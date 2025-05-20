@@ -40,6 +40,7 @@ export default function UploadFileDialog({
   const [fileType, setFileType] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
@@ -65,6 +66,7 @@ export default function UploadFileDialog({
     }
 
     setLoading(true)
+    setUploadProgress(0)
 
     try {
       // Generate a unique file path
@@ -72,28 +74,57 @@ export default function UploadFileDialog({
       const fileName = `${nursingHomeName} ${fileType} - ${month} ${year}.${fileExt}`
       const filePath = `${nursingHomeId}/${year}/${month}/${fileName}`
 
+      console.log("Uploading file:", {
+        fileName,
+        filePath,
+        fileSize: file.size,
+        fileType: file.type,
+      })
+
       // Upload file to storage
-      const { error: uploadError } = await supabase.storage.from("nursing-home-files").upload(filePath, file)
+      const { data, error: uploadError } = await supabase.storage.from("nursing-home-files").upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+        onUploadProgress: (progress) => {
+          const percent = Math.round((progress.loaded / progress.total) * 100)
+          setUploadProgress(percent)
+          console.log(`Upload progress: ${percent}%`)
+        },
+      })
 
       if (uploadError) {
+        console.error("Storage upload error:", uploadError)
         throw uploadError
       }
 
+      console.log("File uploaded successfully:", data)
+
+      // Get the public URL
+      const { data: publicUrlData } = supabase.storage.from("nursing-home-files").getPublicUrl(filePath)
+
+      console.log("Public URL:", publicUrlData)
+
       // Save file metadata to database
-      const { error: dbError } = await supabase.from("nursing_home_files").insert([
-        {
-          nursing_home_id: nursingHomeId,
-          file_name: fileName,
-          file_type: fileType,
-          month,
-          year,
-          file_path: filePath,
-        },
-      ])
+      const { data: insertData, error: dbError } = await supabase
+        .from("nursing_home_files")
+        .insert([
+          {
+            nursing_home_id: nursingHomeId,
+            file_name: fileName,
+            file_type: fileType,
+            month,
+            year,
+            file_path: filePath,
+          },
+        ])
+        .select()
 
       if (dbError) {
+        console.error("Database insert error:", dbError)
         throw dbError
       }
+
+      console.log("Database record inserted:", insertData)
 
       toast({
         title: "Success",
@@ -103,6 +134,7 @@ export default function UploadFileDialog({
       onOpenChange(false)
       router.refresh()
     } catch (error: any) {
+      console.error("Upload error:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to upload file",
@@ -110,6 +142,7 @@ export default function UploadFileDialog({
       })
     } finally {
       setLoading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -143,6 +176,13 @@ export default function UploadFileDialog({
             <Input id="file" type="file" onChange={handleFileChange} required />
             <p className="text-xs text-muted-foreground">Accepted file types: Excel (.xlsx, .xls) or PDF (.pdf)</p>
           </div>
+
+          {uploadProgress !== null && (
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
+              <p className="text-xs text-center mt-1">{uploadProgress}% uploaded</p>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

@@ -35,32 +35,45 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
   return (
     <header className="border-b bg-white">
       <div className="container mx-auto py-4 px-4 flex items-center justify-between">
-        <Link href="/dashboard" className="font-bold text-xl">
-          Nursing Home Management
-        </Link>
+        <div className="flex items-center space-x-4">
+          <nav>
+            <ul className="flex space-x-4">
+              <li>
+                <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
+                  Dashboard
+                </Link>
+              </li>
+              <li>
+                <Link href="/debug" className="text-gray-600 hover:text-gray-900">
+                  Debug
+                </Link>
+              </li>
+            </ul>
+          </nav>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-              <Avatar>
-                <AvatarFallback>{userInitials}</AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <UserIcon className="mr-2 h-4 w-4" />
-              <span>{user.email}</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Sign out</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Avatar>
+                  <AvatarFallback>{userInitials}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <UserIcon className="mr-2 h-4 w-4" />
+                <span>{user.email}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sign out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </header>
   )
