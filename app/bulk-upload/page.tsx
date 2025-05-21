@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import DashboardHeader from "@/components/dashboard-header"
 import { BulkFileUpload } from "@/components/bulk-file-upload"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default async function BulkUploadPage() {
   const supabase = createServerComponentClient({ cookies })
@@ -24,12 +25,42 @@ export default async function BulkUploadPage() {
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <h1 className="text-3xl font-bold mb-6">Bulk Patient File Upload</h1>
-        <p className="mb-6 text-gray-600">
-          Upload patient files in bulk. The system will automatically extract patient information, create patient
-          records if they don't exist, and associate the files with the correct patients.
-        </p>
 
-        <BulkFileUpload nursingHomes={nursingHomes || []} />
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>How It Works</CardTitle>
+              <CardDescription>Understanding the bulk upload process</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h3 className="font-medium">File Naming</h3>
+                <p className="text-sm text-muted-foreground">
+                  Files should be named with the patient's name followed by the file type, e.g., "John Smith Patient
+                  Engagement.pdf" or "Jane Doe 90 Day Unified.pdf"
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-medium">Patient Creation</h3>
+                <p className="text-sm text-muted-foreground">
+                  The system will automatically create patient records based on the filenames if they don't already
+                  exist.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-medium">File Types</h3>
+                <p className="text-sm text-muted-foreground">
+                  Files containing "Unified" in the name will be categorized as "90 Day Unified". All other files will
+                  be categorized as "Patient Engagement".
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <BulkFileUpload nursingHomes={nursingHomes || []} />
+        </div>
       </main>
     </div>
   )

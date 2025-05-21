@@ -14,7 +14,6 @@ import { useToast } from "@/components/ui/use-toast"
 import { Upload, FileText, AlertCircle, CheckCircle2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { extractPatientInfo } from "@/lib/pdf-parser"
 
 interface NursingHome {
   id: string
@@ -27,6 +26,8 @@ interface BulkFileUploadProps {
 
 export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
   const [selectedNursingHomeId, setSelectedNursingHomeId] = useState<string>("")
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toLocaleString("default", { month: "long" }))
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
   const [files, setFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [currentFileIndex, setCurrentFileIndex] = useState(0)
@@ -44,22 +45,32 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
   const processFile = async (file: File) => {
     try {
-      // Read the file as text (for demonstration purposes)
-      // In a real implementation, you would use a PDF parsing library
-      const fileText = await file.text()
+      // Extract patient name from filename
+      // Assuming filename format: "PatientName FileType.pdf"
+      let patientName = file.name.split(".")[0] // Remove file extension
 
-      // Extract patient information from the file
-      const patientInfo = await extractPatientInfo(fileText)
+      // If the filename contains spaces, assume the format is "FirstName LastName FileType.pdf"
+      // and extract just the name part
+      if (patientName.includes(" ")) {
+        // Look for common file type indicators in the name
+        const fileTypeIndicators = ["Patient Engagement", "90 Day Unified", "Unified", "Engagement"]
 
-      if (!patientInfo) {
-        throw new Error(`Could not extract patient information from ${file.name}`)
+        let nameEndIndex = patientName.length
+        for (const indicator of fileTypeIndicators) {
+          const index = patientName.indexOf(indicator)
+          if (index > 0) {
+            nameEndIndex = Math.min(nameEndIndex, index)
+          }
+        }
+
+        patientName = patientName.substring(0, nameEndIndex).trim()
       }
 
       // Check if patient already exists
       const { data: existingPatients, error: searchError } = await supabase
         .from("patients")
         .select("id")
-        .eq("name", patientInfo.name)
+        .eq("name", patientName)
         .eq("nursing_home_id", selectedNursingHomeId)
 
       if (searchError) {
@@ -74,9 +85,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
           .from("patients")
           .insert([
             {
-              name: patientInfo.name,
-              date_of_birth: patientInfo.dateOfBirth,
-              medical_record_number: patientInfo.medicalRecordNumber,
+              name: patientName,
               nursing_home_id: selectedNursingHomeId,
             },
           ])
@@ -92,8 +101,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       }
 
       // Upload the file to storage
-      const fileExt = file.name.split(".").pop()
-      const filePath = `patients/${patientId}/${file.name}`
+      const filePath = `patients/${patientId}/${selectedYear}/${selectedMonth}/${file.name}`
 
       const { error: uploadError } = await supabase.storage.from("nursing-home-files").upload(filePath, file, {
         cacheControl: "3600",
@@ -104,7 +112,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         throw uploadError
       }
 
-      // Get the file type from the filename
+      // Determine file type based on filename
       let fileType = "Patient Engagement"
       if (file.name.toLowerCase().includes("unified")) {
         fileType = "90 Day Unified"
@@ -116,8 +124,8 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
           patient_id: patientId,
           file_name: file.name,
           file_type: fileType,
-          month: new Date().toLocaleString("default", { month: "long" }),
-          year: new Date().getFullYear().toString(),
+          month: selectedMonth,
+          year: selectedYear,
           file_path: filePath,
         },
       ])
@@ -126,7 +134,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         throw dbError
       }
 
-      return { success: true, message: `Successfully processed ${file.name}` }
+      return { success: true, message: `Successfully processed ${file.name} for patient ${patientName}` }
     } catch (error: any) {
       console.error("Error processing file:", error)
       return { success: false, message: `Error processing ${file.name}: ${error.message}` }
@@ -185,6 +193,23 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
     router.refresh()
   }
 
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ]
+
+  const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - 2 + i).toString())
+
   const selectedNursingHome = nursingHomes.find((home) => home.id === selectedNursingHomeId)
 
   return (
@@ -192,7 +217,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       <CardHeader>
         <CardTitle>Upload Patient Files</CardTitle>
         <CardDescription>
-          Upload PDF files for patients. The system will automatically extract patient information and create records.
+          Upload PDF files for patients. The system will automatically create patient records based on filenames.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -212,11 +237,45 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
           </Select>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="month">Month</Label>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger id="month">
+                <SelectValue placeholder="Select month" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((month) => (
+                  <SelectItem key={month} value={month}>
+                    {month}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="year">Year</Label>
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger id="year">
+                <SelectValue placeholder="Select year" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((year) => (
+                  <SelectItem key={year} value={year}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="files">Patient Files (PDF)</Label>
           <Input id="files" type="file" multiple accept=".pdf" onChange={handleFileChange} />
           <p className="text-xs text-muted-foreground">
-            Upload patient PDF files. File names should include the patient name.
+            Upload patient PDF files. Patient records will be created based on filenames.
           </p>
         </div>
 
