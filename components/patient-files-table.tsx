@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Download, Trash2 } from "lucide-react"
+// Import the FileText icon
+import { FileText, Download, Trash2, FileSearch } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
@@ -17,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import Link from "next/link"
 
 interface FileRecord {
   id: string
@@ -27,6 +29,7 @@ interface FileRecord {
   year: string
   file_path: string
   created_at: string
+  processing_status?: "pending" | "processing" | "completed" | "failed"
 }
 
 interface PatientFilesTableProps {
@@ -119,13 +122,14 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
             <TableHead>File Type</TableHead>
             <TableHead>Month/Year</TableHead>
             <TableHead>Uploaded On</TableHead>
+            <TableHead>Processing Status</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {files.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="text-center">
+              <TableCell colSpan={6} className="text-center">
                 No files found for this patient
               </TableCell>
             </TableRow>
@@ -142,10 +146,36 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
                 <TableCell>{`${file.month} ${file.year}`}</TableCell>
                 <TableCell>{new Date(file.created_at).toLocaleDateString()}</TableCell>
                 <TableCell>
+                  {file.processing_status === "completed" ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Processed
+                    </span>
+                  ) : file.processing_status === "failed" ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      Failed
+                    </span>
+                  ) : file.processing_status === "processing" ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Processing
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      Pending
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell>
                   <div className="flex space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleDownload(file.file_path, file.file_name)}>
                       <Download className="h-4 w-4" />
                     </Button>
+                    {file.file_name.toLowerCase().endsWith(".pdf") && (
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/patients/${file.patient_id}/files/${file.id}/view`}>
+                          <FileSearch className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => setFileToDelete(file)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>

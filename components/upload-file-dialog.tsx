@@ -126,6 +126,21 @@ export default function UploadFileDialog({
 
       console.log("Database record inserted:", insertData)
 
+      if (file.type === "application/pdf") {
+        const { error: queueError } = await supabase.from("pdf_processing_queue").insert([
+          {
+            file_id: insertData[0].id,
+            file_path: filePath,
+            status: "pending",
+          },
+        ])
+
+        if (queueError) {
+          console.error("Queue insert error:", queueError)
+          // Don't throw here, just log the error since the file upload was successful
+        }
+      }
+
       toast({
         title: "Success",
         description: "File uploaded successfully",

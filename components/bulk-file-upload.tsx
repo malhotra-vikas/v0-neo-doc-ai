@@ -43,7 +43,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
     }
   }
 
-    // Function to extract patient name and file type from filename
+  // Function to extract patient name and file type from filename
   const extractFileInfo = (filename: string) => {
     // Remove file extension
     const nameWithoutExtension = filename.replace(/\.[^/.]+$/, "")
@@ -90,17 +90,12 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
   const processFile = async (file: File) => {
     try {
-      // Read the file as text (for demonstration purposes)
-      // In a real implementation, you would use a PDF parsing library
-      const fileText = await file.text()
-
       // Extract patient name and file type from filename
       const { patientName, fileType } = extractFileInfo(file.name)
 
       if (!patientName) {
         throw new Error(`Could not extract patient name from ${file.name}`)
       }
-      
 
       // Check if patient already exists
       const { data: existingPatients, error: searchError } = await supabase
@@ -148,7 +143,6 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         throw uploadError
       }
 
-
       // Save file metadata to database
       const { error: dbError } = await supabase.from("patient_files").insert([
         {
@@ -163,6 +157,30 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
       if (dbError) {
         throw dbError
+      }
+
+      const { data: fileData, error: fileQueryError } = await supabase
+        .from("patient_files")
+        .select("id")
+        .eq("patient_id", patientId)
+        .eq("file_path", filePath)
+        .single()
+
+      if (fileQueryError) {
+        throw fileQueryError
+      }
+
+      // Add the file to the processing queue
+      const { error: queueError } = await supabase.from("pdf_processing_queue").insert([
+        {
+          file_id: fileData.id,
+          file_path: filePath,
+          status: "pending",
+        },
+      ])
+
+      if (queueError) {
+        throw queueError
       }
 
       return { success: true, message: `Successfully processed ${file.name} for patient ${patientName}` }
@@ -223,6 +241,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
     router.refresh()
   }
+
   const months = [
     "January",
     "February",
@@ -300,7 +319,6 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
             </Select>
           </div>
         </div>
-
 
         <div className="space-y-2">
           <Label htmlFor="files">Patient Files (PDF)</Label>
