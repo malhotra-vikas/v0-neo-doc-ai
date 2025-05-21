@@ -36,9 +36,19 @@ export default async function BulkUploadPage() {
               <div>
                 <h3 className="font-medium">File Naming</h3>
                 <p className="text-sm text-muted-foreground">
-                  Files should be named with the patient's name followed by the file type, e.g., "John Smith Patient
-                  Engagement.pdf" or "Jane Doe 90 Day Unified.pdf"
+                  Files should be named with the patient's name followed by the file type. The system supports the
+                  following patterns:
                 </p>
+                <ul className="text-sm text-muted-foreground list-disc pl-5 mt-2 space-y-1">
+                  <li>
+                    "PatientName Patient Engagement.pdf" (or numbered versions like "PatientName Patient
+                    Engagement1.pdf")
+                  </li>
+                  <li>"PatientName 90 Day Unified.pdf"</li>
+                  <li>"PatientName 60 Day Unified.pdf"</li>
+                  <li>"PatientName SNF Unified.pdf"</li>
+                  <li>"PatientName Unified.pdf"</li>
+                </ul>
               </div>
 
               <div>
@@ -52,8 +62,9 @@ export default async function BulkUploadPage() {
               <div>
                 <h3 className="font-medium">File Types</h3>
                 <p className="text-sm text-muted-foreground">
-                  Files containing "Unified" in the name will be categorized as "90 Day Unified". All other files will
-                  be categorized as "Patient Engagement".
+                  Files are categorized based on their names. For example, files containing "90 Day Unified" will be
+                  categorized as "90 Day Unified", files with "Patient Engagement" (with or without a number) will be
+                  categorized as "Patient Engagement", etc.
                 </p>
               </div>
             </CardContent>

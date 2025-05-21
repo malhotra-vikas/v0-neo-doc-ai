@@ -43,27 +43,58 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
     }
   }
 
+  // Function to extract patient name and file type from filename
+  const extractFileInfo = (filename: string) => {
+    // Remove file extension
+    const nameWithoutExtension = filename.replace(/\.[^/.]+$/, "")
+
+    // Define file type patterns to look for
+    const fileTypePatterns = [
+      { pattern: /60 Day Unified/i, type: "60 Day Unified" },
+      { pattern: /90 Day Unified/i, type: "90 Day Unified" },
+      { pattern: /SNF Unified/i, type: "SNF Unified" },
+      { pattern: /Unified/i, type: "Unified" },
+      { pattern: /Patient Engagement\d*/i, type: "Patient Engagement" },
+    ]
+
+    // Find the first matching pattern
+    let fileType = "Patient Engagement" // Default file type
+    let patientName = nameWithoutExtension // Default to full name without extension
+
+    for (const { pattern, type } of fileTypePatterns) {
+      const match = nameWithoutExtension.match(pattern)
+      if (match) {
+        fileType = type
+        // Extract patient name by removing the file type from the filename
+        const matchIndex = nameWithoutExtension.indexOf(match[0])
+        if (matchIndex > 0) {
+          patientName = nameWithoutExtension.substring(0, matchIndex).trim()
+        }
+        break
+      }
+    }
+
+    // If no specific pattern was found but there are multiple words,
+    // assume the last word(s) might be a file type indicator
+    if (fileType === "Patient Engagement" && !nameWithoutExtension.includes("Patient Engagement")) {
+      const parts = nameWithoutExtension.split(" ")
+      if (parts.length > 1) {
+        // Assume the patient name is all but the last word
+        // This is a fallback and might not be accurate for all cases
+        patientName = parts.slice(0, -1).join(" ").trim()
+      }
+    }
+
+    return { patientName, fileType }
+  }
+
   const processFile = async (file: File) => {
     try {
-      // Extract patient name from filename
-      // Assuming filename format: "PatientName FileType.pdf"
-      let patientName = file.name.split(".")[0] // Remove file extension
+      // Extract patient name and file type from filename
+      const { patientName, fileType } = extractFileInfo(file.name)
 
-      // If the filename contains spaces, assume the format is "FirstName LastName FileType.pdf"
-      // and extract just the name part
-      if (patientName.includes(" ")) {
-        // Look for common file type indicators in the name
-        const fileTypeIndicators = ["Patient Engagement", "90 Day Unified", "Unified", "Engagement"]
-
-        let nameEndIndex = patientName.length
-        for (const indicator of fileTypeIndicators) {
-          const index = patientName.indexOf(indicator)
-          if (index > 0) {
-            nameEndIndex = Math.min(nameEndIndex, index)
-          }
-        }
-
-        patientName = patientName.substring(0, nameEndIndex).trim()
+      if (!patientName) {
+        throw new Error(`Could not extract patient name from ${file.name}`)
       }
 
       // Check if patient already exists
@@ -110,12 +141,6 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
       if (uploadError) {
         throw uploadError
-      }
-
-      // Determine file type based on filename
-      let fileType = "Patient Engagement"
-      if (file.name.toLowerCase().includes("unified")) {
-        fileType = "90 Day Unified"
       }
 
       // Save file metadata to database
