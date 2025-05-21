@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, UserIcon, Upload } from "lucide-react"
+import { LogOut, UserIcon, Upload, FileText } from "lucide-react"
 
 interface DashboardHeaderProps {
   user: User
@@ -51,6 +51,12 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
                 <Link href="/bulk-upload" className="text-gray-600 hover:text-gray-900 flex items-center">
                   <Upload className="mr-1 h-4 w-4" />
                   Bulk Upload
+                </Link>
+              </li>
+              <li>
+                <Link href="/admin/pdf-queue" className="text-gray-600 hover:text-gray-900 flex items-center">
+                  <FileText className="mr-1 h-4 w-4" />
+                  PDF Queue
                 </Link>
               </li>
               <li>

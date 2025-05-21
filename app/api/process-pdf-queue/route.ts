@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
     try {
-        const supabase = createRouteHandlerClient({ cookies })
+        // Fix: Properly await cookies()
+        const cookieStore = cookies()
+        const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
 
         // Get the next pending item from the queue
         const { data: queueItem, error: queueError } = await supabase
@@ -40,23 +42,9 @@ export async function GET(request: Request) {
                 throw downloadError
             }
 
-            // Call the PDF to text API service
-            // This is a placeholder - you would replace this with your actual PDF to text API
-            const formData = new FormData()
-            formData.append("file", fileData)
-
-            // Example API call to a PDF extraction service
-            const response = await fetch("https://your-pdf-extraction-api.com/extract", {
-                method: "POST",
-                body: formData,
-            })
-
-            if (!response.ok) {
-                throw new Error(`API responded with status: ${response.status}`)
-            }
-
-            const extractionResult = await response.json()
-            const extractedText = extractionResult.text || "No text extracted"
+            // Instead of calling an external API, we'll simulate text extraction
+            // In a real implementation, you would use a PDF parsing library
+            const extractedText = await simulatePdfTextExtraction(fileData)
 
             // Update the patient_files table with the extracted text
             await supabase
@@ -113,4 +101,34 @@ export async function GET(request: Request) {
             { status: 500 },
         )
     }
+}
+
+// Function to simulate PDF text extraction
+// In a real implementation, you would use a PDF parsing library
+async function simulatePdfTextExtraction(pdfFile: Blob): Promise<string> {
+    // Get the file size to make the simulation more realistic
+    const fileSize = pdfFile.size
+
+    // Create a simulated text based on the file size
+    const paragraphCount = Math.max(3, Math.floor(fileSize / 10000))
+
+    let extractedText = `PDF File Size: ${fileSize} bytes\n\n`
+
+    for (let i = 0; i < paragraphCount; i++) {
+        extractedText += `Paragraph ${i + 1}: This is simulated text extracted from the PDF document. `
+        extractedText += `In a real implementation, this would contain the actual content from page ${i + 1} of the document. `
+        extractedText += `The text would include patient information, medical notes, and other relevant data.\n\n`
+    }
+
+    // Add some metadata
+    extractedText += `\nMetadata:\n`
+    extractedText += `File Type: PDF\n`
+    extractedText += `Extraction Date: ${new Date().toISOString()}\n`
+    extractedText += `Processing Method: Simulation\n`
+
+    // Simulate processing time based on file size
+    const processingTime = Math.min(2000, Math.floor(fileSize / 5000))
+    await new Promise((resolve) => setTimeout(resolve, processingTime))
+
+    return extractedText
 }
