@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-// Import the FileText icon
-import { FileText, Download, Trash2, FileSearch } from "lucide-react"
+import { FileText, Download, Trash2, FileSearch, RefreshCw } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
@@ -30,6 +29,7 @@ interface FileRecord {
   file_path: string
   created_at: string
   processing_status?: "pending" | "processing" | "completed" | "failed"
+  parsed_text?: string | null
 }
 
 interface PatientFilesTableProps {
@@ -113,6 +113,65 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
     }
   }
 
+  const handleReprocess = async (fileId: string) => {
+    try {
+      // Update the file status to pending
+      const { error: updateError } = await supabase
+        .from("patient_files")
+        .update({ processing_status: "pending" })
+        .eq("id", fileId)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      // Get the file path
+      const { data: fileData, error: fileError } = await supabase
+        .from("patient_files")
+        .select("file_path")
+        .eq("id", fileId)
+        .single()
+
+      if (fileError) {
+        throw fileError
+      }
+
+      // Add to the processing queue
+      const { error: queueError } = await supabase.from("pdf_processing_queue").insert([
+        {
+          file_id: fileId,
+          file_path: fileData.file_path,
+          status: "pending",
+        },
+      ])
+
+      if (queueError) {
+        throw queueError
+      }
+
+      toast({
+        title: "Success",
+        description: "File has been queued for processing",
+      })
+
+      // Trigger the processing
+      fetch("/api/process-pdf-queue", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }).catch(console.error) // We don't need to await this
+
+      router.refresh()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to queue file for processing",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <>
       <Table>
@@ -170,11 +229,18 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
                       <Download className="h-4 w-4" />
                     </Button>
                     {file.file_name.toLowerCase().endsWith(".pdf") && (
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/patients/${file.patient_id}/files/${file.id}/view`}>
-                          <FileSearch className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                      <>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/patients/${file.patient_id}/files/${file.id}/view`}>
+                            <FileSearch className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        {(file.processing_status === "failed" || !file.processing_status) && (
+                          <Button variant="outline" size="sm" onClick={() => handleReprocess(file.id)}>
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </>
                     )}
                     <Button variant="outline" size="sm" onClick={() => setFileToDelete(file)}>
                       <Trash2 className="h-4 w-4" />

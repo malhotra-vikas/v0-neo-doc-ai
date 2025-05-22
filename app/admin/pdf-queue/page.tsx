@@ -11,7 +11,7 @@ import { ProcessQueueButton } from "@/components/process-queue-button"
 
 export default async function PDFQueuePage() {
     // Fix: Properly await cookies()
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const supabase = createServerComponentClient({ cookies: () => cookieStore })
 
     const {
