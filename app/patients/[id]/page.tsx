@@ -11,6 +11,7 @@ import { PageViewLogger } from "@/components/page-view-logger"
 
 export default async function PatientPage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
+  const resolvedParams = await params
 
   const {
     data: { session },
@@ -24,7 +25,7 @@ export default async function PatientPage({ params }: { params: { id: string } }
   const { data: patient, error } = await supabase
     .from("patients")
     .select("*, nursing_homes(*)")
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .single()
 
   if (error || !patient) {
@@ -32,12 +33,12 @@ export default async function PatientPage({ params }: { params: { id: string } }
   }
 
   // Fetch files for this patient
-  const { data: files } = await supabase.from("patient_files").select("*").eq("patient_id", params.id)
+  const { data: files } = await supabase.from("patient_files").select("*").eq("patient_id", resolvedParams.id)
 
   return (
     <div className="flex flex-col min-h-screen">
       <DashboardHeader user={session.user} />
-      <PageViewLogger user={session.user} pageName="Patient Details" entityType="patient" entityId={params.id} />
+      <PageViewLogger user={session.user} pageName="Patient Details" entityType="patient" entityId={resolvedParams.id} />
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <div className="flex items-center mb-6">

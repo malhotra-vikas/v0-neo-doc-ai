@@ -86,7 +86,7 @@ export default async function PatientFileViewPage({
             <main className="flex-1 container mx-auto py-6 px-4">
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center">
-                        <h1 className="text-3xl font-bold">Parsed Text: {file.file_name}</h1>
+                        <h1 className="text-3xl font-bold">{file.file_name}</h1>
                     </div>
                     <div className="flex space-x-2">
                         <Button variant="outline" size="sm" asChild>

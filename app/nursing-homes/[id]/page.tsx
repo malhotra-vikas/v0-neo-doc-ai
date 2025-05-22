@@ -12,6 +12,11 @@ import { PageViewLogger } from "@/components/page-view-logger"
 export default async function NursingHomePage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
 
+  const resolvedParams = await params;
+  // Log the params to debug
+  console.log("Route params:", resolvedParams)
+
+
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -24,7 +29,7 @@ export default async function NursingHomePage({ params }: { params: { id: string
   const { data: nursingHome, error } = await supabase
     .from("nursing_homes")
     .select("*, patients(*)")
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .single()
 
   if (error || !nursingHome) {
@@ -32,7 +37,7 @@ export default async function NursingHomePage({ params }: { params: { id: string
   }
 
   // Fetch files for this nursing home
-  const { data: files } = await supabase.from("nursing_home_files").select("*").eq("nursing_home_id", params.id)
+  const { data: files } = await supabase.from("nursing_home_files").select("*").eq("nursing_home_id", resolvedParams.id)
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -41,7 +46,7 @@ export default async function NursingHomePage({ params }: { params: { id: string
         user={session.user}
         pageName="Nursing Home Details"
         entityType="nursing_home"
-        entityId={params.id}
+        entityId={resolvedParams.id}
       />
 
       <main className="flex-1 container mx-auto py-6 px-4">

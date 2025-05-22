@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -8,7 +8,20 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, FileText, Download, Calendar, Building2, AlertCircle, Loader2 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+    BarChart3,
+    FileText,
+    Download,
+    Calendar,
+    Building2,
+    AlertCircle,
+    Loader2,
+    Shield,
+    Sparkles,
+    ChevronDown,
+    ChevronUp,
+} from "lucide-react"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useToast } from "@/components/ui/use-toast"
@@ -18,6 +31,16 @@ import html2canvas from "html2canvas"
 interface NursingHome {
     id: string
     name: string
+}
+
+interface CaseStudyHighlight {
+    id: string
+    patient_id: string
+    file_id: string
+    highlight_text: string
+    created_at: string
+    patient_name: string
+    file_name: string
 }
 
 interface ReportGeneratorProps {
@@ -31,6 +54,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [isGenerating, setIsGenerating] = useState(false)
     const [reportGenerated, setReportGenerated] = useState(false)
     const [isExporting, setIsExporting] = useState(false)
+    const [caseStudies, setCaseStudies] = useState<CaseStudyHighlight[]>([])
+    const [isLoadingCaseStudies, setIsLoadingCaseStudies] = useState(false)
+    const [expandedCaseStudy, setExpandedCaseStudy] = useState<string | null>(null)
     const reportRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
 
@@ -53,35 +79,125 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     const selectedNursingHome = nursingHomes.find((home) => home.id === selectedNursingHomeId)
 
+    useEffect(() => {
+        // Reset case studies when nursing home or date changes
+        setCaseStudies([])
+        setReportGenerated(false)
+    }, [selectedNursingHomeId, selectedMonth, selectedYear])
+
+    const fetchCaseStudies = async () => {
+        if (!selectedNursingHomeId) return
+
+        setIsLoadingCaseStudies(true)
+
+        try {
+            const supabase = createClientComponentClient()
+
+            // Get the month number (1-12) from the month name
+            const monthNumber = months.indexOf(selectedMonth) + 1
+
+            // Create date range for the selected month
+            const startDate = `${selectedYear}-${monthNumber.toString().padStart(2, "0")}-01`
+            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0] // Last day of month
+
+            // First get patients for the nursing home
+            const { data: patients, error: patientsError } = await supabase
+                .from("patients")
+                .select("id, name")
+                .eq("nursing_home_id", selectedNursingHomeId)
+
+            if (patientsError) {
+                throw patientsError
+            }
+
+            if (!patients || patients.length === 0) {
+                setCaseStudies([])
+                setIsLoadingCaseStudies(false)
+                return
+            }
+
+            // Get patient IDs
+            const patientIds = patients.map((p) => p.id)
+
+            // Get case studies for these patients in the date range
+            const { data, error } = await supabase
+                .from("case_study_highlights")
+                .select(`
+          id, 
+          patient_id, 
+          file_id, 
+          highlight_text, 
+          created_at,
+          patient_files(file_name)
+        `)
+                .in("patient_id", patientIds)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate)
+                .order("created_at", { ascending: false })
+
+            if (error) {
+                throw error
+            }
+
+            // Format the case studies with patient names
+            const formattedCaseStudies = data.map((cs) => {
+                const patient = patients.find((p) => p.id === cs.patient_id)
+                return {
+                    id: cs.id,
+                    patient_id: cs.patient_id,
+                    file_id: cs.file_id,
+                    highlight_text: cs.highlight_text,
+                    created_at: cs.created_at,
+                    patient_name: patient?.name || "Unknown Patient",
+                    file_name: cs.patient_files?.file_name || "Unknown File",
+                }
+            })
+
+            setCaseStudies(formattedCaseStudies)
+        } catch (error) {
+            console.error("Error fetching case studies:", error)
+            toast({
+                title: "Error",
+                description: "Failed to fetch case studies. Please try again.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsLoadingCaseStudies(false)
+        }
+    }
+
     const handleGenerateReport = () => {
         if (!selectedNursingHomeId) return
 
         setIsGenerating(true)
 
-        // Simulate report generation
-        setTimeout(async () => {
-            setIsGenerating(false)
-            setReportGenerated(true)
+        // Fetch case studies and generate report
+        fetchCaseStudies().then(() => {
+            setTimeout(async () => {
+                setIsGenerating(false)
+                setReportGenerated(true)
 
-            // Log report generation
-            const supabase = createClientComponentClient()
-            const user = await supabase.auth.getUser()
-            if (user.data?.user) {
-                logAuditEvent({
-                    user: user.data.user,
-                    actionType: "generate_report",
-                    entityType: "report",
-                    entityId: `${selectedNursingHomeId}-${selectedMonth}-${selectedYear}`,
-                    details: {
-                        nursing_home_id: selectedNursingHomeId,
-                        nursing_home_name: selectedNursingHome?.name,
-                        month: selectedMonth,
-                        year: selectedYear,
-                        report_type: "monthly",
-                    },
-                })
-            }
-        }, 2000)
+                // Log report generation
+                const supabase = createClientComponentClient()
+                const user = await supabase.auth.getUser()
+                if (user.data?.user) {
+                    logAuditEvent({
+                        user: user.data.user,
+                        actionType: "generate_report",
+                        entityType: "report",
+                        entityId: `${selectedNursingHomeId}-${selectedMonth}-${selectedYear}`,
+                        details: {
+                            nursing_home_id: selectedNursingHomeId,
+                            nursing_home_name: selectedNursingHome?.name,
+                            month: selectedMonth,
+                            year: selectedYear,
+                            report_type: "monthly",
+                            case_studies_count: caseStudies.length,
+                        },
+                    })
+                }
+            }, 1500)
+        })
     }
 
     const handlePrint = async () => {
@@ -99,12 +215,25 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     nursing_home_name: selectedNursingHome?.name,
                     month: selectedMonth,
                     year: selectedYear,
+                    case_studies_count: caseStudies.length,
                 },
             })
         }
 
-        // Use browser's print functionality
-        window.print()
+        // Expand all case studies for printing
+        const previouslyExpanded = expandedCaseStudy
+        setExpandedCaseStudy("all")
+
+        // Wait for state update to apply
+        setTimeout(() => {
+            // Use browser's print functionality
+            window.print()
+
+            // Restore previous state after print dialog closes
+            setTimeout(() => {
+                setExpandedCaseStudy(previouslyExpanded)
+            }, 500)
+        }, 100)
     }
 
     const handleExportPDF = async () => {
@@ -128,9 +257,17 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                         month: selectedMonth,
                         year: selectedYear,
                         format: "pdf",
+                        case_studies_count: caseStudies.length,
                     },
                 })
             }
+
+            // Expand all case studies for PDF export
+            const previouslyExpanded = expandedCaseStudy
+            setExpandedCaseStudy("all")
+
+            // Wait for state update to apply
+            await new Promise((resolve) => setTimeout(resolve, 100))
 
             // Create a clone of the report element to modify for PDF export
             const reportElement = reportRef.current
@@ -158,6 +295,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             reportElement.style.top = ""
             reportElement.style.left = ""
             reportElement.style.width = ""
+
+            // Restore previous expansion state
+            setExpandedCaseStudy(previouslyExpanded)
 
             // Create PDF
             const imgData = canvas.toDataURL("image/png")
@@ -193,6 +333,23 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
+    const toggleCaseStudy = (id: string) => {
+        if (expandedCaseStudy === id) {
+            setExpandedCaseStudy(null)
+        } else {
+            setExpandedCaseStudy(id)
+        }
+    }
+
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString)
+        return date.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+        })
+    }
+
     return (
         <Card className="w-full shadow-md border-slate-200">
             <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
@@ -210,10 +367,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             </CardHeader>
             <CardContent className="p-6">
                 <Tabs defaultValue="generate" className="w-full">
-                    <TabsList className="mb-6">
-                        <TabsTrigger value="generate">Generate Report</TabsTrigger>
-                        <TabsTrigger value="history">Report History</TabsTrigger>
-                    </TabsList>
+
 
                     <TabsContent value="generate" className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -359,43 +513,81 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                                             </div>
                                         </CardHeader>
                                         <CardContent className="p-6">
-                                            <Alert className="mb-6 print:hidden">
-                                                <AlertCircle className="h-4 w-4" />
-                                                <AlertTitle>Report Structure Placeholder</AlertTitle>
-                                                <AlertDescription>
-                                                    This is a placeholder for the report structure that will be defined in the next phase.
-                                                </AlertDescription>
-                                            </Alert>
+           
 
                                             <div className="space-y-6">
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-3">Patient Summary</h4>
-                                                    <div className="space-y-2">
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">Total Patients: 24</div>
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">New Patients: 3</div>
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">Active Patients: 22</div>
-                                                    </div>
-                                                </div>
 
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-3">File Processing Status</h4>
-                                                    <div className="space-y-2">
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">Total Files: 87</div>
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">Processed Files: 85</div>
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">
-                                                            Processing Success Rate: 97.7%
-                                                        </div>
+                                                <div className="mt-8">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h4 className="text-sm font-medium">Case Study Highlights</h4>
+                                                        <Badge variant="outline" className="bg-white">
+                                                            <Shield className="h-3 w-3 mr-1" />
+                                                            Privacy Protected
+                                                        </Badge>
                                                     </div>
-                                                </div>
 
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-3">Monthly Metrics</h4>
-                                                    <div className="space-y-2">
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">
-                                                            Average Processing Time: 2.3 minutes
+                                                    {isLoadingCaseStudies ? (
+                                                        <div className="space-y-4">
+                                                            <Skeleton className="h-32 w-full" />
+                                                            <Skeleton className="h-32 w-full" />
+                                                            <Skeleton className="h-32 w-full" />
                                                         </div>
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">Files Uploaded: 12</div>
-                                                        <div className="h-8 w-full border rounded-md px-3 py-2 bg-white">System Uptime: 99.9%</div>
+                                                    ) : caseStudies.length === 0 ? (
+                                                        <div className="text-center py-8 border rounded-md bg-white">
+                                                            <Sparkles className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                                                            <h3 className="text-lg font-medium mb-2">No Case Studies Available</h3>
+                                                            <p className="text-sm text-muted-foreground">
+                                                                No case studies were found for this nursing home in {selectedMonth} {selectedYear}.
+                                                            </p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-4">
+                                                            {caseStudies.map((caseStudy) => (
+                                                                <Card key={caseStudy.id} className="border overflow-hidden">
+                                                                    <div
+                                                                        className="bg-gradient-to-r from-slate-50 to-slate-100 border-b px-4 py-3 flex items-center justify-between cursor-pointer"
+                                                                        onClick={() => toggleCaseStudy(caseStudy.id)}
+                                                                    >
+                                                                        <div className="flex items-center">
+                                                                            <Sparkles className="h-4 w-4 text-amber-500 mr-2" />
+                                                                            <div>
+                                                                                <h5 className="font-medium text-sm">
+                                                                                    {caseStudy.patient_name
+                                                                                        .split(" ")
+                                                                                        .map((name) => name.charAt(0) + "." + (name.length > 1 ? " " : ""))
+                                                                                        .join("")}
+                                                                                </h5>
+                                                                                <p className="text-xs text-muted-foreground">
+                                                                                    {formatDate(caseStudy.created_at)} • {caseStudy.file_name}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            {expandedCaseStudy === caseStudy.id || expandedCaseStudy === "all" ? (
+                                                                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                                                            ) : (
+                                                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {(expandedCaseStudy === caseStudy.id || expandedCaseStudy === "all") && (
+                                                                        <CardContent className="p-4 bg-white">
+                                                                            <div className="prose prose-sm max-w-none">
+                                                                                <p>{caseStudy.highlight_text}</p>
+                                                                            </div>
+                                                                        </CardContent>
+                                                                    )}
+                                                                </Card>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="mt-4 text-xs text-muted-foreground">
+                                                        <p className="flex items-center">
+                                                            <Shield className="h-3 w-3 mr-1" />
+                                                            All case studies are privacy-protected and exclude personally identifiable information.
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -421,7 +613,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             <CardFooter className="bg-slate-50 border-t px-6 py-4 print:hidden">
                 <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                     <div className="text-xs text-muted-foreground">
-                        <p>Reports include patient statistics, file processing status, and monthly metrics.</p>
+                        <p>
+                            Reports include patient statistics, file processing status, monthly metrics, and case study highlights.
+                        </p>
                     </div>
                     <div className="flex items-center gap-2">
                         {selectedNursingHome && (

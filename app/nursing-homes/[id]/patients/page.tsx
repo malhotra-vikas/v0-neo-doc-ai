@@ -10,6 +10,7 @@ import { PatientListClient } from "@/components/patient-list-client"
 
 export default async function NursingHomePatientsPage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
+  const resolvedParams = await params
 
   const {
     data: { session },
@@ -23,7 +24,7 @@ export default async function NursingHomePatientsPage({ params }: { params: { id
   const { data: nursingHome, error } = await supabase
     .from("nursing_homes")
     .select("*, patients(*)")
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .single()
 
   if (error || !nursingHome) {
@@ -45,7 +46,7 @@ export default async function NursingHomePatientsPage({ params }: { params: { id
               <CardTitle>Patients</CardTitle>
               <CardDescription>Manage patients for {nursingHome.name}</CardDescription>
             </div>
-            <Link href={`/nursing-homes/${params.id}/add-patient`} passHref>
+            <Link href={`/nursing-homes/${resolvedParams.id}/add-patient`} passHref>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Patient
@@ -53,7 +54,7 @@ export default async function NursingHomePatientsPage({ params }: { params: { id
             </Link>
           </CardHeader>
           <CardContent>
-            <PatientListClient patients={nursingHome.patients || []} nursingHomeId={params.id} />
+            <PatientListClient patients={nursingHome.patients || []} nursingHomeId={resolvedParams.id} />
           </CardContent>
         </Card>
       </main>
