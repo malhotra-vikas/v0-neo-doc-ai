@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import DashboardHeader from "@/components/dashboard-header"
 import { ReportGenerator } from "@/components/report-generator"
+import { PageViewLogger } from "@/components/page-view-logger"
 
 export default async function ReportsPage() {
     const cookieStore = await cookies()
@@ -22,6 +23,7 @@ export default async function ReportsPage() {
     return (
         <div className="flex flex-col min-h-screen">
             <DashboardHeader user={session.user} />
+            <PageViewLogger user={session.user} pageName="Reports" />
 
             <main className="flex-1 container mx-auto py-6 px-4">
                 <h1 className="text-3xl font-bold mb-6">Reports</h1>

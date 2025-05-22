@@ -10,6 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { BarChart3, FileText, Download, Calendar, Building2, AlertCircle, Loader2 } from "lucide-react"
+import { logAuditEvent } from "@/lib/audit-logger"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 interface NursingHome {
     id: string
@@ -52,9 +54,28 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         setIsGenerating(true)
 
         // Simulate report generation
-        setTimeout(() => {
+        setTimeout(async () => {
             setIsGenerating(false)
             setReportGenerated(true)
+
+            // Log report generation
+            const supabase = createClientComponentClient()
+            const user = await supabase.auth.getUser()
+            if (user.data?.user) {
+                logAuditEvent({
+                    user: user.data.user,
+                    actionType: "generate_report",
+                    entityType: "report",
+                    entityId: `${selectedNursingHomeId}-${selectedMonth}-${selectedYear}`,
+                    details: {
+                        nursing_home_id: selectedNursingHomeId,
+                        nursing_home_name: selectedNursingHome?.name,
+                        month: selectedMonth,
+                        year: selectedYear,
+                        report_type: "monthly",
+                    },
+                })
+            }
         }, 2000)
     }
 

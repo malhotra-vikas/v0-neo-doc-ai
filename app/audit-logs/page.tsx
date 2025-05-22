@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import DashboardHeader from "@/components/dashboard-header"
 import { AuditLogViewer } from "@/components/audit-log-viewer"
+import { PageViewLogger } from "@/components/page-view-logger"
 
 export default async function AuditLogsPage() {
     const cookieStore = await cookies()
@@ -41,6 +42,7 @@ export default async function AuditLogsPage() {
     return (
         <div className="flex flex-col min-h-screen">
             <DashboardHeader user={session.user} />
+            <PageViewLogger user={session.user} pageName="Audit Logs" />
 
             <main className="flex-1 container mx-auto py-6 px-4">
                 <h1 className="text-3xl font-bold mb-6">Audit Logs</h1>

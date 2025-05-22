@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import Link from "next/link"
 
+// Import the audit logger at the top of the file
+import { logAuditEvent } from "@/lib/audit-logger"
+
 interface FileRecord {
   id: string
   patient_id: string
@@ -42,6 +45,7 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
   const supabase = createClientComponentClient()
   const { toast } = useToast()
 
+  // Update the handleDownload function to log file downloads
   const handleDownload = async (filePath: string, fileName: string) => {
     try {
       const { data, error } = await supabase.storage.from("nursing-home-files").download(filePath)
@@ -59,6 +63,20 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
       a.click()
       URL.revokeObjectURL(url)
       document.body.removeChild(a)
+
+      // Log file download
+      const user = await supabase.auth.getUser()
+      if (user.data?.user) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "download",
+          entityType: "patient_file",
+          entityId: filePath,
+          details: {
+            file_name: fileName,
+          },
+        })
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -68,6 +86,7 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
     }
   }
 
+  // Update the handleDelete function to log file deletions
   const handleDelete = async () => {
     if (!fileToDelete) return
 
@@ -84,6 +103,22 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
 
       if (dbError) {
         throw dbError
+      }
+
+      // Log file deletion
+      const user = await supabase.auth.getUser()
+      if (user.data?.user) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "delete",
+          entityType: "patient_file",
+          entityId: fileToDelete.id,
+          details: {
+            file_path: fileToDelete.file_path,
+            file_name: fileToDelete.file_name,
+            patient_id: fileToDelete.patient_id,
+          },
+        })
       }
 
       toast({
@@ -113,6 +148,7 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
     }
   }
 
+  // Update the handleReprocess function to log reprocessing events
   const handleReprocess = async (fileId: string) => {
     try {
       // Update the file status to pending
@@ -147,6 +183,21 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
 
       if (queueError) {
         throw queueError
+      }
+
+      // Log reprocessing event
+      const user = await supabase.auth.getUser()
+      if (user.data?.user) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "process",
+          entityType: "patient_file",
+          entityId: fileId,
+          details: {
+            file_path: fileData.file_path,
+            action: "reprocess",
+          },
+        })
       }
 
       toast({

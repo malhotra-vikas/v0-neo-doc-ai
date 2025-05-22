@@ -28,6 +28,9 @@ import {
 import { Logo } from "./logo"
 import { cn } from "@/lib/utils"
 
+// Import the audit logger at the top of the file
+import { logAuditEvent } from "@/lib/audit-logger"
+
 interface DashboardHeaderProps {
   user: User
 }
@@ -37,7 +40,17 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
   const pathname = usePathname()
   const supabase = createClientComponentClient()
 
+  // Update the handleSignOut function to log logout events
   const handleSignOut = async () => {
+    // Log logout event before signing out
+    logAuditEvent({
+      user: user,
+      actionType: "logout",
+      entityType: "user",
+      entityId: user.id,
+      details: { method: "manual" },
+    })
+
     await supabase.auth.signOut()
     router.push("/")
     router.refresh()

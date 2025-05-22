@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CalendarDays } from "lucide-react"
 import { Building, Users, Upload } from "lucide-react" // Import missing variables
+import { PageViewLogger } from "@/components/page-view-logger"
 
 export default async function DashboardPage() {
   const cookieStore = await cookies()
@@ -44,6 +45,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <DashboardHeader user={session.user} />
+      <PageViewLogger user={session.user} pageName="Dashboard" />
 
       <main className="flex-1 container mx-auto py-8 px-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">

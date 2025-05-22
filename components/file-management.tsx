@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, FileText, Download, Trash2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import UploadFileDialog from "./upload-file-dialog"
+// Import the audit logger at the top of the file
+import { logAuditEvent } from "@/lib/audit-logger"
 
 interface NursingHome {
   id: string
@@ -67,6 +69,7 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
 
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - 2 + i).toString())
 
+  // Update the handleDownload function to log file downloads
   const handleDownload = async (filePath: string, fileName: string) => {
     try {
       const { data, error } = await supabase.storage.from("nursing-home-files").download(filePath)
@@ -84,6 +87,21 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
       a.click()
       URL.revokeObjectURL(url)
       document.body.removeChild(a)
+
+      // Log file download
+      const user = await supabase.auth.getUser()
+      if (user.data?.user) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "download",
+          entityType: "nursing_home_file",
+          entityId: filePath,
+          details: {
+            file_name: fileName,
+            nursing_home_id: selectedHomeId,
+          },
+        })
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -93,6 +111,7 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
     }
   }
 
+  // Update the handleDelete function to log file deletions
   const handleDelete = async (id: string, filePath: string) => {
     try {
       // Delete from storage
@@ -107,6 +126,21 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
 
       if (dbError) {
         throw dbError
+      }
+
+      // Log file deletion
+      const user = await supabase.auth.getUser()
+      if (user.data?.user) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "delete",
+          entityType: "nursing_home_file",
+          entityId: id,
+          details: {
+            file_path: filePath,
+            nursing_home_id: selectedHomeId,
+          },
+        })
       }
 
       toast({

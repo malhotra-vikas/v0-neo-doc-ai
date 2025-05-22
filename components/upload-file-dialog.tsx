@@ -20,6 +20,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/components/ui/use-toast"
 import { Upload } from "lucide-react"
 
+// Import the audit logger at the top of the file
+import { logAuditEvent } from "@/lib/audit-logger"
+
 interface UploadFileDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -53,6 +56,7 @@ export default function UploadFileDialog({
     }
   }
 
+  // Update the handleSubmit function to log file uploads
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -125,6 +129,26 @@ export default function UploadFileDialog({
       }
 
       console.log("Database record inserted:", insertData)
+
+      // Log file upload
+      const user = await supabase.auth.getUser()
+      if (user.data?.user && insertData && insertData[0]) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "upload",
+          entityType: "nursing_home_file",
+          entityId: insertData[0].id,
+          details: {
+            nursing_home_id: nursingHomeId,
+            nursing_home_name: nursingHomeName,
+            file_name: fileName,
+            file_type: fileType,
+            month,
+            year,
+            file_size: file.size,
+          },
+        })
+      }
 
       if (file.type === "application/pdf") {
         const { error: queueError } = await supabase.from("pdf_processing_queue").insert([

@@ -18,6 +18,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 
+// Import the audit logger at the top of the file
+import { logAuditEvent } from "@/lib/audit-logger"
+
 interface AddPatientDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -33,6 +36,7 @@ export default function AddPatientDialog({ open, onOpenChange, nursingHomeId }: 
   const supabase = createClientComponentClient()
   const { toast } = useToast()
 
+  // Update the handleSubmit function to log patient creation
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -52,6 +56,22 @@ export default function AddPatientDialog({ open, onOpenChange, nursingHomeId }: 
 
       if (error) {
         throw error
+      }
+
+      // Log patient creation
+      const user = await supabase.auth.getUser()
+      if (user.data?.user && data && data[0]) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "create",
+          entityType: "patient",
+          entityId: data[0].id,
+          details: {
+            name,
+            nursing_home_id: nursingHomeId,
+            medical_record_number: medicalRecordNumber,
+          },
+        })
       }
 
       toast({

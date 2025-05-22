@@ -3,14 +3,16 @@ import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 import { logger } from "@/lib/logger"
+// Import the server audit logger at the top of the file
+import { logServerAuditEvent } from "@/lib/audit-logger"
 
 const COMPONENT = "ProcessPDFQueue"
-
 
 export const dynamic = "force-dynamic"
 // Increase the maximum duration for this route handler to handle larger PDFs
 export const maxDuration = 60 // 60 seconds
 
+// Update the GET function to log processing events
 export async function GET(request: Request) {
     const overallTimer = logger.timing(COMPONENT, "complete-process")
     logger.info(COMPONENT, "PDF processing queue API called")
@@ -21,6 +23,12 @@ export async function GET(request: Request) {
         const cookieStore = await cookies()
         const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
         logger.debug(COMPONENT, "Supabase client created")
+
+        // Get the session for audit logging
+        const {
+            data: { session },
+        } = await supabase.auth.getSession()
+        const user = session?.user
 
         // Get the next pending item from the queue
         logger.info(COMPONENT, "Fetching next pending item from queue")
@@ -34,6 +42,18 @@ export async function GET(request: Request) {
 
         if (queueError || !queueItem) {
             logger.info(COMPONENT, "No pending items in queue", { error: queueError?.message })
+
+            // Log the no items event if we have a user
+            if (user) {
+                await logServerAuditEvent(supabase, {
+                    userId: user.id,
+                    userEmail: user.email || "",
+                    actionType: "process",
+                    entityType: "pdf_queue",
+                    details: { status: "no_items" },
+                })
+            }
+
             return NextResponse.json(
                 {
                     message: "No pending items in queue",
@@ -46,12 +66,28 @@ export async function GET(request: Request) {
         logger.info(COMPONENT, "Found pending item in queue", {
             queueItemId: queueItem.id,
             fileId: queueItem.file_id,
-            filePath: queueItem.file_path
+            filePath: queueItem.file_path,
         })
 
         // Update the queue item status to processing
         logger.debug(COMPONENT, "Updating queue item status to processing", { queueItemId: queueItem.id })
         await supabase.from("pdf_processing_queue").update({ status: "processing" }).eq("id", queueItem.id)
+
+        // Log the processing started event if we have a user
+        if (user) {
+            await logServerAuditEvent(supabase, {
+                userId: user.id,
+                userEmail: user.email || "",
+                actionType: "process",
+                entityType: "pdf_queue",
+                entityId: queueItem.id,
+                details: {
+                    status: "processing_started",
+                    file_id: queueItem.file_id,
+                    file_path: queueItem.file_path,
+                },
+            })
+        }
 
         try {
             // Download the PDF file
@@ -69,20 +105,20 @@ export async function GET(request: Request) {
 
             logger.info(COMPONENT, "PDF file downloaded successfully", {
                 fileSize: fileData.size,
-                fileType: fileData.type
+                fileType: fileData.type,
             })
 
-            // Convert the Blob to ArrayBuffer for PDF.js
+            // Convert the Blob to ArrayBuffer for processing
             logger.debug(COMPONENT, "Converting Blob to ArrayBuffer")
             const arrayBufferTimer = logger.timing(COMPONENT, "blob-to-arraybuffer")
             const arrayBuffer = await fileData.arrayBuffer()
             arrayBufferTimer.end()
             logger.debug(COMPONENT, "Blob converted to ArrayBuffer", { bufferSize: arrayBuffer.byteLength })
 
-            // If PDF.js extraction fails, use a fallback approach
+            // Extract metadata and text
             let extractedText = ""
             let metadata = { numPages: 0, info: {} }
-            const fileName = queueItem.fileName
+            const fileName = queueItem.filePath.split('/').pop() || "";
 
             try {
                 // Try to get PDF metadata
@@ -95,26 +131,23 @@ export async function GET(request: Request) {
                     title: fileName || "Untitled",
                 })
 
-                // Try to extract text using PDF.js
+                // Try to extract text
                 logger.info(COMPONENT, "Extracting text from PDF")
                 const extractionTimer = logger.timing(COMPONENT, "extract-text")
-
-                //extractedText = await extractTextFromPDF(arrayBuffer)
                 extractedText = await extractTextFromPDF(arrayBuffer)
-
                 extractionTimer.end()
 
                 const textLength = extractedText.length
                 logger.info(COMPONENT, "Text extracted successfully", {
                     textLength,
-                    pages: metadata.numPages
+                    pages: metadata.numPages,
                 })
             } catch (pdfError) {
-                logger.error(COMPONENT, "PDF.js extraction failed, using fallback", pdfError)
+                logger.error(COMPONENT, "Text extraction failed", pdfError)
 
                 // Fallback: Generate basic information about the PDF
                 extractedText = `PDF Text Extraction (Fallback Method)\n\n`
-                extractedText += `The system was unable to extract text from this PDF using the primary method.\n`
+                extractedText += `The system was unable to extract text from this PDF.\n`
                 extractedText += `This could be due to the PDF being scanned, encrypted, or in an unsupported format.\n\n`
                 extractedText += `File Information:\n`
                 extractedText += `- File Path: ${queueItem.file_path}\n`
@@ -144,7 +177,7 @@ ${extractedText}
             // Update the patient_files table with the extracted text
             logger.info(COMPONENT, "Updating patient_files table with extracted text", {
                 fileId: queueItem.file_id,
-                textLength: formattedText.length
+                textLength: formattedText.length,
             })
 
             const dbUpdateTimer = logger.timing(COMPONENT, "update-database")
@@ -167,10 +200,27 @@ ${extractedText}
                 .eq("id", queueItem.id)
             dbUpdateTimer.end()
 
+            // Log the processing completed event if we have a user
+            if (user) {
+                await logServerAuditEvent(supabase, {
+                    userId: user.id,
+                    userEmail: user.email || "",
+                    actionType: "process",
+                    entityType: "pdf_queue",
+                    entityId: queueItem.id,
+                    details: {
+                        status: "processing_completed",
+                        file_id: queueItem.file_id,
+                        text_length: formattedText.length,
+                        pages: metadata.numPages || 0,
+                    },
+                })
+            }
+
             logger.info(COMPONENT, "PDF processing completed successfully", {
                 queueItemId: queueItem.id,
                 fileId: queueItem.file_id,
-                processingTime: overallTimer.end()
+                processingTime: overallTimer.end(),
             })
 
             return NextResponse.json({
@@ -179,7 +229,7 @@ ${extractedText}
                 metadata: {
                     pageCount: metadata.numPages,
                     fileSize: fileData.size,
-                    title: metadata.info?.Title,
+                    title: fileName,
                 },
             })
         } catch (error: any) {
@@ -198,6 +248,22 @@ ${extractedText}
             // Update the patient_files status
             logger.debug(COMPONENT, "Updating patient_files status to failed", { fileId: queueItem.file_id })
             await supabase.from("patient_files").update({ processing_status: "failed" }).eq("id", queueItem.file_id)
+
+            // Log the processing failed event if we have a user
+            if (user) {
+                await logServerAuditEvent(supabase, {
+                    userId: user.id,
+                    userEmail: user.email || "",
+                    actionType: "process",
+                    entityType: "pdf_queue",
+                    entityId: queueItem.id,
+                    details: {
+                        status: "processing_failed",
+                        file_id: queueItem.file_id,
+                        error: error.message,
+                    },
+                })
+            }
 
             return NextResponse.json(
                 {

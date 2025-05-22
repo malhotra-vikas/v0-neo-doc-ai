@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
+import { logAuditEvent } from "@/lib/audit-logger"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 export function ProcessQueueButton() {
     const [isProcessing, setIsProcessing] = useState(false)
@@ -25,6 +27,22 @@ export function ProcessQueueButton() {
             })
 
             const result = await response.json()
+            const supabase = createClientComponentClient()
+
+            // Log the processing event
+            const user = await supabase.auth.getUser()
+            if (user.data?.user) {
+                logAuditEvent({
+                    user: user.data.user,
+                    actionType: "process",
+                    entityType: "pdf_queue",
+                    entityId: result.file_id || "batch",
+                    details: {
+                        status: response.ok ? "success" : response.status === 404 ? "no_items" : "error",
+                        message: result.message,
+                    },
+                })
+            }
 
             if (response.ok) {
                 toast({

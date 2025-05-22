@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChevronLeft } from "lucide-react"
+import { PageViewLogger } from "@/components/page-view-logger"
 
 export default async function PatientPage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
@@ -36,6 +37,7 @@ export default async function PatientPage({ params }: { params: { id: string } }
   return (
     <div className="flex flex-col min-h-screen">
       <DashboardHeader user={session.user} />
+      <PageViewLogger user={session.user} pageName="Patient Details" entityType="patient" entityId={params.id} />
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <div className="flex items-center mb-6">

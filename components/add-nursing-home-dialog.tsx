@@ -20,6 +20,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+// Import the audit logger at the top of the file
+import { logAuditEvent } from "@/lib/audit-logger"
 
 interface AddNursingHomeDialogProps {
   open: boolean
@@ -59,6 +61,7 @@ export default function AddNursingHomeDialog({ open, onOpenChange }: AddNursingH
     },
   })
 
+  // Update the onSubmit function to log nursing home creation
   const onSubmit = async (values: NursingHomeFormValues) => {
     setFormState("submitting")
 
@@ -81,6 +84,21 @@ export default function AddNursingHomeDialog({ open, onOpenChange }: AddNursingH
 
       if (error) {
         throw error
+      }
+
+      // Log nursing home creation
+      const user = await supabase.auth.getUser()
+      if (user.data?.user && data && data[0]) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "create",
+          entityType: "nursing_home",
+          entityId: data[0].id,
+          details: {
+            name: values.name,
+            address: formattedAddress,
+          },
+        })
       }
 
       setFormState("success")

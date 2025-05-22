@@ -6,6 +6,8 @@ import { RefreshCw } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+// Import the audit logger at the top of the file
+import { logAuditEvent } from "@/lib/audit-logger"
 
 interface ReprocessButtonProps {
     fileId: string
@@ -17,6 +19,7 @@ export function ReprocessButton({ fileId }: ReprocessButtonProps) {
     const router = useRouter()
     const supabase = createClientComponentClient()
 
+    // Update the handleReprocess function to log reprocessing events
     const handleReprocess = async () => {
         if (isProcessing) return
 
@@ -81,6 +84,21 @@ export function ReprocessButton({ fileId }: ReprocessButtonProps) {
                 if (insertError) {
                     throw insertError
                 }
+            }
+
+            // Log reprocessing event
+            const user = await supabase.auth.getUser()
+            if (user.data?.user) {
+                logAuditEvent({
+                    user: user.data.user,
+                    actionType: "process",
+                    entityType: "patient_file",
+                    entityId: fileId,
+                    details: {
+                        action: "reprocess",
+                        initiated_from: "reprocess_button",
+                    },
+                })
             }
 
             toast({

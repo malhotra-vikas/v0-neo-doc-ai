@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { logger } from "@/lib/logger"
+import { logAuditEvent } from "@/lib/audit-logger"
 
 const COMPONENT = "BulkFileUpload"
 
@@ -173,6 +174,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       }
 
       let patientId: string
+      let patientCreated = false
 
       // If patient doesn't exist, create a new patient record
       if (!existingPatients || existingPatients.length === 0) {
@@ -194,7 +196,24 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         }
 
         patientId = newPatient[0].id
+        patientCreated = true
         logger.info(COMPONENT, "New patient created", { patientId, patientName })
+
+        // Log patient creation
+        const user = await supabase.auth.getUser()
+        if (user.data?.user) {
+          logAuditEvent({
+            user: user.data.user,
+            actionType: "create",
+            entityType: "patient",
+            entityId: patientId,
+            details: {
+              name: patientName,
+              nursing_home_id: selectedNursingHomeId,
+              created_via: "bulk_upload",
+            },
+          })
+        }
       } else {
         patientId = existingPatients[0].id
         logger.info(COMPONENT, "Existing patient found", { patientId, patientName })
@@ -220,16 +239,19 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
       // Save file metadata to database
       logger.debug(COMPONENT, "Saving file metadata to database")
-      const { error: dbError } = await supabase.from("patient_files").insert([
-        {
-          patient_id: patientId,
-          file_name: file.name,
-          file_type: fileType,
-          month: selectedMonth,
-          year: selectedYear,
-          file_path: filePath,
-        },
-      ])
+      const { data: fileData, error: dbError } = await supabase
+        .from("patient_files")
+        .insert([
+          {
+            patient_id: patientId,
+            file_name: file.name,
+            file_type: fileType,
+            month: selectedMonth,
+            year: selectedYear,
+            file_path: filePath,
+          },
+        ])
+        .select()
 
       if (dbError) {
         logger.error(COMPONENT, "Error saving file metadata", dbError)
@@ -238,7 +260,28 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
       logger.info(COMPONENT, "File metadata saved successfully")
 
-      const { data: fileData, error: fileQueryError } = await supabase
+      // Log file upload
+      const user = await supabase.auth.getUser()
+      if (user.data?.user && fileData && fileData[0]) {
+        logAuditEvent({
+          user: user.data.user,
+          actionType: "upload",
+          entityType: "patient_file",
+          entityId: fileData[0].id,
+          details: {
+            patient_id: patientId,
+            patient_name: patientName,
+            file_name: file.name,
+            file_type: fileType,
+            month: selectedMonth,
+            year: selectedYear,
+            file_size: file.size,
+            uploaded_via: "bulk_upload",
+          },
+        })
+      }
+
+      const { data: fileQueryData, error: fileQueryError } = await supabase
         .from("patient_files")
         .select("id")
         .eq("patient_id", patientId)
@@ -250,13 +293,13 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         throw fileQueryError
       }
 
-      logger.debug(COMPONENT, "Retrieved file ID", { fileId: fileData.id })
+      logger.debug(COMPONENT, "Retrieved file ID", { fileId: fileQueryData.id })
 
       // Add the file to the processing queue
-      logger.info(COMPONENT, "Adding file to processing queue", { fileId: fileData.id })
+      logger.info(COMPONENT, "Adding file to processing queue", { fileId: fileQueryData.id })
       const { error: queueError } = await supabase.from("pdf_processing_queue").insert([
         {
-          file_id: fileData.id,
+          file_id: fileQueryData.id,
           file_path: filePath,
           status: "pending",
         },
@@ -274,7 +317,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         fileName: file.name,
         processingTime,
         patientId,
-        fileId: fileData.id,
+        fileId: fileQueryData.id,
       })
 
       return { success: true, message: `Successfully processed ${file.name} for patient ${patientName}` }
