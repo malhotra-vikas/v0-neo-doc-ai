@@ -118,7 +118,7 @@ export async function GET(request: Request) {
             // Extract metadata and text
             let extractedText = ""
             let metadata = { numPages: 0, info: {} }
-            const fileName = queueItem.filePath.split('/').pop() || "";
+            const fileName = queueItem.file_path.split('/').pop() || "";
 
             try {
                 // Try to get PDF metadata

@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Download, Trash2, FileSearch, RefreshCw } from "lucide-react"
+import { FileText, Download, Trash2, FileSearch, RefreshCw, Sparkles } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
@@ -33,17 +33,42 @@ interface FileRecord {
   created_at: string
   processing_status?: "pending" | "processing" | "completed" | "failed"
   parsed_text?: string | null
+  has_case_study?: boolean
 }
 
 interface PatientFilesTableProps {
   files: FileRecord[]
 }
 
-export function PatientFilesTable({ files }: PatientFilesTableProps) {
+export function PatientFilesTable({ files: initialFiles }: PatientFilesTableProps) {
+  const [files, setFiles] = useState<FileRecord[]>(initialFiles)
   const [fileToDelete, setFileToDelete] = useState<FileRecord | null>(null)
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+
+  // Fetch case study highlight status for each file
+  useEffect(() => {
+    const fetchCaseStudyStatus = async () => {
+      const fileIds = initialFiles.map((file) => file.id)
+      if (fileIds.length === 0) return
+
+      const { data } = await supabase.from("case_study_highlights").select("file_id").in("file_id", fileIds)
+
+      if (data) {
+        const fileIdsWithCaseStudy = new Set(data.map((item) => item.file_id))
+
+        setFiles(
+          initialFiles.map((file) => ({
+            ...file,
+            has_case_study: fileIdsWithCaseStudy.has(file.id),
+          })),
+        )
+      }
+    }
+
+    fetchCaseStudyStatus()
+  }, [initialFiles, supabase])
 
   // Update the handleDownload function to log file downloads
   const handleDownload = async (filePath: string, fileName: string) => {
@@ -233,13 +258,14 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
             <TableHead>Month/Year</TableHead>
             <TableHead>Uploaded On</TableHead>
             <TableHead>Processing Status</TableHead>
+            <TableHead>Case Study</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {files.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center">
+              <TableCell colSpan={7} className="text-center">
                 No files found for this patient
               </TableCell>
             </TableRow>
@@ -271,6 +297,22 @@ export function PatientFilesTable({ files }: PatientFilesTableProps) {
                   ) : (
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                       Pending
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {file.has_case_study ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Generated
+                    </span>
+                  ) : file.processing_status === "completed" ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      Not Generated
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      Process PDF First
                     </span>
                   )}
                 </TableCell>

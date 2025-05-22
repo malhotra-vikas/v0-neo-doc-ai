@@ -8,8 +8,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChevronLeft, FileText, Download, RefreshCw } from "lucide-react"
 import { ReprocessButton } from "@/components/reprocess-button"
 import { PageViewLogger } from "@/components/page-view-logger"
+import { CaseStudyHighlight } from "@/components/case-study-highlight"
 
-export default async function ViewParsedTextPage({ params }: { params: { id: string; fileId: string } }) {
+export const dynamic = "force-dynamic"
+
+export default async function PatientFileViewPage({
+    params,
+}: {
+    params: { id: string; fileid: string }
+}) {
+    const resolvedParams = await params;    
+    // Log the params to debug
+    console.log("Route params:", resolvedParams)
+
+    // Use the correct casing for the file ID parameter
+    const patientId = resolvedParams.id
+    const fileId = resolvedParams.fileid // Note: using lowercase 'fileid' to match URL parameter
+
+    // Log the extracted values
+    console.log("Patient ID:", patientId, "File ID:", fileId)
+
     const cookieStore = await cookies()
     const supabase = createServerComponentClient({ cookies: () => cookieStore })
 
@@ -21,23 +39,23 @@ export default async function ViewParsedTextPage({ params }: { params: { id: str
         redirect("/")
     }
 
-    // Fetch patient details
+    // Get the patient data
     const { data: patient, error: patientError } = await supabase
         .from("patients")
         .select("*, nursing_homes(*)")
-        .eq("id", params.id)
+        .eq("id", patientId)
         .single()
 
     if (patientError || !patient) {
         notFound()
     }
 
-    // Fetch file details
+    // Get the file data
     const { data: file, error: fileError } = await supabase
         .from("patient_files")
         .select("*")
-        .eq("id", params.fileId)
-        .eq("patient_id", params.id)
+        .eq("id", fileId)
+        .eq("patient_id", patientId)
         .single()
 
     if (fileError || !file) {
@@ -48,26 +66,28 @@ export default async function ViewParsedTextPage({ params }: { params: { id: str
     const { data: queueItem } = await supabase
         .from("pdf_processing_queue")
         .select("*")
-        .eq("file_id", params.fileId)
+        .eq("file_id", fileId)
         .order("created_at", { ascending: false })
         .limit(1)
+        .single()
+
+    // Get the case study highlight if it exists
+    const { data: caseStudyHighlight } = await supabase
+        .from("case_study_highlights")
+        .select("highlight_text")
+        .eq("file_id", fileId)
         .single()
 
     return (
         <div className="flex flex-col min-h-screen">
             <DashboardHeader user={session.user} />
-            <PageViewLogger
-                user={session.user}
-                pageName="View Patient File"
-                entityType="patient_file"
-                entityId={params.fileId}
-            />
+            <PageViewLogger user={session.user} pageName="View Patient File" entityType="patient_file" entityId={fileId} />
 
             <main className="flex-1 container mx-auto py-6 px-4">
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center">
                         <Button variant="ghost" size="sm" asChild className="mr-4">
-                            <Link href={`/patients/${params.id}/files`}>
+                            <Link href={`/patients/${patientId}/files`}>
                                 <ChevronLeft className="mr-2 h-4 w-4" />
                                 Back to Files
                             </Link>
@@ -85,7 +105,7 @@ export default async function ViewParsedTextPage({ params }: { params: { id: str
                                 Download Original
                             </Link>
                         </Button>
-                        <ReprocessButton fileId={params.fileId} />
+                        <ReprocessButton fileId={fileId} />
                     </div>
                 </div>
 
@@ -133,7 +153,17 @@ export default async function ViewParsedTextPage({ params }: { params: { id: str
                     </CardContent>
                 </Card>
 
-                <Card>
+                {/* Add Case Study Highlight component */}
+                {file.processing_status === "completed" && (
+                    <CaseStudyHighlight
+                        fileId={fileId}
+                        patientId={patientId}
+                        highlight={caseStudyHighlight?.highlight_text}
+                        fileName={file.file_name}
+                    />
+                )}
+
+                <Card className="mt-6">
                     <CardHeader>
                         <CardTitle>Extracted Text Content</CardTitle>
                         <CardDescription>
