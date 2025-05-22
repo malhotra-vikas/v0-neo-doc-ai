@@ -14,7 +14,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, UserIcon, Upload, FileText } from "lucide-react"
+import { LogOut, UserIcon, Upload, FileText, LayoutDashboard, Settings, HelpCircle } from "lucide-react"
+import { Logo } from "./logo"
 
 interface DashboardHeaderProps {
   user: User
@@ -33,63 +34,79 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
   const userInitials = user.email ? user.email.substring(0, 2).toUpperCase() : "U"
 
   return (
-    <header className="border-b bg-white">
-      <div className="container mx-auto py-4 px-4 flex items-center justify-between">
-        <div className="flex items-center space-x-6">
-          <Link href="/dashboard" className="font-bold text-xl">
-            Nursing Home Management
-          </Link>
+    <header className="sticky top-0 z-40 border-b bg-white shadow-sm">
+      <div className="container mx-auto py-3 px-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-8">
+            <Logo />
 
-          <nav>
-            <ul className="flex space-x-6">
-              <li>
-                <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
-                  Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link href="/bulk-upload" className="text-gray-600 hover:text-gray-900 flex items-center">
-                  <Upload className="mr-1 h-4 w-4" />
-                  Bulk Upload
-                </Link>
-              </li>
-              <li>
-                <Link href="/admin/pdf-queue" className="text-gray-600 hover:text-gray-900 flex items-center">
-                  <FileText className="mr-1 h-4 w-4" />
-                  PDF Queue
-                </Link>
-              </li>
-              <li>
-                <Link href="/debug" className="text-gray-600 hover:text-gray-900">
-                  Debug
-                </Link>
-              </li>
-            </ul>
-          </nav>
-        </div>
+            <nav className="hidden md:block">
+              <ul className="flex space-x-6">
+                <li>
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
+                  >
+                    <LayoutDashboard className="mr-1 h-4 w-4" />
+                    Dashboard
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/bulk-upload"
+                    className="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
+                  >
+                    <Upload className="mr-1 h-4 w-4" />
+                    Bulk Upload
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/admin/pdf-queue"
+                    className="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
+                  >
+                    <FileText className="mr-1 h-4 w-4" />
+                    PDF Queue
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+          </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-              <Avatar>
-                <AvatarFallback>{userInitials}</AvatarFallback>
-              </Avatar>
+          <div className="flex items-center space-x-4">
+            <Button variant="outline" size="sm" className="hidden md:flex">
+              <HelpCircle className="mr-2 h-4 w-4" />
+              Help
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <UserIcon className="mr-2 h-4 w-4" />
-              <span>{user.email}</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Sign out</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                  <Avatar className="h-9 w-9 border border-primary-100">
+                    <AvatarFallback className="bg-primary-50 text-primary-700">{userInitials}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>
+                  <UserIcon className="mr-2 h-4 w-4" />
+                  <span>{user.email}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
       </div>
     </header>
   )

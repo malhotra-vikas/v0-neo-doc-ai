@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Loader2, AlertCircle } from "lucide-react"
 
 export default function LoginForm() {
   const [email, setEmail] = useState("malhotra.vikas@gmail.com")
@@ -44,15 +45,16 @@ export default function LoginForm() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sign In</CardTitle>
+    <Card className="shadow-lg border-gray-200">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">Sign In</CardTitle>
         <CardDescription>Enter your credentials to access your account</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="text-sm">
+              <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
@@ -64,27 +66,44 @@ export default function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
+              className="focus:border-primary-500 focus:ring-primary-500"
               required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <a href="#" className="text-xs text-primary-600 hover:text-primary-800">
+                Forgot password?
+              </a>
+            </div>
             <Input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
+              className="focus:border-primary-500 focus:ring-primary-500"
               required
             />
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
+          <Button type="submit" className="w-full bg-primary-600 hover:bg-primary-700" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </Button>
         </form>
       </CardContent>
-      <CardFooter className="flex justify-center text-sm text-gray-500">
-        Default credentials: malhotra.vikas@gmail.com / test@123
+      <CardFooter className="flex flex-col space-y-4 border-t bg-gray-50 p-6 text-center text-sm text-gray-600 rounded-b-lg">
+        <div className="flex items-center justify-center space-x-1">
+          <span>Default credentials:</span>
+          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs">malhotra.vikas@gmail.com / test@123</code>
+        </div>
       </CardFooter>
     </Card>
   )

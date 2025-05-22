@@ -3,14 +3,14 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
-// Import the worker component
 import { PDFProcessingWorker } from "@/components/pdf-processing-worker"
+import { Footer } from "@/components/footer"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Nursing Home Management",
-  description: "Manage nursing homes, patients, and their data",
+  title: "NursingCare Pro | Nursing Home Management",
+  description: "Secure, reliable nursing home management software for healthcare professionals.",
 }
 
 export default function RootLayout({
@@ -20,8 +20,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        {children}
+      <body className={`${inter.className} min-h-screen flex flex-col`}>
+        <div className="flex-1">{children}</div>
+        <Footer />
         <Toaster />
         <PDFProcessingWorker />
       </body>
