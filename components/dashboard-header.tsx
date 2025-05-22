@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { User } from "@supabase/auth-helpers-nextjs"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -14,8 +14,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, UserIcon, Upload, FileText, LayoutDashboard, Settings, HelpCircle } from "lucide-react"
+import {
+  LogOut,
+  UserIcon,
+  Upload,
+  FileText,
+  LayoutDashboard,
+  Settings,
+  HelpCircle,
+  BarChart3,
+  ClipboardList,
+} from "lucide-react"
 import { Logo } from "./logo"
+import { cn } from "@/lib/utils"
 
 interface DashboardHeaderProps {
   user: User
@@ -23,6 +34,7 @@ interface DashboardHeaderProps {
 
 export default function DashboardHeader({ user }: DashboardHeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClientComponentClient()
 
   const handleSignOut = async () => {
@@ -33,6 +45,34 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
 
   const userInitials = user.email ? user.email.substring(0, 2).toUpperCase() : "U"
 
+  const navItems = [
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+    },
+    {
+      name: "Bulk Upload",
+      href: "/bulk-upload",
+      icon: Upload,
+    },
+    {
+      name: "PDF Queue",
+      href: "/admin/pdf-queue",
+      icon: FileText,
+    },
+    {
+      name: "Reports",
+      href: "/reports",
+      icon: BarChart3,
+    },
+    {
+      name: "Audit Logs",
+      href: "/audit-logs",
+      icon: ClipboardList,
+    },
+  ]
+
   return (
     <header className="sticky top-0 z-40 border-b bg-white shadow-sm">
       <div className="container mx-auto py-3 px-4">
@@ -42,33 +82,22 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
 
             <nav className="hidden md:block">
               <ul className="flex space-x-6">
-                <li>
-                  <Link
-                    href="/dashboard"
-                    className="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
-                  >
-                    <LayoutDashboard className="mr-1 h-4 w-4" />
-                    Dashboard
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/bulk-upload"
-                    className="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
-                  >
-                    <Upload className="mr-1 h-4 w-4" />
-                    Bulk Upload
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/admin/pdf-queue"
-                    className="flex items-center text-gray-600 hover:text-primary-600 transition-colors"
-                  >
-                    <FileText className="mr-1 h-4 w-4" />
-                    PDF Queue
-                  </Link>
-                </li>
+                {navItems.map((item) => (
+                  <li key={item.name}>
+                    <Link
+                      href={item.href}
+                      className={cn(
+                        "flex items-center transition-colors",
+                        pathname === item.href
+                          ? "text-primary-600 font-medium"
+                          : "text-gray-600 hover:text-primary-600",
+                      )}
+                    >
+                      <item.icon className="mr-1 h-4 w-4" />
+                      {item.name}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </nav>
           </div>
