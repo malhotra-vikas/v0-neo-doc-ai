@@ -130,3 +130,48 @@
     @apply status-badge bg-gray-100 text-gray-800;
   }
 }
+
+/* Add these print styles at the end of the file */
+@media print {
+
+  /* Hide elements that shouldn't be printed */
+  header,
+  nav,
+  footer,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Ensure the report takes up the full page */
+  .report-content {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Remove shadows and adjust borders for better printing */
+  .report-content .shadow-md,
+  .report-content .shadow-lg,
+  .report-content .shadow-sm {
+    box-shadow: none !important;
+  }
+
+  /* Ensure backgrounds print properly */
+  .report-content * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure page breaks don't occur in the middle of important content */
+  .card-header,
+  h1,
+  h2,
+  h3,
+  h4 {
+    page-break-after: avoid;
+  }
+
+  .card-content {
+    page-break-inside: avoid;
+  }
+}
