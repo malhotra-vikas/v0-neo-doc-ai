@@ -30,6 +30,9 @@ export default async function DashboardPage() {
   // Fetch monthly files status
   const { data: monthlyFiles } = await supabase.from("nursing_home_files").select("*")
 
+    // Fetch patients monthly files status
+  const { data: patientsMonthlyFiles } = await supabase.from("patient_files").select("*")
+
   // Calculate statistics
   const totalNursingHomes = nursingHomes?.length || 0
   const totalPatients = nursingHomes?.reduce((acc, home) => acc + (home.patients?.length || 0), 0) || 0
@@ -64,6 +67,7 @@ export default async function DashboardPage() {
           nursingHomesCount={totalNursingHomes}
           patientsCount={totalPatients}
           monthlyFiles={monthlyFiles || []}
+          patientMonthlyFiles={patientsMonthlyFiles || []}
         />
 
         <Card className="mt-8 border-t-4 border-t-primary-500">

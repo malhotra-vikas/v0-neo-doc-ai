@@ -39,12 +39,6 @@ export default async function PatientFilesPage({ params }: { params: { id: strin
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <div className="flex items-center mb-6">
-          <Button variant="ghost" size="sm" asChild className="mr-4">
-            <Link href={`/patients/${params.id}`}>
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Patient
-            </Link>
-          </Button>
           <h1 className="text-3xl font-bold">Files for {patient.name}</h1>
         </div>
 

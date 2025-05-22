@@ -43,12 +43,6 @@ export default async function PatientCaseStudiesPage({
     return (
         <div className="container mx-auto py-6 space-y-6">
             <div className="flex items-center gap-4">
-                <Button variant="outline" size="sm" asChild>
-                    <Link href={`/patients/${params.id}`}>
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Back to Patient
-                    </Link>
-                </Button>
                 <h1 className="text-2xl font-bold">Case Study Highlights for {patient.name}</h1>
             </div>
 

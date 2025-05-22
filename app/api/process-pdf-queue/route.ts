@@ -3,8 +3,8 @@ import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 import { logger } from "@/lib/logger"
-// Import the server audit logger at the top of the file
 import { logServerAuditEvent } from "@/lib/audit-logger"
+import { generateCaseStudyHighlight } from "@/app/actions/generate-case-study"
 
 const COMPONENT = "ProcessPDFQueue"
 
@@ -12,7 +12,6 @@ export const dynamic = "force-dynamic"
 // Increase the maximum duration for this route handler to handle larger PDFs
 export const maxDuration = 60 // 60 seconds
 
-// Update the GET function to log processing events
 export async function GET(request: Request) {
     const overallTimer = logger.timing(COMPONENT, "complete-process")
     logger.info(COMPONENT, "PDF processing queue API called")
@@ -215,6 +214,97 @@ ${extractedText}
                         pages: metadata.numPages || 0,
                     },
                 })
+            }
+
+            // AUTO-GENERATE CASE STUDY HIGHLIGHT
+            try {
+                logger.info(COMPONENT, "Auto-generating case study highlight", { fileId: queueItem.file_id })
+
+                // Get patient data for the case study
+                const { data: patientData, error: patientError } = await supabase
+                    .from("patient_files")
+                    .select("patient_id")
+                    .eq("id", queueItem.file_id)
+                    .single()
+
+                if (patientError || !patientData) {
+                    throw new Error(`Failed to get patient data: ${patientError?.message || "Patient not found"}`)
+                }
+
+                const { data: patient, error: patientNameError } = await supabase
+                    .from("patients")
+                    .select("name")
+                    .eq("id", patientData.patient_id)
+                    .single()
+
+                if (patientNameError || !patient) {
+                    throw new Error(`Failed to get patient name: ${patientNameError?.message}`)
+                }
+
+                // Check if we already have a case study highlight for this file
+                const { data: existingHighlight } = await supabase
+                    .from("case_study_highlights")
+                    .select("id")
+                    .eq("file_id", queueItem.file_id)
+                    .single()
+
+                // Log the start of case study generation
+                if (user) {
+                    await logServerAuditEvent(supabase, {
+                        userId: user.id,
+                        userEmail: user.email || "",
+                        actionType: "process",
+                        entityType: "case_study",
+                        entityId: queueItem.file_id,
+                        details: {
+                            status: "generation_started",
+                            file_id: queueItem.file_id,
+                            patient_id: patientData.patient_id,
+                        },
+                    })
+                }
+
+                const geenratedHighlight = await generateCaseStudyHighlight(queueItem.file_id)
+
+                // Log the successful generation
+                if (user) {
+                    await logServerAuditEvent(supabase, {
+                        userId: user.id,
+                        userEmail: user.email || "",
+                        actionType: "process",
+                        entityType: "case_study",
+                        entityId: queueItem.file_id,
+                        details: {
+                            status: "generation_completed",
+                            file_id: queueItem.file_id,
+                            patient_id: patientData.patient_id,
+                            text_length: geenratedHighlight.highlight?.length,
+                        },
+                    })
+                }
+
+                logger.info(COMPONENT, "Case study highlight saved to database", { fileId: queueItem.file_id })
+            } catch (caseStudyError: any) {
+                logger.error(COMPONENT, "Error generating case study highlight", caseStudyError)
+
+                // Log the error but don't fail the overall process
+                if (user) {
+                    await logServerAuditEvent(supabase, {
+                        userId: user.id,
+                        userEmail: user.email || "",
+                        actionType: "process",
+                        entityType: "case_study",
+                        entityId: queueItem.file_id,
+                        details: {
+                            status: "generation_failed",
+                            file_id: queueItem.file_id,
+                            error: caseStudyError.message,
+                        },
+                    })
+                }
+
+                // We don't throw here because we don't want to fail the overall process
+                // if case study generation fails
             }
 
             logger.info(COMPONENT, "PDF processing completed successfully", {

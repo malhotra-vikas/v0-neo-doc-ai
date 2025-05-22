@@ -41,12 +41,6 @@ export default async function PatientPage({ params }: { params: { id: string } }
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <div className="flex items-center mb-6">
-          <Button variant="ghost" size="sm" asChild className="mr-4">
-            <Link href="/dashboard">
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Dashboard
-            </Link>
-          </Button>
           <h1 className="text-3xl font-bold">{patient.name}</h1>
         </div>
 
