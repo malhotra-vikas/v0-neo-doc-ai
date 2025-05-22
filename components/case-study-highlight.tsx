@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Sparkles, RefreshCw, FileText } from "lucide-react"
+import { Sparkles, RefreshCw, FileText, ShieldCheck } from "lucide-react"
 import { generateCaseStudyHighlight } from "@/app/actions/generate-case-study"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -28,7 +28,7 @@ export function CaseStudyHighlight({ fileId, patientId, highlight, fileName }: C
                 setHighlightText(result.highlight)
                 toast({
                     title: "Case Study Highlight Generated",
-                    description: "The case study highlight has been successfully generated.",
+                    description: "The case study highlight has been successfully generated with privacy protection.",
                     variant: "default",
                 })
             } else {
@@ -48,10 +48,16 @@ export function CaseStudyHighlight({ fileId, patientId, highlight, fileName }: C
     return (
         <Card className="mb-6">
             <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
-                <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    Case Study Highlight
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        Case Study Highlight
+                    </CardTitle>
+                    <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                        <ShieldCheck className="h-4 w-4 mr-1 text-green-600" />
+                        Privacy Protected
+                    </div>
+                </div>
                 <CardDescription>AI-generated summary of the patient case and Puzzle Healthcare's intervention</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -64,12 +70,16 @@ export function CaseStudyHighlight({ fileId, patientId, highlight, fileName }: C
                         <FileText className="h-12 w-12 text-gray-400 mb-4" />
                         <h3 className="text-lg font-medium mb-2">No Case Study Highlight Yet</h3>
                         <p className="text-gray-500 mb-4 max-w-md">
-                            Generate an AI-powered case study highlight based on the extracted text from "{fileName}".
+                            Generate a privacy-protected AI summary based on the extracted text from "{fileName}".
                         </p>
                     </div>
                 )}
             </CardContent>
-            <CardFooter className="flex justify-end gap-2 bg-gray-50 dark:bg-gray-900">
+            <CardFooter className="flex justify-between gap-2 bg-gray-50 dark:bg-gray-900">
+                <div className="text-xs text-gray-500 italic flex items-center">
+                    <ShieldCheck className="h-3 w-3 mr-1 text-green-600" />
+                    All personal identifiers are removed for privacy
+                </div>
                 <Button
                     onClick={handleGenerateHighlight}
                     disabled={isGenerating}
