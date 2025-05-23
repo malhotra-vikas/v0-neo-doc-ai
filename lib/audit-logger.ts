@@ -45,8 +45,8 @@ export async function logAuditEvent({
 
         // Log the audit event
         await supabase.rpc("add_audit_log", {
-            p_user_id: user.id,
-            p_user_email: user.email,
+            p_user_id: user?.id,
+            p_user_email: user?.email,
             p_action_type: actionType,
             p_entity_type: entityType,
             p_entity_id: entityId || null,

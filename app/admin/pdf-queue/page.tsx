@@ -25,6 +25,8 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AutoRefreshWrapper } from "@/components/auto-refresh-wrapper"
+import { PageViewLogger } from "@/components/page-view-logger"
 
 export default async function PDFQueuePage() {
     // Fix: Properly await cookies()
@@ -69,193 +71,196 @@ export default async function PDFQueuePage() {
     return (
         <div className="flex flex-col min-h-screen">
             <DashboardHeader user={session.user} />
+            <PageViewLogger user={session.user} pageName="PDF Queue" entityType="pdf_queue" entityId="admin" />
 
             <main className="flex-1 container mx-auto py-6 px-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                    <div className="flex items-center">
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-800">PDF Processing Queue</h1>
-                            <p className="text-sm text-muted-foreground mt-1">Manage and monitor PDF text extraction processing</p>
+                <AutoRefreshWrapper userId={session.user.id} pageName="PDF Queue">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center">
+                            <Button variant="ghost" size="sm" asChild className="mr-4">
+                                <Link href="/dashboard">
+                                    <ChevronLeft className="mr-2 h-4 w-4" />
+                                    Back to Dashboard
+                                </Link>
+                            </Button>
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-800">PDF Processing Queue</h1>
+                                <p className="text-sm text-muted-foreground mt-1">Manage and monitor PDF text extraction processing</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <ProcessQueueButton />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <ProcessQueueButton />
-                        <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                            <Link href="/admin/pdf-queue">
-                                <RefreshCw className="h-4 w-4" />
-                                <span className="hidden sm:inline">Refresh</span>
-                            </Link>
-                        </Button>
-                    </div>
-                </div>
 
-                <div className="grid gap-6 md:grid-cols-5 mb-8">
-                    <Card className="bg-white">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Total Files</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-end justify-between">
-                                <p className="text-3xl font-bold">{totalCount}</p>
-                                <FileText className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-white">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-end justify-between">
-                                <p className="text-3xl font-bold text-amber-600">{pendingCount}</p>
-                                <Clock className="h-5 w-5 text-amber-500" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-white">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Processing</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-end justify-between">
-                                <p className="text-3xl font-bold text-blue-600">{processingCount}</p>
-                                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-white">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-end justify-between">
-                                <p className="text-3xl font-bold text-green-600">{completedCount}</p>
-                                <CheckCircle className="h-5 w-5 text-green-500" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-white">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Failed</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-end justify-between">
-                                <p className="text-3xl font-bold text-red-600">{failedCount}</p>
-                                <AlertTriangle className="h-5 w-5 text-red-500" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <Card className="bg-white shadow-sm border-slate-200">
-                    <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                            <div>
-                                <CardTitle className="text-xl text-slate-800 flex items-center">
-                                    <FileSearch className="mr-2 h-5 w-5 text-primary" />
-                                    Queue Items
-                                </CardTitle>
-                                <CardDescription className="mt-1">
-                                    {totalCount > 0 ? (
-                                        <>
-                                            Showing {totalCount} items from {formatDate(oldestDate)} to {formatDate(newestDate)}
-                                        </>
-                                    ) : (
-                                        <>No items in the processing queue</>
-                                    )}
-                                </CardDescription>
-                            </div>
-                            <div className="flex flex-col sm:flex-row gap-2">
-                                <div className="relative">
-                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                    <Input type="search" placeholder="Search files..." className="pl-9 h-9 md:w-[200px] lg:w-[300px]" />
+                    <div className="grid gap-6 md:grid-cols-5 mb-8">
+                        <Card className="bg-white">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Total Files</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-end justify-between">
+                                    <p className="text-3xl font-bold">{totalCount}</p>
+                                    <FileText className="h-5 w-5 text-muted-foreground" />
                                 </div>
-                                <Select defaultValue="all">
-                                    <SelectTrigger className="h-9 w-[130px]">
-                                        <Filter className="h-4 w-4 mr-2" />
-                                        <SelectValue placeholder="Filter" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Statuses</SelectItem>
-                                        <SelectItem value="pending">Pending</SelectItem>
-                                        <SelectItem value="processing">Processing</SelectItem>
-                                        <SelectItem value="completed">Completed</SelectItem>
-                                        <SelectItem value="failed">Failed</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <Tabs defaultValue="all" className="w-full">
-                            <TabsList className="w-full rounded-none justify-start border-b bg-slate-50">
-                                <TabsTrigger value="all" className="data-[state=active]:bg-white">
-                                    All
-                                    <Badge variant="secondary" className="ml-2 bg-slate-200 text-slate-700">
-                                        {totalCount}
-                                    </Badge>
-                                </TabsTrigger>
-                                <TabsTrigger value="pending" className="data-[state=active]:bg-white">
-                                    Pending
-                                    <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800">
-                                        {pendingCount}
-                                    </Badge>
-                                </TabsTrigger>
-                                <TabsTrigger value="processing" className="data-[state=active]:bg-white">
-                                    Processing
-                                    <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-800">
-                                        {processingCount}
-                                    </Badge>
-                                </TabsTrigger>
-                                <TabsTrigger value="completed" className="data-[state=active]:bg-white">
-                                    Completed
-                                    <Badge variant="secondary" className="ml-2 bg-green-100 text-green-800">
-                                        {completedCount}
-                                    </Badge>
-                                </TabsTrigger>
-                                <TabsTrigger value="failed" className="data-[state=active]:bg-white">
-                                    Failed
-                                    <Badge variant="secondary" className="ml-2 bg-red-100 text-red-800">
-                                        {failedCount}
-                                    </Badge>
-                                </TabsTrigger>
-                            </TabsList>
+                            </CardContent>
+                        </Card>
 
-                            <div className="p-0">
-                                <TabsContent value="all" className="m-0">
-                                    <QueueItemsTable items={queueItems || []} />
-                                </TabsContent>
-                                <TabsContent value="pending" className="m-0">
-                                    <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "pending")} />
-                                </TabsContent>
-                                <TabsContent value="processing" className="m-0">
-                                    <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "processing")} />
-                                </TabsContent>
-                                <TabsContent value="completed" className="m-0">
-                                    <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "completed")} />
-                                </TabsContent>
-                                <TabsContent value="failed" className="m-0">
-                                    <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "failed")} />
-                                </TabsContent>
+                        <Card className="bg-white">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-end justify-between">
+                                    <p className="text-3xl font-bold text-amber-600">{pendingCount}</p>
+                                    <Clock className="h-5 w-5 text-amber-500" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-white">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Processing</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-end justify-between">
+                                    <p className="text-3xl font-bold text-blue-600">{processingCount}</p>
+                                    <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-white">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-end justify-between">
+                                    <p className="text-3xl font-bold text-green-600">{completedCount}</p>
+                                    <CheckCircle className="h-5 w-5 text-green-500" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-white">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Failed</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-end justify-between">
+                                    <p className="text-3xl font-bold text-red-600">{failedCount}</p>
+                                    <AlertTriangle className="h-5 w-5 text-red-500" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <Card className="bg-white shadow-sm border-slate-200">
+                        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                <div>
+                                    <CardTitle className="text-xl text-slate-800 flex items-center">
+                                        <FileSearch className="mr-2 h-5 w-5 text-primary" />
+                                        Queue Items
+                                    </CardTitle>
+                                    <CardDescription className="mt-1">
+                                        {totalCount > 0 ? (
+                                            <>
+                                                Showing {totalCount} items from {formatDate(oldestDate)} to {formatDate(newestDate)}
+                                            </>
+                                        ) : (
+                                            <>No items in the processing queue</>
+                                        )}
+                                    </CardDescription>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <div className="relative">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input type="search" placeholder="Search files..." className="pl-9 h-9 md:w-[200px] lg:w-[300px]" />
+                                    </div>
+                                    <Select defaultValue="all">
+                                        <SelectTrigger className="h-9 w-[130px]">
+                                            <Filter className="h-4 w-4 mr-2" />
+                                            <SelectValue placeholder="Filter" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Statuses</SelectItem>
+                                            <SelectItem value="pending">Pending</SelectItem>
+                                            <SelectItem value="processing">Processing</SelectItem>
+                                            <SelectItem value="completed">Completed</SelectItem>
+                                            <SelectItem value="failed">Failed</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
-                        </Tabs>
-                    </CardContent>
-                    <CardFooter className="bg-slate-50 border-t px-6 py-3">
-                        <div className="w-full flex justify-between items-center text-xs text-muted-foreground">
-                            <div>
-                                Showing {totalCount} of {totalCount} items
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Tabs defaultValue="all" className="w-full">
+                                <TabsList className="w-full rounded-none justify-start border-b bg-slate-50">
+                                    <TabsTrigger value="all" className="data-[state=active]:bg-white">
+                                        All
+                                        <Badge variant="secondary" className="ml-2 bg-slate-200 text-slate-700">
+                                            {totalCount}
+                                        </Badge>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="pending" className="data-[state=active]:bg-white">
+                                        Pending
+                                        <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800">
+                                            {pendingCount}
+                                        </Badge>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="processing" className="data-[state=active]:bg-white">
+                                        Processing
+                                        <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-800">
+                                            {processingCount}
+                                        </Badge>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="completed" className="data-[state=active]:bg-white">
+                                        Completed
+                                        <Badge variant="secondary" className="ml-2 bg-green-100 text-green-800">
+                                            {completedCount}
+                                        </Badge>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="failed" className="data-[state=active]:bg-white">
+                                        Failed
+                                        <Badge variant="secondary" className="ml-2 bg-red-100 text-red-800">
+                                            {failedCount}
+                                        </Badge>
+                                    </TabsTrigger>
+                                </TabsList>
+
+                                <div className="p-0">
+                                    <TabsContent value="all" className="m-0">
+                                        <QueueItemsTable items={queueItems || []} />
+                                    </TabsContent>
+                                    <TabsContent value="pending" className="m-0">
+                                        <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "pending")} />
+                                    </TabsContent>
+                                    <TabsContent value="processing" className="m-0">
+                                        <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "processing")} />
+                                    </TabsContent>
+                                    <TabsContent value="completed" className="m-0">
+                                        <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "completed")} />
+                                    </TabsContent>
+                                    <TabsContent value="failed" className="m-0">
+                                        <QueueItemsTable items={(queueItems || []).filter((item) => item.status === "failed")} />
+                                    </TabsContent>
+                                </div>
+                            </Tabs>
+                        </CardContent>
+                        <CardFooter className="bg-slate-50 border-t px-6 py-3">
+                            <div className="w-full flex justify-between items-center text-xs text-muted-foreground">
+                                <div>
+                                    Showing {totalCount} of {totalCount} items
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3 mr-1" />
+                                    Last updated: {new Date().toLocaleString()}
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3 mr-1" />
-                                Last updated: {new Date().toLocaleString()}
-                            </div>
-                        </div>
-                    </CardFooter>
-                </Card>
+                        </CardFooter>
+                    </Card>
+                </AutoRefreshWrapper>
             </main>
         </div>
     )
