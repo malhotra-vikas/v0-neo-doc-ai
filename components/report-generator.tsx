@@ -19,8 +19,6 @@ import {
     Loader2,
     Shield,
     Sparkles,
-    ChevronDown,
-    ChevronUp,
 } from "lucide-react"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
@@ -56,7 +54,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [isExporting, setIsExporting] = useState(false)
     const [caseStudies, setCaseStudies] = useState<CaseStudyHighlight[]>([])
     const [isLoadingCaseStudies, setIsLoadingCaseStudies] = useState(false)
-    const [expandedCaseStudy, setExpandedCaseStudy] = useState<string | null>(null)
     const reportRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
 
@@ -220,20 +217,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             })
         }
 
-        // Expand all case studies for printing
-        const previouslyExpanded = expandedCaseStudy
-        setExpandedCaseStudy("all")
-
-        // Wait for state update to apply
-        setTimeout(() => {
-            // Use browser's print functionality
-            window.print()
-
-            // Restore previous state after print dialog closes
-            setTimeout(() => {
-                setExpandedCaseStudy(previouslyExpanded)
-            }, 500)
-        }, 100)
+        // Use browser's print functionality
+        window.print()
     }
 
     const handleExportPDF = async () => {
@@ -262,13 +247,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 })
             }
 
-            // Expand all case studies for PDF export
-            const previouslyExpanded = expandedCaseStudy
-            setExpandedCaseStudy("all")
-
-            // Wait for state update to apply
-            await new Promise((resolve) => setTimeout(resolve, 100))
-
             // Create a clone of the report element to modify for PDF export
             const reportElement = reportRef.current
             const originalPosition = reportElement.style.position
@@ -295,9 +273,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             reportElement.style.top = ""
             reportElement.style.left = ""
             reportElement.style.width = ""
-
-            // Restore previous expansion state
-            setExpandedCaseStudy(previouslyExpanded)
 
             // Create PDF
             const imgData = canvas.toDataURL("image/png")
@@ -333,14 +308,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const toggleCaseStudy = (id: string) => {
-        if (expandedCaseStudy === id) {
-            setExpandedCaseStudy(null)
-        } else {
-            setExpandedCaseStudy(id)
-        }
-    }
-
     const formatDate = (dateString: string) => {
         const date = new Date(dateString)
         return date.toLocaleDateString("en-US", {
@@ -348,6 +315,14 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             month: "short",
             day: "numeric",
         })
+    }
+
+    // Function to get privacy-protected patient initials
+    const getPatientInitials = (fullName: string) => {
+        return fullName
+            .split(" ")
+            .map((name) => name.charAt(0) + "." + (name.length > 1 ? " " : ""))
+            .join("")
     }
 
     return (
@@ -544,40 +519,24 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                                                         <div className="space-y-4">
                                                             {caseStudies.map((caseStudy) => (
                                                                 <Card key={caseStudy.id} className="border overflow-hidden">
-                                                                    <div
-                                                                        className="bg-gradient-to-r from-slate-50 to-slate-100 border-b px-4 py-3 flex items-center justify-between cursor-pointer"
-                                                                        onClick={() => toggleCaseStudy(caseStudy.id)}
-                                                                    >
+                                                                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 border-b px-4 py-3">
                                                                         <div className="flex items-center">
                                                                             <Sparkles className="h-4 w-4 text-amber-500 mr-2" />
                                                                             <div>
                                                                                 <h5 className="font-medium text-sm">
-                                                                                    {caseStudy.patient_name
-                                                                                        .split(" ")
-                                                                                        .map((name) => name.charAt(0) + "." + (name.length > 1 ? " " : ""))
-                                                                                        .join("")}
+                                                                                    {getPatientInitials(caseStudy.patient_name)}
                                                                                 </h5>
                                                                                 <p className="text-xs text-muted-foreground">
                                                                                     {formatDate(caseStudy.created_at)} • {caseStudy.file_name}
                                                                                 </p>
                                                                             </div>
                                                                         </div>
-                                                                        <div>
-                                                                            {expandedCaseStudy === caseStudy.id || expandedCaseStudy === "all" ? (
-                                                                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                                                                            ) : (
-                                                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                                                            )}
-                                                                        </div>
                                                                     </div>
-
-                                                                    {(expandedCaseStudy === caseStudy.id || expandedCaseStudy === "all") && (
-                                                                        <CardContent className="p-4 bg-white">
-                                                                            <div className="prose prose-sm max-w-none">
-                                                                                <p>{caseStudy.highlight_text}</p>
-                                                                            </div>
-                                                                        </CardContent>
-                                                                    )}
+                                                                    <CardContent className="p-4 bg-white">
+                                                                        <div className="prose prose-sm max-w-none">
+                                                                            <p>{caseStudy.highlight_text}</p>
+                                                                        </div>
+                                                                    </CardContent>
                                                                 </Card>
                                                             ))}
                                                         </div>
