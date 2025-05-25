@@ -46,12 +46,6 @@ export default async function NursingHomePatientsPage({ params }: { params: { id
               <CardTitle>Patients</CardTitle>
               <CardDescription>Manage patients for {nursingHome.name}</CardDescription>
             </div>
-            <Link href={`/nursing-homes/${resolvedParams.id}/add-patient`} passHref>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Patient
-              </Button>
-            </Link>
           </CardHeader>
           <CardContent>
             <PatientListClient patients={nursingHome.patients || []} nursingHomeId={resolvedParams.id} />

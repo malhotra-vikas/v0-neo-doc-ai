@@ -56,11 +56,6 @@ export default function PatientsList({ nursingHomes }: PatientsListProps) {
               ))}
             </SelectContent>
           </Select>
-
-          <Button onClick={() => setIsAddDialogOpen(true)} disabled={!selectedHomeId}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Patient
-          </Button>
         </div>
       </CardHeader>
       <CardContent>
