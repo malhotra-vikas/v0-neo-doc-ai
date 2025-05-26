@@ -24,18 +24,22 @@ import {
   HelpCircle,
   BarChart3,
   ClipboardList,
+  Building2,
 } from "lucide-react"
 import { Logo } from "./logo"
 import { cn } from "@/lib/utils"
 
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+type UserRole = 'superadmin' | 'facility_admin' | 'facility_user';
+
 
 interface DashboardHeaderProps {
   user: User
+  userRole?: UserRole;
 }
 
-export default function DashboardHeader({ user }: DashboardHeaderProps) {
+export default function DashboardHeader({ user,userRole }: DashboardHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClientComponentClient()
@@ -84,6 +88,11 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
       href: "/audit-logs",
       icon: ClipboardList,
     },
+      ...(userRole === 'superadmin' ? [{
+        name: "Facilities",
+        href: "/admin/facilities",
+        icon: Building2, 
+    }] : []),
   ]
 
   return (

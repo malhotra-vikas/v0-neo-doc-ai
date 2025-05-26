@@ -1,7 +1,6 @@
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import DashboardHeader from "@/components/dashboard-header"
 import { BulkFileUpload } from "@/components/bulk-file-upload"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageViewLogger } from "@/components/page-view-logger"
@@ -24,7 +23,6 @@ export default async function BulkUploadPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <DashboardHeader user={session.user} />
       <PageViewLogger user={session.user} pageName="Bulk Upload" />
 
       <main className="flex-1 container mx-auto py-6 px-4">

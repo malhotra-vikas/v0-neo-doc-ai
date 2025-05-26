@@ -5,6 +5,7 @@ import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { PDFProcessingWorker } from "@/components/pdf-processing-worker"
 import { Footer } from "@/components/footer"
+import ProtectedLayout from "@/components/protected-layout"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -19,9 +20,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} min-h-screen flex flex-col`}>
-        <div className="flex-1">{children}</div>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.className} min-h-screen flex flex-col`} suppressHydrationWarning>
+        <div className="flex-1">
+          <ProtectedLayout children={children}/>
+        </div>
         <Footer />
         <Toaster />
         <PDFProcessingWorker />

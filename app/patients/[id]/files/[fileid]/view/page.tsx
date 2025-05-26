@@ -2,7 +2,6 @@ import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
-import DashboardHeader from "@/components/dashboard-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronLeft, FileText, Download, RefreshCw } from "lucide-react"
@@ -80,7 +79,6 @@ export default async function PatientFileViewPage({
 
     return (
         <div className="flex flex-col min-h-screen">
-            <DashboardHeader user={session.user} />
             <PageViewLogger user={session.user} pageName="View Patient File" entityType="patient_file" entityId={fileId} />
 
             <main className="flex-1 container mx-auto py-6 px-4">

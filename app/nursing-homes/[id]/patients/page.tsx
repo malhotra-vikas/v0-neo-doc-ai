@@ -2,7 +2,6 @@ import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
-import DashboardHeader from "@/components/dashboard-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronLeft, Plus } from "lucide-react"
@@ -33,7 +32,6 @@ export default async function NursingHomePatientsPage({ params }: { params: { id
 
   return (
     <div className="flex flex-col min-h-screen">
-      <DashboardHeader user={session.user} />
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <div className="flex items-center mb-6">

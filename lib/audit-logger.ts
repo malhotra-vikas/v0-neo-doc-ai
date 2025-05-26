@@ -21,6 +21,7 @@ export type AuditEntityType =
     | "nursing_home_file"
     | "pdf_queue"
     | "report"
+    | "facility"
 
 interface AuditLogParams {
     user: User

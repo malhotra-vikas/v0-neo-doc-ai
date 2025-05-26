@@ -2,7 +2,6 @@ import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import DashboardHeader from "@/components/dashboard-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -70,7 +69,6 @@ export default async function PDFQueuePage() {
 
     return (
         <div className="flex flex-col min-h-screen">
-            <DashboardHeader user={session.user} />
             <PageViewLogger user={session.user} pageName="PDF Queue" entityType="pdf_queue" entityId="admin" />
 
             <main className="flex-1 container mx-auto py-6 px-4">

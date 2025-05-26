@@ -2,7 +2,6 @@ import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
-import DashboardHeader from "@/components/dashboard-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -37,7 +36,6 @@ export default async function PatientPage({ params }: { params: { id: string } }
 
   return (
     <div className="flex flex-col min-h-screen">
-      <DashboardHeader user={session.user} />
       <PageViewLogger user={session.user} pageName="Patient Details" entityType="patient" entityId={resolvedParams.id} />
 
       <main className="flex-1 container mx-auto py-6 px-4">

@@ -1,7 +1,6 @@
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import DashboardHeader from "@/components/dashboard-header"
 import { AuditLogViewer } from "@/components/audit-log-viewer"
 import { PageViewLogger } from "@/components/page-view-logger"
 
@@ -41,7 +40,6 @@ export default async function AuditLogsPage() {
 
     return (
         <div className="flex flex-col min-h-screen">
-            <DashboardHeader user={session.user} />
             <PageViewLogger user={session.user} pageName="Audit Logs" />
 
             <main className="flex-1 container mx-auto py-6 px-4">

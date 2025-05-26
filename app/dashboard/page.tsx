@@ -1,7 +1,6 @@
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import DashboardHeader from "@/components/dashboard-header"
 import DashboardStats from "@/components/dashboard-stats"
 import NursingHomesList from "@/components/nursing-homes-list"
 import PatientsList from "@/components/patients-list"
@@ -47,7 +46,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <DashboardHeader user={session.user} />
       <PageViewLogger user={session.user} pageName="Dashboard" />
 
       <main className="flex-1 container mx-auto py-8 px-4">
