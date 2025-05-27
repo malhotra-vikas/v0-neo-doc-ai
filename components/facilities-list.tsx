@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Building2, Users } from "lucide-react"
 import { CreateFacilityForm } from "./create-facility-form"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog"
+import { DialogDescription, DialogTitle } from "@radix-ui/react-dialog"
 
 interface Facility {
   id: string
@@ -69,7 +70,7 @@ export function FacilitiesList({ facilities }: FacilitiesListProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {new Date(facility.created_at).toLocaleDateString()}
+                   {new Date(facility.created_at).toLocaleDateString('en-GB')}
                   </TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
@@ -90,6 +91,10 @@ export function FacilitiesList({ facilities }: FacilitiesListProps) {
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="max-w-2xl">
+           <DialogHeader>
+            <DialogTitle>Create New Facility</DialogTitle>
+            <DialogDescription>Add a new healthcare facility to the system</DialogDescription>
+          </DialogHeader>
           <CreateFacilityForm onSuccess={() => setIsCreateDialogOpen(false)} />
         </DialogContent>
       </Dialog>

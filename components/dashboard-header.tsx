@@ -37,16 +37,15 @@ type UserRole = 'superadmin' | 'facility_admin' | 'facility_user';
 interface DashboardHeaderProps {
   user: User
   userRole?: UserRole;
+  facilityId:string
 }
 
-export default function DashboardHeader({ user,userRole }: DashboardHeaderProps) {
+export default function DashboardHeader({ user,userRole,facilityId }: DashboardHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClientComponentClient()
 
-  // Update the handleSignOut function to log logout events
   const handleSignOut = async () => {
-    // Log logout event before signing out
     logAuditEvent({
       user: user,
       actionType: "logout",

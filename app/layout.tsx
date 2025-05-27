@@ -23,7 +23,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen flex flex-col`} suppressHydrationWarning>
         <div className="flex-1">
-          <ProtectedLayout children={children}/>
+          {children}
         </div>
         <Footer />
         <Toaster />

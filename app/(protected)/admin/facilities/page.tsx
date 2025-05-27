@@ -17,6 +17,8 @@ export default async function FacilitiesPage() {
     `)
     .order('created_at', { ascending: false })
 
+    console.log('Fetched facilities:', facilities)
+
   return (
     <>
       <PageViewLogger user={session!.user} pageName="Facilities" />

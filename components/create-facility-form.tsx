@@ -164,16 +164,6 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
 
   return (
     <Card className="w-full max-w-2xl mx-auto shadow-md border-slate-200">
-      <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
-        <CardTitle className="text-xl text-slate-800 flex items-center">
-          <Building2 className="mr-2 h-5 w-5 text-primary" />
-          Create New Facility
-        </CardTitle>
-        <CardDescription>
-          Add a new healthcare facility to the system
-        </CardDescription>
-      </CardHeader>
-      
       <CardContent className="p-6 space-y-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {state.error && (
