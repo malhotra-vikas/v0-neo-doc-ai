@@ -77,12 +77,6 @@ export default async function PDFQueuePage() {
                 <AutoRefreshWrapper userId={session.user.id} pageName="PDF Queue">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                         <div className="flex items-center">
-                            <Button variant="ghost" size="sm" asChild className="mr-4">
-                                <Link href="/dashboard">
-                                    <ChevronLeft className="mr-2 h-4 w-4" />
-                                    Back to Dashboard
-                                </Link>
-                            </Button>
                             <div>
                                 <h1 className="text-2xl font-bold text-slate-800">PDF Processing Queue</h1>
                                 <p className="text-sm text-muted-foreground mt-1">Manage and monitor PDF text extraction processing</p>
