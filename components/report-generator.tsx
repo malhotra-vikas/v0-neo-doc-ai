@@ -1,30 +1,37 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-    BarChart3,
-    FileText,
-    Download,
-    Calendar,
-    Building2,
-    AlertCircle,
-    Loader2,
-    Shield,
-    Sparkles,
-} from "lucide-react"
-import { logAuditEvent } from "@/lib/audit-logger"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Button } from "@/components/ui/button"
+import { format } from "date-fns"
+import { Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Label } from "@/components/ui/label"
+import { logAuditEvent } from "@/lib/audit-logger"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { format as dateformat } from "date-fns"
 import { jsPDF } from "jspdf"
-import html2canvas from "html2canvas"
+import { useReactToPrint } from "react-to-print"
+
+const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+]
+
+const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - 2 + i).toString())
 
 interface NursingHome {
     id: string
@@ -37,8 +44,8 @@ interface CaseStudyHighlight {
     file_id: string
     highlight_text: string
     created_at: string
-    patient_name: string
-    file_name: string
+    patient_name?: string
+    file_name?: string
 }
 
 interface ReportGeneratorProps {
@@ -57,31 +64,158 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const reportRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
 
-    const months = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-    ]
+    // Add patient selection state
+    const [selectedPatients, setSelectedPatients] = useState<string[]>([])
+    const [availablePatients, setAvailablePatients] = useState<{ id: string; name: string; created_at: string }[]>([])
+    const [useAISelection, setUseAISelection] = useState(false)
+    const [isLoadingPatients, setIsLoadingPatients] = useState(false)
+    const [isAISelecting, setIsAISelecting] = useState(false)
 
-    const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - 2 + i).toString())
-
-    const selectedNursingHome = nursingHomes.find((home) => home.id === selectedNursingHomeId)
-
+    // Add effect to fetch patients when nursing home changes
     useEffect(() => {
-        // Reset case studies when nursing home or date changes
-        setCaseStudies([])
-        setReportGenerated(false)
+        if (selectedNursingHomeId && selectedMonth && selectedYear) {
+            fetchAvailablePatients()
+        } else {
+            setAvailablePatients([])
+            setSelectedPatients([])
+        }
     }, [selectedNursingHomeId, selectedMonth, selectedYear])
 
+    const fetchAvailablePatients = async () => {
+        if (!selectedNursingHomeId) return
+
+        setIsLoadingPatients(true)
+        try {
+            const supabase = createClientComponentClient()
+
+            // Get the month number (1-12) from the month name
+            const monthNumber = months.indexOf(selectedMonth) + 1
+
+            // Create date range for the selected month
+            const startDate = `${selectedYear}-${monthNumber.toString().padStart(2, "0")}-01`
+            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0] // Last day of month
+
+            const { data: patients, error } = await supabase
+                .from("patients")
+                .select("id, name, created_at")
+                .eq("nursing_home_id", selectedNursingHomeId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate)
+                .order("name")
+
+            if (error) throw error
+
+            setAvailablePatients(patients || [])
+            // Reset selections when nursing home changes
+            setSelectedPatients([])
+            setUseAISelection(false)
+        } catch (error) {
+            console.error("Error fetching patients:", error)
+            toast({
+                title: "Error",
+                description: "Failed to fetch patients. Please try again.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsLoadingPatients(false)
+        }
+    }
+
+    const handleAIPatientSelection = async () => {
+        if (!selectedNursingHomeId || availablePatients.length === 0) return
+
+        setIsAISelecting(true)
+        try {
+            const supabase = createClientComponentClient()
+
+            // Get patients with their file counts and recent activity
+            const { data: patientsWithFiles, error } = await supabase
+                .from("patients")
+                .select(`
+                id, 
+                name, 
+                created_at,
+                patient_files(id, created_at)
+            `)
+                .eq("nursing_home_id", selectedNursingHomeId)
+
+            if (error) throw error
+
+            console.log("patientsWithFiles is ", patientsWithFiles)
+
+            // AI selection criteria
+            const selectedPatientIds =
+                patientsWithFiles
+                    ?.filter((patient) => {
+                        const files = patient.patient_files || []
+                        const recentFiles = files.filter((file) => {
+                            const fileDate = new Date(file.created_at)
+                            const monthsAgo = new Date()
+                            monthsAgo.setMonth(monthsAgo.getMonth() - 3)
+                            return fileDate >= monthsAgo
+                        })
+
+                        // Select patients with recent activity and multiple files
+                        return recentFiles.length > 0 && files.length >= 2
+                    })
+                    .sort((a, b) => {
+                        const aFiles = a.patient_files?.length || 0
+                        const bFiles = b.patient_files?.length || 0
+                        return bFiles - aFiles
+                    })
+                    .slice(0, Math.min(10, Math.ceil(availablePatients.length * 0.3)))
+                    .map((p) => p.id) || []
+
+            setSelectedPatients(selectedPatientIds)
+
+            // Log AI selection
+            const user = await supabase.auth.getUser()
+            if (user.data?.user) {
+                logAuditEvent({
+                    user: user.data.user,
+                    actionType: "ai_patient_selection",
+                    entityType: "report",
+                    entityId: selectedNursingHomeId,
+                    details: {
+                        nursing_home_id: selectedNursingHomeId,
+                        selected_patients_count: selectedPatientIds.length,
+                        total_patients_count: availablePatients.length,
+                        selection_criteria: "recent_activity_and_file_count",
+                    },
+                })
+            }
+
+            toast({
+                title: "AI Selection Complete",
+                description: `Selected ${selectedPatientIds.length} patients based on recent activity and documentation.`,
+            })
+        } catch (error) {
+            console.error("Error with AI patient selection:", error)
+            toast({
+                title: "AI Selection Failed",
+                description: "Failed to select patients automatically. Please try manual selection.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsAISelecting(false)
+        }
+    }
+
+    const handlePatientToggle = (patientId: string) => {
+        setSelectedPatients((prev) =>
+            prev.includes(patientId) ? prev.filter((id) => id !== patientId) : [...prev, patientId],
+        )
+    }
+
+    const handleSelectAllPatients = () => {
+        setSelectedPatients(availablePatients.map((p) => p.id))
+    }
+
+    const handleDeselectAllPatients = () => {
+        setSelectedPatients([])
+    }
+
+    // Replace the existing fetchCaseStudies function with this updated version
     const fetchCaseStudies = async () => {
         if (!selectedNursingHomeId) return
 
@@ -95,38 +229,28 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Create date range for the selected month
             const startDate = `${selectedYear}-${monthNumber.toString().padStart(2, "0")}-01`
-            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0] // Last day of month
+            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0]
 
-            // First get patients for the nursing home
-            const { data: patients, error: patientsError } = await supabase
-                .from("patients")
-                .select("id, name")
-                .eq("nursing_home_id", selectedNursingHomeId)
+            // Use selected patients or all patients if none selected
+            const patientIds = selectedPatients.length > 0 ? selectedPatients : availablePatients.map((p) => p.id)
 
-            if (patientsError) {
-                throw patientsError
-            }
-
-            if (!patients || patients.length === 0) {
+            if (patientIds.length === 0) {
                 setCaseStudies([])
                 setIsLoadingCaseStudies(false)
                 return
             }
 
-            // Get patient IDs
-            const patientIds = patients.map((p) => p.id)
-
-            // Get case studies for these patients in the date range
+            // Get case studies for selected patients in the date range
             const { data, error } = await supabase
                 .from("case_study_highlights")
                 .select(`
-          id, 
-          patient_id, 
-          file_id, 
-          highlight_text, 
-          created_at,
-          patient_files(file_name)
-        `)
+                id, 
+                patient_id, 
+                file_id, 
+                highlight_text, 
+                created_at,
+                patient_files(file_name)
+            `)
                 .in("patient_id", patientIds)
                 .gte("created_at", startDate)
                 .lte("created_at", endDate)
@@ -138,7 +262,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Format the case studies with patient names
             const formattedCaseStudies = data.map((cs) => {
-                const patient = patients.find((p) => p.id === cs.patient_id)
+                const patient = availablePatients.find((p) => p.id === cs.patient_id)
                 return {
                     id: cs.id,
                     patient_id: cs.patient_id,
@@ -163,144 +287,69 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const handleGenerateReport = () => {
-        if (!selectedNursingHomeId) return
-
+    const handleGenerateReport = async () => {
         setIsGenerating(true)
-
-        // Fetch case studies and generate report
-        fetchCaseStudies().then(() => {
-            setTimeout(async () => {
-                setIsGenerating(false)
-                setReportGenerated(true)
-
-                // Log report generation
-                const supabase = createClientComponentClient()
-                const user = await supabase.auth.getUser()
-                if (user.data?.user) {
-                    logAuditEvent({
-                        user: user.data.user,
-                        actionType: "generate_report",
-                        entityType: "report",
-                        entityId: `${selectedNursingHomeId}-${selectedMonth}-${selectedYear}`,
-                        details: {
-                            nursing_home_id: selectedNursingHomeId,
-                            nursing_home_name: selectedNursingHome?.name,
-                            month: selectedMonth,
-                            year: selectedYear,
-                            report_type: "monthly",
-                            case_studies_count: caseStudies.length,
-                        },
-                    })
-                }
-            }, 1500)
-        })
-    }
-
-    const handlePrint = async () => {
-        // Log print action
-        const supabase = createClientComponentClient()
-        const user = await supabase.auth.getUser()
-        if (user.data?.user) {
-            logAuditEvent({
-                user: user.data.user,
-                actionType: "print_report",
-                entityType: "report",
-                entityId: `${selectedNursingHomeId}-${selectedMonth}-${selectedYear}`,
-                details: {
-                    nursing_home_id: selectedNursingHomeId,
-                    nursing_home_name: selectedNursingHome?.name,
-                    month: selectedMonth,
-                    year: selectedYear,
-                    case_studies_count: caseStudies.length,
-                },
-            })
-        }
-
-        // Use browser's print functionality
-        window.print()
-    }
-
-    const handleExportPDF = async () => {
-        if (!reportRef.current) return
-
-        setIsExporting(true)
-
+        setReportGenerated(false)
         try {
-            // Log export action
-            const supabase = createClientComponentClient()
-            const user = await supabase.auth.getUser()
-            if (user.data?.user) {
-                logAuditEvent({
-                    user: user.data.user,
-                    actionType: "export_report_pdf",
-                    entityType: "report",
-                    entityId: `${selectedNursingHomeId}-${selectedMonth}-${selectedYear}`,
-                    details: {
-                        nursing_home_id: selectedNursingHomeId,
-                        nursing_home_name: selectedNursingHome?.name,
-                        month: selectedMonth,
-                        year: selectedYear,
-                        format: "pdf",
-                        case_studies_count: caseStudies.length,
-                    },
-                })
-            }
-
-            // Create a clone of the report element to modify for PDF export
-            const reportElement = reportRef.current
-            const originalPosition = reportElement.style.position
-            const originalZIndex = reportElement.style.zIndex
-
-            // Temporarily modify the element for better rendering
-            reportElement.style.position = "absolute"
-            reportElement.style.zIndex = "-1000"
-            reportElement.style.top = "0"
-            reportElement.style.left = "0"
-            reportElement.style.width = "800px" // Fixed width for PDF
-
-            // Create canvas from the report element
-            const canvas = await html2canvas(reportElement, {
-                scale: 2, // Higher scale for better quality
-                logging: false,
-                useCORS: true,
-                allowTaint: true,
-            })
-
-            // Restore original styles
-            reportElement.style.position = originalPosition
-            reportElement.style.zIndex = originalZIndex
-            reportElement.style.top = ""
-            reportElement.style.left = ""
-            reportElement.style.width = ""
-
-            // Create PDF
-            const imgData = canvas.toDataURL("image/png")
-            const pdf = new jsPDF({
-                orientation: "portrait",
-                unit: "mm",
-                format: "a4",
-            })
-
-            // Calculate dimensions to fit the image properly on the PDF
-            const imgWidth = 210 // A4 width in mm (portrait)
-            const imgHeight = (canvas.height * imgWidth) / canvas.width
-
-            pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight)
-
-            // Save the PDF
-            const fileName = `${selectedNursingHome?.name || "NursingHome"}_Report_${selectedMonth}_${selectedYear}.pdf`
-            pdf.save(fileName)
-
+            await fetchCaseStudies()
+            setReportGenerated(true)
             toast({
-                title: "PDF Exported Successfully",
-                description: `Your report has been exported as ${fileName}`,
+                title: "Report Generated",
+                description: "The report has been generated successfully.",
+            })
+        } catch (error) {
+            console.error("Error generating report:", error)
+            toast({
+                title: "Error",
+                description: "Failed to generate report. Please try again.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsGenerating(false)
+        }
+    }
+
+    const handlePrint = useReactToPrint({
+        content: () => reportRef.current,
+        documentTitle: "Nursing Home Report",
+        onAfterPrint: () =>
+            toast({
+                title: "Report Printed",
+                description: "The report has been sent to the printer.",
+            }),
+    })
+
+    const handleExportPDF = () => {
+        setIsExporting(true)
+        try {
+            const doc = new jsPDF()
+            doc.text("Nursing Home Report", 10, 10)
+
+            let currentY = 20
+
+            caseStudies.forEach((study) => {
+                doc.text(`Patient: ${study.patient_name}`, 10, currentY)
+                currentY += 10
+                doc.text(`File: ${study.file_name}`, 10, currentY)
+                currentY += 10
+                const textLines = doc.splitTextToSize(study.highlight_text, 180)
+                textLines.forEach((line) => {
+                    doc.text(line, 10, currentY)
+                    currentY += 5
+                })
+                currentY += 10
+            })
+
+            doc.save("nursing_home_report.pdf")
+            toast({
+                title: "Report Exported",
+                description: "The report has been exported to PDF successfully.",
             })
         } catch (error) {
             console.error("Error exporting PDF:", error)
             toast({
-                title: "Export Failed",
-                description: "There was an error exporting your report to PDF. Please try again.",
+                title: "Error",
+                description: "Failed to export report to PDF. Please try again.",
                 variant: "destructive",
             })
         } finally {
@@ -308,288 +357,256 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString)
-        return date.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-        })
+    const formatDate = (date: Date): string => {
+        return dateformat(date, "PPP")
     }
 
-    // Function to get privacy-protected patient initials
-    const getPatientInitials = (fullName: string) => {
-        return fullName
-            .split(" ")
-            .map((name) => name.charAt(0) + "." + (name.length > 1 ? " " : ""))
-            .join("")
+    const getPatientInitials = (name: string): string => {
+        const nameParts = name.split(" ")
+        const initials = nameParts.map((part) => part.charAt(0).toUpperCase()).join("")
+        return initials
     }
 
     return (
-        <Card className="w-full shadow-md border-slate-200">
-            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b">
-                <div className="flex items-center">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
-                        <BarChart3 className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                        <CardTitle className="text-xl text-slate-800">Report Generator</CardTitle>
-                        <CardDescription className="mt-1">
-                            Generate comprehensive reports for nursing homes by month
-                        </CardDescription>
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent className="p-6">
-                <Tabs defaultValue="generate" className="w-full">
-
-
-                    <TabsContent value="generate" className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="space-y-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="nursingHome" className="text-sm font-medium">
-                                        Nursing Home
-                                    </Label>
-                                    <span className="text-red-500 ml-1">*</span>
-                                </div>
-                                <Select value={selectedNursingHomeId} onValueChange={setSelectedNursingHomeId}>
-                                    <SelectTrigger id="nursingHome" className="w-full">
-                                        <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
-                                        <SelectValue placeholder="Select nursing home" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {nursingHomes.length === 0 ? (
-                                            <div className="p-2 text-center text-sm text-muted-foreground">No nursing homes found</div>
-                                        ) : (
-                                            nursingHomes.map((home) => (
-                                                <SelectItem key={home.id} value={home.id}>
-                                                    {home.name}
-                                                </SelectItem>
-                                            ))
-                                        )}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">Select the nursing home for this report.</p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="month" className="text-sm font-medium">
-                                        Month
-                                    </Label>
-                                    <span className="text-red-500 ml-1">*</span>
-                                </div>
-                                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                    <SelectTrigger id="month" className="w-full">
-                                        <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                                        <SelectValue placeholder="Select month" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {months.map((month) => (
-                                            <SelectItem key={month} value={month}>
-                                                {month}
+        <div className="space-y-4">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Generate Report</CardTitle>
+                    <CardDescription>Select the nursing home, month, and year to generate a report.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <Label htmlFor="nursing-home">Nursing Home</Label>
+                            <Select onValueChange={setSelectedNursingHomeId}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select a nursing home" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {nursingHomes.length === 0 ? (
+                                        <div className="p-2 text-center text-sm text-muted-foreground">No nursing homes found</div>
+                                    ) : (
+                                        nursingHomes.map((home) => (
+                                            <SelectItem key={home.id} value={home.id}>
+                                                {home.name}
                                             </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">The month for this report.</p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="year" className="text-sm font-medium">
-                                        Year
-                                    </Label>
-                                    <span className="text-red-500 ml-1">*</span>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor="month">Month</Label>
+                            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select a month" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {months.map((month) => (
+                                        <SelectItem key={month} value={month}>
+                                            {month}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor="year">Year</Label>
+                            <Select value={selectedYear} onValueChange={setSelectedYear}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select a year" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {years.map((year) => (
+                                        <SelectItem key={year} value={year}>
+                                            {year}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    {selectedNursingHomeId && (
+                        <div className="space-y-4 border rounded-lg p-4 bg-slate-50">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h4 className="text-sm font-medium">Patient Selection</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Choose specific patients for this report or use AI to auto-select relevant patients.
+                                    </p>
                                 </div>
-                                <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                    <SelectTrigger id="year" className="w-full">
-                                        <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                                        <SelectValue placeholder="Select year" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {years.map((year) => (
-                                            <SelectItem key={year} value={year}>
-                                                {year}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">The year for this report.</p>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="checkbox"
+                                        id="useAI"
+                                        checked={useAISelection}
+                                        onChange={(e) => {
+                                            setUseAISelection(e.target.checked)
+                                            if (e.target.checked) {
+                                                handleAIPatientSelection()
+                                            }
+                                        }}
+                                        className="rounded border-gray-300"
+                                    />
+                                    <Label htmlFor="useAI" className="text-sm">
+                                        Use AI Selection
+                                    </Label>
+                                </div>
                             </div>
-                        </div>
 
-                        <div className="flex justify-end">
-                            <Button
-                                onClick={handleGenerateReport}
-                                disabled={!selectedNursingHomeId || isGenerating}
-                                className="min-w-[150px]"
-                            >
-                                {isGenerating ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Generating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <BarChart3 className="mr-2 h-4 w-4" />
-                                        Generate Report
-                                    </>
-                                )}
-                            </Button>
-                        </div>
+                            {isLoadingPatients ? (
+                                <div className="space-y-2">
+                                    <Skeleton className="h-8 w-full" />
+                                    <Skeleton className="h-8 w-full" />
+                                    <Skeleton className="h-8 w-full" />
+                                </div>
+                            ) : availablePatients.length > 0 ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-muted-foreground">
+                                            {selectedPatients.length} of {availablePatients.length} patients selected
+                                        </span>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleSelectAllPatients}
+                                                disabled={selectedPatients.length === availablePatients.length}
+                                            >
+                                                Select All
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleDeselectAllPatients}
+                                                disabled={selectedPatients.length === 0}
+                                            >
+                                                Deselect All
+                                            </Button>
+                                        </div>
+                                    </div>
 
-                        {reportGenerated && (
-                            <div className="mt-8 space-y-6">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-medium">Report Preview</h3>
-                                    <div className="flex items-center gap-2">
-                                        <Button variant="outline" size="sm" onClick={handlePrint} className="print:hidden">
-                                            <FileText className="mr-2 h-4 w-4" />
-                                            Print
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={handleExportPDF}
-                                            disabled={isExporting}
-                                            className="print:hidden"
-                                        >
-                                            {isExporting ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                    Exporting...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Download className="mr-2 h-4 w-4" />
-                                                    Export PDF
-                                                </>
-                                            )}
-                                        </Button>
+                                    {useAISelection && isAISelecting && (
+                                        <div className="flex items-center justify-center py-4">
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            <span className="text-sm">AI is selecting relevant patients...</span>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                                        {availablePatients.map((patient) => (
+                                            <div
+                                                key={patient.id}
+                                                className="flex items-center space-x-2 p-2 rounded border bg-white hover:bg-slate-50"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    id={`patient-${patient.id}`}
+                                                    checked={selectedPatients.includes(patient.id)}
+                                                    onChange={() => handlePatientToggle(patient.id)}
+                                                    className="rounded border-gray-300"
+                                                />
+                                                <Label htmlFor={`patient-${patient.id}`} className="text-sm cursor-pointer flex-1 truncate">
+                                                    {patient.name}
+                                                </Label>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-
-                                <div ref={reportRef} className="report-content">
-                                    <Card className="border-dashed">
-                                        <CardHeader className="bg-slate-50 border-b">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <CardTitle>{selectedNursingHome?.name || "Nursing Home"}</CardTitle>
-                                                    <CardDescription>
-                                                        Monthly Report: {selectedMonth} {selectedYear}
-                                                    </CardDescription>
-                                                </div>
-                                                <Badge variant="outline" className="bg-white">
-                                                    <Calendar className="h-3 w-3 mr-1" />
-                                                    Generated: {new Date().toLocaleDateString()}
-                                                </Badge>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="p-6">
-           
-
-                                            <div className="space-y-6">
-
-                                                <div className="mt-8">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <h4 className="text-sm font-medium">Case Study Highlights</h4>
-                                                        <Badge variant="outline" className="bg-white">
-                                                            <Shield className="h-3 w-3 mr-1" />
-                                                            Privacy Protected
-                                                        </Badge>
-                                                    </div>
-
-                                                    {isLoadingCaseStudies ? (
-                                                        <div className="space-y-4">
-                                                            <Skeleton className="h-32 w-full" />
-                                                            <Skeleton className="h-32 w-full" />
-                                                            <Skeleton className="h-32 w-full" />
-                                                        </div>
-                                                    ) : caseStudies.length === 0 ? (
-                                                        <div className="text-center py-8 border rounded-md bg-white">
-                                                            <Sparkles className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                                                            <h3 className="text-lg font-medium mb-2">No Case Studies Available</h3>
-                                                            <p className="text-sm text-muted-foreground">
-                                                                No case studies were found for this nursing home in {selectedMonth} {selectedYear}.
-                                                            </p>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-4">
-                                                            {caseStudies.map((caseStudy) => (
-                                                                <Card key={caseStudy.id} className="border overflow-hidden">
-                                                                    <div className="bg-gradient-to-r from-slate-50 to-slate-100 border-b px-4 py-3">
-                                                                        <div className="flex items-center">
-                                                                            <Sparkles className="h-4 w-4 text-amber-500 mr-2" />
-                                                                            <div>
-                                                                                <h5 className="font-medium text-sm">
-                                                                                    {getPatientInitials(caseStudy.patient_name)}
-                                                                                </h5>
-                                                                                <p className="text-xs text-muted-foreground">
-                                                                                    {formatDate(caseStudy.created_at)} • {caseStudy.file_name}
-                                                                                </p>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    <CardContent className="p-4 bg-white">
-                                                                        <div className="prose prose-sm max-w-none">
-                                                                            <p>{caseStudy.highlight_text}</p>
-                                                                        </div>
-                                                                    </CardContent>
-                                                                </Card>
-                                                            ))}
-                                                        </div>
-                                                    )}
-
-                                                    <div className="mt-4 text-xs text-muted-foreground">
-                                                        <p className="flex items-center">
-                                                            <Shield className="h-3 w-3 mr-1" />
-                                                            All case studies are privacy-protected and exclude personally identifiable information.
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
+                            ) : (
+                                <div className="text-center py-4 text-sm text-muted-foreground">
+                                    No patients found for this nursing home.
                                 </div>
-                            </div>
-                        )}
-                    </TabsContent>
-
-                    <TabsContent value="history">
-                        <div className="text-center py-8">
-                            <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                            <h3 className="text-lg font-medium mb-2">No Recent Reports</h3>
-                            <p className="text-sm text-muted-foreground mb-6">Generated reports will appear here for easy access</p>
-                            <Button variant="outline" onClick={() => document.querySelector('[data-value="generate"]')?.click()}>
-                                Generate a New Report
-                            </Button>
+                            )}
                         </div>
-                    </TabsContent>
-                </Tabs>
-            </CardContent>
-            <CardFooter className="bg-slate-50 border-t px-6 py-4 print:hidden">
-                <div className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                    <div className="text-xs text-muted-foreground">
-                        <p>
-                            Reports include patient statistics, file processing status, monthly metrics, and case study highlights.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {selectedNursingHome && (
-                            <Badge variant="outline" className="bg-white">
-                                <Building2 className="h-3 w-3 mr-1" />
-                                {selectedNursingHome.name}
-                            </Badge>
+                    )}
+                </CardContent>
+                <CardFooter className="flex justify-between items-center">
+                    <div>
+                        {caseStudies.length > 0 && (
+                            <p className="text-sm text-muted-foreground">Found {caseStudies.length} case studies</p>
                         )}
-                        <Badge variant="outline" className="bg-white">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {selectedMonth} {selectedYear}
-                        </Badge>
                     </div>
-                </div>
-            </CardFooter>
-        </Card>
+                    <Button
+                        onClick={handleGenerateReport}
+                        disabled={
+                            !selectedNursingHomeId || isGenerating || (availablePatients.length > 0 && selectedPatients.length === 0)
+                        }
+                        className="min-w-[150px]"
+                    >
+                        {isGenerating ? (
+                            <>
+                                Generating <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                            </>
+                        ) : (
+                            "Generate Report"
+                        )}
+                    </Button>
+                </CardFooter>
+            </Card>
+
+            {/* Report Preview */}
+            {reportGenerated && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Report Preview</CardTitle>
+                        <CardDescription>A preview of the generated report.</CardDescription>
+                        {selectedPatients.length > 0 && selectedPatients.length < availablePatients.length && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Report includes {selectedPatients.length} selected patients
+                            </p>
+                        )}
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                        <Tabs defaultValue="preview" className="w-full space-y-4">
+                            <TabsList>
+                                <TabsTrigger value="preview">Preview</TabsTrigger>
+                                <TabsTrigger value="print">Print</TabsTrigger>
+                                <TabsTrigger value="export">Export</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="preview" className="space-y-4">
+                                <div ref={reportRef} className="space-y-4">
+                                    {caseStudies.length > 0 ? (
+                                        caseStudies.map((study) => (
+                                            <div key={study.id} className="border rounded-md p-4">
+                                                <p className="text-sm font-medium">{study.patient_name}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {study.file_name} - {format(new Date(study.created_at), "MMM dd, yyyy")}
+                                                </p>
+                                                <p className="text-sm mt-2">{study.highlight_text}</p>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-4 text-sm text-muted-foreground">
+                                            No case studies found for the selected criteria.
+                                        </div>
+                                    )}
+                                </div>
+                            </TabsContent>
+                            <TabsContent value="print" className="space-y-4">
+                                <div className="flex justify-center">
+                                    <Button onClick={handlePrint} disabled={isGenerating}>
+                                        Print Report
+                                    </Button>
+                                </div>
+                            </TabsContent>
+                            <TabsContent value="export" className="space-y-4">
+                                <div className="flex justify-center">
+                                    <Button onClick={handleExportPDF} disabled={isExporting}>
+                                        {isExporting ? (
+                                            <>
+                                                Exporting <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                                            </>
+                                        ) : (
+                                            "Export to PDF"
+                                        )}
+                                    </Button>
+                                </div>
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
+            )}
+        </div>
     )
 }
