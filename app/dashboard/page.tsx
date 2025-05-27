@@ -84,17 +84,6 @@ export default async function DashboardPage() {
                   <p className="text-sm text-gray-600 mt-2">Register a new nursing home in the system</p>
                 </CardContent>
               </Card>
-
-              <Card className="card-hover bg-secondary-50 border-secondary-100">
-                <CardContent className="p-6 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 rounded-full bg-secondary-100 flex items-center justify-center mb-4">
-                    <Users className="h-6 w-6 text-secondary-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900">Add Patient</h3>
-                  <p className="text-sm text-gray-600 mt-2">Register a new patient to a nursing home</p>
-                </CardContent>
-              </Card>
-
               <Card className="card-hover bg-accent-50 border-accent-100">
                 <CardContent className="p-6 flex flex-col items-center text-center">
                   <div className="w-12 h-12 rounded-full bg-accent-100 flex items-center justify-center mb-4">
