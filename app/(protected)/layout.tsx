@@ -21,14 +21,7 @@ export default async function ProtectedLayout({
   // Get user role from database
   const { data: userRole } = await supabase
     .from('user_roles')
-    .select('role')
-    .eq('user_id', session.user.id)
-    .single()
-
-  // Get user's facility if they're not superadmin
-  const { data: userFacility } = await supabase
-    .from('user_facilities')
-    .select('facility_id')
+    .select('role,facility_id')
     .eq('user_id', session.user.id)
     .single()
 
@@ -37,7 +30,7 @@ export default async function ProtectedLayout({
       <DashboardHeader 
         user={session.user} 
         userRole={userRole?.role}
-        facilityId={userFacility?.facility_id}
+        facilityId={userRole?.facility_id}
       />
       <main className="flex-1">
         {children}

@@ -31,19 +31,57 @@ import { cn } from "@/lib/utils"
 
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useEffect, useState } from "react"
+
 type UserRole = 'superadmin' | 'facility_admin' | 'facility_user';
 
 
 interface DashboardHeaderProps {
   user: User
-  userRole?: UserRole;
-  facilityId:string
+  userRole?: UserRole
+  facilityId: string
 }
 
-export default function DashboardHeader({ user,userRole,facilityId }: DashboardHeaderProps) {
+export default function DashboardHeader({ user, userRole, facilityId }: DashboardHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClientComponentClient()
+  const [facilityData, setFacilityData] = useState<{ name: string; logo_url: string | null } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  
+  useEffect(() => {
+    const getFacilityData = async () => {
+      if (!facilityId) {
+        setIsLoading(false);
+        return
+      }
+      setIsLoading(true)
+
+      try {
+        // Get facility details including name and logo
+        const { data: facility, error: facilityError } = await supabase
+          .from('facilities')
+          .select('name, logo_url')
+          .eq('id', facilityId)
+          .single()
+
+        if (facilityError) {
+          console.error('Error fetching facility:', facilityError)
+          return
+        }
+
+        setFacilityData({name: facility.name,logo_url: facility.logo_url})
+
+      } catch (error) {
+        console.error('Error loading facility data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    getFacilityData()
+    
+  }, [facilityId, supabase])
 
   const handleSignOut = async () => {
     logAuditEvent({
@@ -99,7 +137,14 @@ export default function DashboardHeader({ user,userRole,facilityId }: DashboardH
       <div className="container mx-auto py-3 px-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <Logo />
+            {isLoading ? (
+              <div className="h-10 w-32 animate-pulse bg-gray-200 rounded" />
+            ) :
+              <Logo 
+                facilityName={facilityData?.name}
+                facilityLogoUrl={facilityData?.logo_url}
+              />
+            }
 
             <nav className="hidden md:block">
               <ul className="flex space-x-6">

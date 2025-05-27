@@ -9,16 +9,14 @@ export default async function FacilitiesPage() {
   const { data: { session } } = await supabase.auth.getSession()
 
   // Fetch facilities with user count
-  const { data: facilities } = await supabase
-    .from('facilities')
-    .select(`
-      *,
-      users_count:user_roles(count)
-    `)
-    .order('created_at', { ascending: false })
-
-    console.log('Fetched facilities:', facilities)
-
+const { data: facilities, error } = await supabase
+  .from('facilities')
+  .select(`
+    *,
+    user_roles (
+      id
+    )
+  `);
   return (
     <>
       <PageViewLogger user={session!.user} pageName="Facilities" />

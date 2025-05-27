@@ -15,7 +15,7 @@ interface Facility {
   name: string
   logo_url?: string
   created_at: string
-  users_count?: { count: number }[]
+  user_roles?: { id: string }[]
 }
 
 interface FacilitiesListProps {
@@ -66,7 +66,7 @@ export function FacilitiesList({ facilities }: FacilitiesListProps) {
                   <TableCell>
                     <div className="flex items-center">
                       <Users className="mr-2 h-4 w-4" />
-                      { facility?.users_count ? facility?.users_count[0].count : 0}
+                      { Array.isArray(facility?.user_roles) ? facility?.user_roles.length : 0}
                     </div>
                   </TableCell>
                   <TableCell>

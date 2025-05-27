@@ -92,8 +92,6 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
         const fileName = `${Math.random()}.${fileExt}`
         const filePath = `${state.name}/${fileName}`
 
-        // console.log("User:", user.data.user)
-
         const { error: uploadError } = await supabase.storage
           .from('facility-logos')
           .upload(filePath, state.logo)
@@ -104,8 +102,6 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
 
         logger.info(COMPONENT, "Logo uploaded successfully", { filePath })
       }
-
-      // Create facility
       const { data: facility, error: facilityError } = await supabase
         .from('facilities')
         .insert([
@@ -120,7 +116,6 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
 
       if (facilityError) throw facilityError
 
-      // Log facility creation
       const user = await supabase.auth.getUser()
       if (user.data?.user && facility) {
         logAuditEvent({
