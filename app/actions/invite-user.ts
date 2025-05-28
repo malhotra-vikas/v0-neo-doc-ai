@@ -2,6 +2,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { UserRole, UserStatus } from '@/types/enums'
+import { getServerDatabase } from '@/lib/services/supabase/get-service'
 
 const COMPONENT = "InviteUserAction"
 
@@ -10,20 +12,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function inviteUser(email: string, facilityId: string) {
-  try {
-    const { data: facility, error: facilityError } = await supabase
-      .from('facilities')
-      .select('name')
-      .eq('id', facilityId)
-      .single()
+export async function inviteUser(email: string, facilityId?: string,role: UserRole = UserRole.FACILITY_ADMIN) {
+    const db =getServerDatabase()
 
-    if (facilityError) {
-      logger.error(COMPONENT, "Failed to fetch facility", { 
-        error: facilityError,
-        facilityId 
-      })
-      throw new Error("Could not find facility")
+  try {
+    let facility: { name?: string } | undefined;
+    if(facilityId){
+      const { data } = await db.getFacility(facilityId)
+      facility = data;
     }
 
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
@@ -52,14 +48,11 @@ export async function inviteUser(email: string, facilityId: string) {
 
     console.log("Invite data:", inviteData)
 
-    // Create user record
-    const { error: userError } = await supabase
-      .from('users')
-      .insert([{
+    const { error: userError } = await db.createUser({
         id: inviteData.user.id,
         email,
-        status: 'pending'
-      }])
+        status: UserStatus.PENDING
+      }); 
 
     if (userError) {
       logger.error(COMPONENT, "Failed to create user record", { 
@@ -70,13 +63,11 @@ export async function inviteUser(email: string, facilityId: string) {
     }
 
     //Create facility association
-    const { error: facilityError2 } = await supabase
-      .from('user_roles')
-      .insert([{
+    const { error: facilityError2 } = await db.assignUserRole({
         user_id: inviteData.user.id,
         facility_id: facilityId,
-        role: 'facility_admin'
-      }])
+        role: role
+      })
 
     if (facilityError2) {
       logger.error(COMPONENT, "Failed to associate user with facility", { 

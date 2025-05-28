@@ -2,6 +2,8 @@ import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import DashboardHeader from "@/components/dashboard-header"
+import UserProviderWrapper from "@/contexts/UserProviderWrapper"
+import { Footer } from "@/components/footer"
 
 export default async function ProtectedLayout({
   children,
@@ -18,23 +20,27 @@ export default async function ProtectedLayout({
     redirect("/login")
   }
 
-  // Get user role from database
   const { data: userRole } = await supabase
     .from('user_roles')
     .select('role,facility_id')
     .eq('user_id', session.user.id)
-    .single()
+    .maybeSingle()
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <DashboardHeader 
-        user={session.user} 
-        userRole={userRole?.role}
-        facilityId={userRole?.facility_id}
-      />
-      <main className="flex-1">
-        {children}
-      </main>
-    </div>
+    <UserProviderWrapper 
+      value={{
+        user: session.user,
+        userRole: userRole?.role,
+        facilityId: userRole?.facility_id
+      }}
+    >
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <DashboardHeader />
+        <main className="flex-1">
+          {children}
+        </main>
+      </div>
+      <Footer />
+    </UserProviderWrapper>
   )
 }

@@ -14,7 +14,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { Building2, MapPin, Phone, Mail, Globe, X, Loader2, CheckCircle } from "lucide-react"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -22,6 +22,7 @@ import { useForm } from "react-hook-form"
 import * as z from "zod"
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useUser } from "./providers/user-provider"
 
 interface AddNursingHomeDialogProps {
   open: boolean
@@ -46,6 +47,7 @@ export default function AddNursingHomeDialog({ open, onOpenChange }: AddNursingH
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+  const { facilityId } = useUser()
 
   const form = useForm<NursingHomeFormValues>({
     resolver: zodResolver(nursingHomeSchema),
@@ -75,9 +77,10 @@ export default function AddNursingHomeDialog({ open, onOpenChange }: AddNursingH
           {
             name: values.name,
             address: formattedAddress,
-            phone: values.phone || null,
-            email: values.email || null,
-            website: values.website || null,
+            // phone: values.phone || null,
+            // email: values.email || null,
+            // website: values.website || null,
+            facility_id: facilityId,
           },
         ])
         .select()

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sparkles, RefreshCw, FileText, ShieldCheck } from "lucide-react"
 import { generateCaseStudyHighlight } from "@/app/actions/generate-case-study"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 interface CaseStudyHighlightProps {
     fileId: string

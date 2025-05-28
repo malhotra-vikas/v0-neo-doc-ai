@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,57 +26,45 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Mail, UserCircle } from "lucide-react";
 import { CreateUserForm } from "./create-user-form";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
+import { UserRole } from "@/types/enums";
+import { useUser } from "./providers/user-provider";
+import { getClientDatabase } from "@/lib/services/supabase";
+import { UserRoleWithUser } from "@/types";
 
-interface User {
-  id: string;
-  email: string;
-  created_at: string;
-  status: string;
-  user_roles: {
-    role: string;
-    facility_id: string;
-  }[];
-}
 
 interface UsersListProps {
-  facilityId: string;
-  facilityName: string;
+  facilityId?: string;
+  facilityName?: string;
+  isSuperAdminView?: boolean;
 }
 
-export function UsersList({ facilityId, facilityName }: UsersListProps) {
-  const [users, setUsers] = useState<User[]>([]);
+export function UsersList({ 
+  facilityId, 
+  facilityName,
+  isSuperAdminView = false 
+}: UsersListProps) {
+  const { user, userRole } = useUser();
+  const db = getClientDatabase()
+  const [users, setUsers] = useState<UserRoleWithUser[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const supabase = createClientComponentClient();
   const { toast } = useToast();
+  const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
+  const inviteUserRole = isSuperAdminView ? UserRole.SUPER_ADMIN : 
+    (isSuperAdmin ? UserRole.FACILITY_ADMIN : UserRole.FACILITY_USER);
 
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .select(
-          `
-    id,
-    email,
-    created_at,
-    status,
-    user_roles:user_roles!user_roles_user_id_fkey (
-      role,
-      facility_id
-    )
-  `
-        )
-        .eq("user_roles.facility_id", facilityId)
-        .not("user_roles", "is", null);
-
-      if (error) {
-        console.error("Error fetching users:", error);
-        throw error;
+      if (isSuperAdminView) {
+        const { data } = await db.getUsersWithRole(null, UserRole.SUPER_ADMIN,user?.id)
+        setUsers(data || []);
+      } else {
+        // Fetch facility users
+        const { data } = await db.getUsersWithRole(facilityId!, isSuperAdmin ? null : inviteUserRole)
+        setUsers(data || []);
       }
-
-      setUsers(data || []);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -102,14 +89,19 @@ export function UsersList({ facilityId, facilityName }: UsersListProps) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Users - {facilityName}</CardTitle>
+          <CardTitle>
+            {isSuperAdminView ? "Super Administrators" : `Users - ${facilityName}`}
+          </CardTitle>
           <CardDescription>
-            Manage facility users and their access
+            {isSuperAdminView 
+              ? "Manage system super administrators"
+              : "Manage facility users and their access"
+            }
           </CardDescription>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Add User
+          {isSuperAdminView ? "Add Super Admin" : "Add User"}
         </Button>
       </CardHeader>
       <CardContent>
@@ -141,16 +133,16 @@ export function UsersList({ facilityId, facilityName }: UsersListProps) {
                   <TableCell className="font-medium">
                     <div className="flex items-center space-x-2">
                       <Mail className="h-4 w-4" />
-                      <span>{user.email}</span>
+                      <span>{Array.isArray(user.users) ? user.users[0].email : user.users.email}</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center">
                       <UserCircle className="mr-2 h-4 w-4" />
-                      {user.status}
-                      {user.user_roles[0]?.role && (
+                      {Array.isArray(user.users) ? user.users[0].status : user.users.status}
+                      {user.role && (
                         <span className="ml-2 text-sm text-muted-foreground">
-                          ({user.user_roles[0].role})
+                          ({user.role})
                         </span>
                       )}
                     </div>
@@ -173,12 +165,22 @@ export function UsersList({ facilityId, facilityName }: UsersListProps) {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New User</DialogTitle>
+            <DialogTitle>
+              {isSuperAdminView ? "Add Super Administrator" : "Add New User"}
+            </DialogTitle>
             <DialogDescription>
-              Invite a new user to {facilityName}
+              {isSuperAdminView 
+                ? "Invite a new super administrator to the system"
+                : `Invite a new user to ${facilityName}`
+              }
             </DialogDescription>
           </DialogHeader>
-          <CreateUserForm facilityId={facilityId} onSuccess={handleSuccess} />
+          <CreateUserForm 
+            facilityId={isSuperAdminView ? undefined : facilityId} 
+            onSuccess={handleSuccess}
+            role={inviteUserRole}
+            isInsertSuperAdmin={isSuperAdminView}
+          />
         </DialogContent>
       </Dialog>
     </Card>

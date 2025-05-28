@@ -1,8 +1,8 @@
-import LoginForm from "@/components/login-form"
 import { Logo } from "@/components/logo"
 import { AuthHero } from "@/components/auth-hero"
+import { ForgotPasswordForm } from "@/components/forgot-password-form"
 
-export default function LoginPage() {
+export default function ForgotPasswordPage() {
   return (
     <main className="flex min-h-screen flex-col">
       <div className="flex-1 flex flex-col md:flex-row">
@@ -10,10 +10,12 @@ export default function LoginPage() {
           <div className="w-full max-w-md">
             <div className="mb-8">
               <Logo size="lg" />
-              <h1 className="mt-6 text-3xl font-bold text-gray-900">Welcome back</h1>
-              <p className="mt-2 text-gray-600">Sign in to access your dashboard</p>
+              <h1 className="mt-6 text-3xl font-bold text-gray-900">Reset Password</h1>
+              <p className="mt-2 text-gray-600">
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
             </div>
-            <LoginForm />
+            <ForgotPasswordForm />
           </div>
         </div>
         <AuthHero />

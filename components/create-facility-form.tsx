@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { Upload, Building2, ImagePlus, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import Image from "next/image"
@@ -70,14 +70,39 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
         fileType: file.type
       })
     }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  } 
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setState(prev => ({ ...prev, loading: true, error: null }))
 
     const timer = logger.timing(COMPONENT, "create-facility")
     logger.info(COMPONENT, "Creating facility", { name: state.name })
+
+    const { data: existingFacility, error: checkError } = await supabase
+      .from('facilities')
+      .select('id')
+      .eq('name', state.name)
+      .single()
+
+    if (existingFacility) {
+      setState(prev => ({ ...prev, loading: false, error: "A facility with this name already exists" }))
+      toast({
+        title: "Error",
+        description: "A facility with this name already exists. Please choose a different name.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (checkError && checkError.code !== 'PGRST116') {  // PGRST116 means no rows returned
+      setState(prev => ({ ...prev, loading: false, error: checkError.message }))
+      toast({
+        title: "Error",
+        description: "Failed to validate facility name. Please try again.",
+        variant: "destructive"
+      })
+      return
+    }
 
     const user = await supabase.auth.getUser()
       if (user) {
@@ -135,12 +160,12 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
         facilityId: facility.id,
         processingTime
       })
-     onSuccess?.()
       toast({
-        title: "Facility Created",
+        title: "Success!",
         description: "The facility has been created successfully.",
-        variant: "default"
+        variant: "success"
       })
+     onSuccess?.()
 
       router.push('/admin/facilities')
       router.refresh()
@@ -161,12 +186,6 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
     <Card className="w-full max-w-2xl mx-auto shadow-md border-slate-200">
       <CardContent className="p-6 space-y-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {state.error && (
-            <Alert variant="destructive">
-              <AlertDescription>{state.error}</AlertDescription>
-            </Alert>
-          )}
-
           <div className="space-y-2">
             <Label htmlFor="name">Facility Name</Label>
             <Input

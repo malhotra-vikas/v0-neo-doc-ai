@@ -162,3 +162,39 @@ BEGIN
         'superadmin'
     );
 END $$;
+
+DROP POLICY "Facility admin access on users" ON users;
+
+
+CREATE POLICY "Facility admin access on users"
+ON users
+FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM user_roles ur
+    WHERE ur.user_id = auth.uid()
+    AND ur.role = 'facility_admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM user_roles ur
+    WHERE ur.user_id = auth.uid()
+    AND ur.role = 'facility_admin'
+  )
+);
+
+CREATE POLICY "Public read access to email only"
+ON users
+FOR SELECT
+TO public
+USING (true);
+
+ALTER TABLE nursing_homes 
+ADD COLUMN facility_id UUID REFERENCES facilities(id) ON DELETE CASCADE;
+
+UPDATE nursing_homes 
+SET facility_id = (SELECT id FROM facilities LIMIT 1)
+WHERE facility_id IS NULL;
+
+CREATE INDEX idx_nursing_homes_facility_id ON nursing_homes(facility_id);

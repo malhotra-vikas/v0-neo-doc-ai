@@ -1,32 +1,46 @@
 "use client"
 
 import { useState } from "react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { z } from "zod"
 import { logger } from "@/lib/logger"
 import { inviteUser } from "@/app/actions/invite-user"
+import { UserRole } from "@/types/enums"
+import { getClientDatabase } from "@/lib/services/supabase"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useUser } from "@/components/providers/user-provider"
 
 const COMPONENT = "CreateUserForm"
 
 const emailSchema = z.string().email("Please enter a valid email address")
 
 interface CreateUserFormProps {
-  facilityId: string
+  facilityId?: string
   onSuccess: () => void
+  role?:UserRole
+  isInsertSuperAdmin?:boolean
 }
 
-export function CreateUserForm({ facilityId, onSuccess }: CreateUserFormProps) {
+export function CreateUserForm({ facilityId, onSuccess, role,isInsertSuperAdmin }: CreateUserFormProps) {
   const [email, setEmail] = useState("")
+  const [selectedRole, setSelectedRole] = useState<UserRole>(role || UserRole.FACILITY_USER)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
-  const supabase = createClientComponentClient()
+  const db = getClientDatabase()
+  const { userRole } = useUser()
+  
+  const isSuperAdmin = userRole === UserRole.SUPER_ADMIN
 
   const validateEmail = (email: string) => {
     try {
@@ -39,12 +53,7 @@ export function CreateUserForm({ facilityId, onSuccess }: CreateUserFormProps) {
 
  const checkExistingUser = async (email: string) => {
   try {
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('email')
-      .eq('email', email)
-      .maybeSingle();
-
+    const { data: userData, error: userError } = await db.getUserByEmail(email) 
     if (userError) throw userError;
 
     return !!userData; 
@@ -68,20 +77,20 @@ export function CreateUserForm({ facilityId, onSuccess }: CreateUserFormProps) {
 
       const exists = await checkExistingUser(email)
       if (exists) {
-        throw new Error("A user with this email already exists")
+        throw ("A user with this email already exists")
       }
 
-      await inviteUser(email, facilityId)
+      await inviteUser(email, facilityId, isInsertSuperAdmin ?UserRole.SUPER_ADMIN :( isSuperAdmin ? selectedRole : role))
 
       toast({
+         variant: "default",
         title: "Success",
         description: "User has been invited successfully.",
       })
 
       onSuccess()
     } catch (error: any) {
-      logger.error(COMPONENT, "Error inviting user", { error: error.message })
-      setError(error.message)
+      setError(error && typeof(error) == "string" ? error : "Failed to invite user. Please try again.")
       toast({
         variant: "destructive",
         title: "Error",
@@ -105,7 +114,6 @@ export function CreateUserForm({ facilityId, onSuccess }: CreateUserFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-
       <div className="space-y-2">
         <Label htmlFor="email">Email Address</Label>
         <Input
@@ -122,6 +130,28 @@ export function CreateUserForm({ facilityId, onSuccess }: CreateUserFormProps) {
           <p className="text-sm text-red-500 mt-1">{error}</p>
         )}
       </div>
+
+      {isSuperAdmin && !isInsertSuperAdmin && (
+        <div className="space-y-2">
+          <Label htmlFor="role">User Role</Label>
+          <Select
+            value={selectedRole}
+            onValueChange={(value) => setSelectedRole(value as UserRole)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select a role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UserRole.FACILITY_ADMIN}>
+                Facility Admin
+              </SelectItem>
+              <SelectItem value={UserRole.FACILITY_USER}>
+                Facility User
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <Button
         type="submit"

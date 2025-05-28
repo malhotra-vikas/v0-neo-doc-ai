@@ -4,11 +4,15 @@ import { redirect } from "next/navigation"
 import { BulkFileUpload } from "@/components/bulk-file-upload"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageViewLogger } from "@/components/page-view-logger"
+import { getServerDatabase } from "@/lib/services/supabase/get-service"
+import { NursingHome } from "@/types"
+import { UserRole } from "@/types/enums"
 
 export default async function BulkUploadPage() {
   // Fix: Properly await cookies()
   const cookieStore = await cookies()
   const supabase = createServerComponentClient({ cookies: () => cookieStore })
+  const db= getServerDatabase()
 
   const {
     data: { session },
@@ -18,8 +22,17 @@ export default async function BulkUploadPage() {
     redirect("/")
   }
 
-  // Fetch nursing homes for the dropdown
-  const { data: nursingHomes } = await supabase.from("nursing_homes").select("id, name")
+ const facility = await db.getFacilityIdByUserId(session.user.id)
+  
+  let nursingHomes:Pick<NursingHome,"id"|"name">[] = [];
+  if(facility.data?.role == UserRole.SUPER_ADMIN){
+    const { data: nursingHomeValues } = await db.getNursingHomes()
+    nursingHomes = nursingHomeValues ?? [];
+  }
+  if(facility.data?.facility_id){
+    const { data: nursingHomeValues } = await db.getNursingHomesByFacilityId(facility.data?.facility_id)
+    nursingHomes = nursingHomeValues ?? [];
+  }
 
   return (
     <div className="flex flex-col min-h-screen">

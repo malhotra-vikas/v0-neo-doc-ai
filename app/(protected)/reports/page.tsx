@@ -3,6 +3,9 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { ReportGenerator } from "@/components/report-generator"
 import { PageViewLogger } from "@/components/page-view-logger"
+import { getServerDatabase } from "@/lib/services/supabase/get-service"
+import { NursingHome } from "@/types"
+import { UserRole } from "@/types/enums"
 
 export default async function ReportsPage() {
     const cookieStore = await cookies()
@@ -16,8 +19,18 @@ export default async function ReportsPage() {
         redirect("/")
     }
 
-    // Fetch nursing homes for the dropdown
-    const { data: nursingHomes } = await supabase.from("nursing_homes").select("id, name")
+    const db = getServerDatabase()
+    const facility = await db.getFacilityIdByUserId(session.user.id)
+  
+    let nursingHomes:Pick<NursingHome,"id"|"name">[] = [];
+    if(facility.data?.role == UserRole.SUPER_ADMIN){
+        const { data: nursingHomeValues } = await db.getNursingHomes()
+        nursingHomes = nursingHomeValues ?? [];
+      }
+    if(facility.data?.facility_id){
+        const { data: nursingHomeValues } = await supabase.from("nursing_homes").select("id, name").eq("facility_id", facility.data?.facility_id)
+        nursingHomes = nursingHomeValues ?? [];
+    }
 
     return (
         <div className="flex flex-col min-h-screen">

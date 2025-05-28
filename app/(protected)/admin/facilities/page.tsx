@@ -17,6 +17,7 @@ const { data: facilities, error } = await supabase
       id
     )
   `);
+  
   return (
     <>
       <PageViewLogger user={session!.user} pageName="Facilities" />

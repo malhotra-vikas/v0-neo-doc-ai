@@ -10,10 +10,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CalendarDays } from "lucide-react"
 import { Building, Users, Upload } from "lucide-react" // Import missing variables
 import { PageViewLogger } from "@/components/page-view-logger"
+import { getServerDatabase } from "@/lib/services/supabase/get-service"
+import { UserRole } from "@/types/enums"
 
 export default async function DashboardPage() {
   const cookieStore = await cookies()
   const supabase = createServerComponentClient({ cookies: () => cookieStore })
+  const db = getServerDatabase()
 
   const {
     data: { session },
@@ -22,10 +25,17 @@ export default async function DashboardPage() {
   if (!session) {
     redirect("/")
   }
-
-  // Fetch nursing homes
-  const { data: nursingHomes } = await supabase.from("nursing_homes").select("*, patients(*)")
-
+  const facility = await db.getFacilityIdByUserId(session.user.id)
+  
+  let nursingHomes = [];
+  if(facility.data?.role == UserRole.SUPER_ADMIN){
+      const { data: nursingHomeValues } = await db.getNursingHomes()
+      nursingHomes = nursingHomeValues ?? [];
+    }
+  if(facility.data?.facility_id){
+    const { data: nursingHomeValues } = await supabase.from("nursing_homes").select("*, patients(*)").eq("facility_id", facility.data?.facility_id);
+    nursingHomes = nursingHomeValues ?? [];
+  }
   // Fetch monthly files status
   const { data: monthlyFiles } = await supabase.from("nursing_home_files").select("*")
 

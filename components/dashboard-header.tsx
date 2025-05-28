@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import type { User } from "@supabase/auth-helpers-nextjs"
 import { useRouter, usePathname } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
@@ -25,29 +24,25 @@ import {
   BarChart3,
   ClipboardList,
   Building2,
+  Users2Icon,
+  User2,
 } from "lucide-react"
 import { Logo } from "./logo"
 import { cn } from "@/lib/utils"
-
-// Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
 import { useEffect, useState } from "react"
+import { UserRole } from "@/types/enums"
+import { getClientDatabase } from "@/lib/services/supabase"
+import { useUser } from "./providers/user-provider"
 
-type UserRole = 'superadmin' | 'facility_admin' | 'facility_user';
-
-
-interface DashboardHeaderProps {
-  user: User
-  userRole?: UserRole
-  facilityId: string
-}
-
-export default function DashboardHeader({ user, userRole, facilityId }: DashboardHeaderProps) {
+export default function DashboardHeader() {
+  const { user, userRole, facilityId } = useUser()
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClientComponentClient()
   const [facilityData, setFacilityData] = useState<{ name: string; logo_url: string | null } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const db = getClientDatabase();
   
   useEffect(() => {
     const getFacilityData = async () => {
@@ -58,22 +53,17 @@ export default function DashboardHeader({ user, userRole, facilityId }: Dashboar
       setIsLoading(true)
 
       try {
-        // Get facility details including name and logo
-        const { data: facility, error: facilityError } = await supabase
-          .from('facilities')
-          .select('name, logo_url')
-          .eq('id', facilityId)
-          .single()
+        const { data: facility, error: facilityError } = await db.getFacility(facilityId);
 
         if (facilityError) {
-          console.error('Error fetching facility:', facilityError)
+          console.log('Error fetching facility:', facilityError)
           return
         }
 
         setFacilityData({name: facility.name,logo_url: facility.logo_url})
 
       } catch (error) {
-        console.error('Error loading facility data:', error)
+        console.log('Error loading facility data:', error)
       } finally {
         setIsLoading(false)
       }
@@ -84,20 +74,22 @@ export default function DashboardHeader({ user, userRole, facilityId }: Dashboar
   }, [facilityId, supabase])
 
   const handleSignOut = async () => {
-    logAuditEvent({
-      user: user,
-      actionType: "logout",
-      entityType: "user",
-      entityId: user.id,
-      details: { method: "manual" },
-    })
+    if(user){
+      logAuditEvent({
+        user: user,
+        actionType: "logout",
+        entityType: "user",
+        entityId: user.id,
+        details: { method: "manual" },
+      })
+    }
 
     await supabase.auth.signOut()
     router.push("/")
     router.refresh()
   }
 
-  const userInitials = user.email ? user.email.substring(0, 2).toUpperCase() : "U"
+  const userInitials = user?.email ? user?.email.substring(0, 2).toUpperCase() : "U"
 
   const navItems = [
     {
@@ -125,10 +117,20 @@ export default function DashboardHeader({ user, userRole, facilityId }: Dashboar
       href: "/audit-logs",
       icon: ClipboardList,
     },
-      ...(userRole === 'superadmin' ? [{
+      ...(userRole ===UserRole.SUPER_ADMIN ? [{
         name: "Facilities",
         href: "/admin/facilities",
         icon: Building2, 
+    }] : []),
+      ...(userRole ===UserRole.SUPER_ADMIN ? [{
+        name: "Admins",
+        href: "/admins",
+        icon: User2, 
+    }] : []),
+      ...(userRole === UserRole.FACILITY_ADMIN  ? [{
+        name: "Users",
+        href: `facilities/${facilityId}/users`,
+        icon: Users2Icon, 
     }] : []),
   ]
 
@@ -187,7 +189,7 @@ export default function DashboardHeader({ user, userRole, facilityId }: Dashboar
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <UserIcon className="mr-2 h-4 w-4" />
-                  <span>{user.email}</span>
+                  <span>{user?.email}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Settings className="mr-2 h-4 w-4" />
