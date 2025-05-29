@@ -511,7 +511,7 @@ function AuditLogTable({ logs, loading, getActionIcon, getEntityIcon }: AuditLog
                                     </PopoverContent>
                                 </Popover>
                             ) : (
-                                <span className="text-muted-foreground text-xs">No details</span>
+                                <span className="text-muted-foreground text-xs">No Details</span>
                             )}
                         </TableCell>
                     </TableRow>
