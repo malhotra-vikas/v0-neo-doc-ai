@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -86,12 +87,6 @@ export default function LoginForm() {
             />
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <a href="#" className="text-xs text-primary-600 hover:text-primary-800">
-                Forgot password?
-              </a>
-            </div>
             <Input
               id="password"
               type="password"
@@ -102,7 +97,15 @@ export default function LoginForm() {
               required
             />
           </div>
-          <Button type="submit" className="w-full bg-primary-600 hover:bg-primary-700" disabled={loading}>
+          <div className="flex justify-end mt-4">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-primary-600 hover:text-primary-500"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+          <Button type="submit" className="w-full text-white bg-primary-600 hover:bg-primary-700" disabled={loading}>
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

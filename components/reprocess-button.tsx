@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 // Import the audit logger at the top of the file

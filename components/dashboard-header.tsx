@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import type { User } from "@supabase/auth-helpers-nextjs"
 import { useRouter, usePathname } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
@@ -24,39 +23,73 @@ import {
   HelpCircle,
   BarChart3,
   ClipboardList,
+  Building2,
+  Users2Icon,
+  User2,
 } from "lucide-react"
 import { Logo } from "./logo"
 import { cn } from "@/lib/utils"
-
-// Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useEffect, useState } from "react"
+import { UserRole } from "@/types/enums"
+import { getClientDatabase } from "@/lib/services/supabase"
+import { useUser } from "./providers/user-provider"
 
-interface DashboardHeaderProps {
-  user: User
-}
-
-export default function DashboardHeader({ user }: DashboardHeaderProps) {
+export default function DashboardHeader() {
+  const { user, userRole, facilityId } = useUser()
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClientComponentClient()
+  const [facilityData, setFacilityData] = useState<{ name: string; logo_url: string | null } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const db = getClientDatabase();
+  
+  useEffect(() => {
+    const getFacilityData = async () => {
+      if (!facilityId) {
+        setIsLoading(false);
+        return
+      }
+      setIsLoading(true)
 
-  // Update the handleSignOut function to log logout events
+      try {
+        const { data: facility, error: facilityError } = await db.getFacility(facilityId);
+
+        if (facilityError) {
+          console.log('Error fetching facility:', facilityError)
+          return
+        }
+
+        setFacilityData({name: facility.name,logo_url: facility.logo_url})
+
+      } catch (error) {
+        console.log('Error loading facility data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    getFacilityData()
+    
+  }, [facilityId, supabase])
+
   const handleSignOut = async () => {
-    // Log logout event before signing out
-    logAuditEvent({
-      user: user,
-      actionType: "logout",
-      entityType: "user",
-      entityId: user.id,
-      details: { method: "manual" },
-    })
+    if(user){
+      logAuditEvent({
+        user: user,
+        actionType: "logout",
+        entityType: "user",
+        entityId: user.id,
+        details: { method: "manual" },
+      })
+    }
 
     await supabase.auth.signOut()
     router.push("/")
     router.refresh()
   }
 
-  const userInitials = user.email ? user.email.substring(0, 2).toUpperCase() : "U"
+  const userInitials = user?.email ? user?.email.substring(0, 2).toUpperCase() : "U"
 
   const navItems = [
     {
@@ -84,6 +117,21 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
       href: "/audit-logs",
       icon: ClipboardList,
     },
+      ...(userRole ===UserRole.SUPER_ADMIN ? [{
+        name: "Facilities",
+        href: "/admin/facilities",
+        icon: Building2, 
+    }] : []),
+      ...(userRole ===UserRole.SUPER_ADMIN ? [{
+        name: "Admins",
+        href: "/admins",
+        icon: User2, 
+    }] : []),
+      ...(userRole === UserRole.FACILITY_ADMIN  ? [{
+        name: "Users",
+        href: `facilities/${facilityId}/users`,
+        icon: Users2Icon, 
+    }] : []),
   ]
 
   return (
@@ -91,7 +139,14 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
       <div className="container mx-auto py-3 px-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <Logo />
+            {isLoading ? (
+              <div className="h-10 w-32 animate-pulse bg-gray-200 rounded" />
+            ) :
+              <Logo 
+                facilityName={facilityData?.name}
+                facilityLogoUrl={facilityData?.logo_url}
+              />
+            }
 
             <nav className="hidden md:block">
               <ul className="flex space-x-6">
@@ -134,7 +189,7 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <UserIcon className="mr-2 h-4 w-4" />
-                  <span>{user.email}</span>
+                  <span>{user?.email}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Settings className="mr-2 h-4 w-4" />
