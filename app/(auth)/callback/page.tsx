@@ -14,6 +14,7 @@ import { logger } from '@/lib/logger'
 import { AuditActionType, UserStatus } from '@/types/enums'
 import { AuthHero } from "@/components/auth-hero"
 import { Logo } from "@/components/logo"
+import { Suspense } from "react"
 
 const COMPONENT = 'SetPasswordPage'
 
@@ -24,7 +25,15 @@ const passwordSchema = z.string()
   .regex(/[0-9]/, "Password must contain at least one number")
   .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character")
 
-export default function CallbackPage() {
+export default function CallbackPageWrapper() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CallbackPage />
+    </Suspense>
+  )
+}
+
+function CallbackPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,12 +51,12 @@ export default function CallbackPage() {
       try {
         const urlParams = new URLSearchParams(window.location.hash.substring(1));
         const refreshToken = urlParams.get('refresh_token');
-        if(refreshToken){
+        if (refreshToken) {
           await supabase.auth.refreshSession({ refresh_token: refreshToken });
         }
         const type = urlParams.get('type')
         setType(type || '')
-        console.log("urlParams",urlParams)
+        console.log("urlParams", urlParams)
         if (!type || (type !== AuditActionType.INVITE && type !== AuditActionType.RECOVERY)) {
           logger.info(COMPONENT, "Invalid access attempt - missing parameters")
           router.replace('/login')
@@ -92,7 +101,7 @@ export default function CallbackPage() {
       }
       const urlParams = new URLSearchParams(window.location.hash.substring(1));
       const refreshToken = urlParams.get('refresh_token');
-      if(refreshToken){
+      if (refreshToken) {
         await supabase.auth.refreshSession({ refresh_token: refreshToken });
       }
 
@@ -105,12 +114,12 @@ export default function CallbackPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('User not found')
 
-      if(type === AuditActionType.INVITE){
+      if (type === AuditActionType.INVITE) {
         const { error: statusError } = await supabase
           .from('users')
           .update({ status: UserStatus.ACTIVE })
           .eq('id', user.id)
-  
+
         if (statusError) throw statusError
       }
 
@@ -204,8 +213,8 @@ export default function CallbackPage() {
                     />
                   </div>
 
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     className="w-full text-white bg-primary-600 hover:bg-primary-700"
                     disabled={loading}
                   >
@@ -214,7 +223,7 @@ export default function CallbackPage() {
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                         Setting Password...
                       </>
-                    ) : 
+                    ) :
                       type == AuditActionType.INVITE ? 'Set Password' : 'Reset Password'
                     }
                   </Button>
