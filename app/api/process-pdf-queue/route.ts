@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 import { logger } from "@/lib/logger"
 import { logServerAuditEvent } from "@/lib/audit-logger"
-import { generateCaseStudyHighlight } from "@/app/actions/generate-case-study"
+import { generateCaseStudyHighlight, generateCaseStudyHighlightForPatient } from "@/app/actions/generate-case-study"
 
 const COMPONENT = "ProcessPDFQueue"
 
@@ -266,6 +266,8 @@ ${extractedText}
 
                 const geenratedHighlight = await generateCaseStudyHighlight(queueItem.file_id)
 
+                const geenratedPatientHighlight = await generateCaseStudyHighlightForPatient(patientData.patient_id)
+
                 // Log the successful generation
                 if (user) {
                     await logServerAuditEvent(supabase, {
@@ -278,7 +280,7 @@ ${extractedText}
                             status: "generation_completed",
                             file_id: queueItem.file_id,
                             patient_id: patientData.patient_id,
-                            text_length: geenratedHighlight.highlight?.length,
+                            text_length: geenratedPatientHighlight.highlight?.length,
                         },
                     })
                 }
