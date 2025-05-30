@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 interface ReprocessButtonProps {
     fileId: string
@@ -18,6 +19,7 @@ export function ReprocessButton({ fileId }: ReprocessButtonProps) {
     const { toast } = useToast()
     const router = useRouter()
     const supabase = createClientComponentClient()
+    const { user } = useAuth()
 
     // Update the handleReprocess function to log reprocessing events
     const handleReprocess = async () => {
@@ -87,10 +89,9 @@ export function ReprocessButton({ fileId }: ReprocessButtonProps) {
             }
 
             // Log reprocessing event
-            const user = await supabase.auth.getUser()
-            if (user.data?.user) {
+            if (user) {
                 logAuditEvent({
-                    user: user.data.user,
+                    user: user,
                     actionType: "process",
                     entityType: "patient_file",
                     entityId: fileId,

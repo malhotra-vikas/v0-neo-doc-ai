@@ -13,8 +13,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Loader2, AlertCircle } from "lucide-react"
 
-// Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 export default function LoginForm() {
   const [email, setEmail] = useState("malhotra.vikas@gmail.com")
@@ -22,7 +22,7 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClientComponentClient()
+  const { signIn } = useAuth()
 
   // Update the handleSubmit function to log login events
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,25 +31,15 @@ export default function LoginForm() {
     setError(null)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      const user = await signIn(email, password);
 
-      if (error) {
-        throw error
-      }
-
-      // Log successful login
-      if (data.user) {
-        logAuditEvent({
-          user: data.user,
-          actionType: "login",
-          entityType: "user",
-          entityId: data.user.id,
-          details: { method: "password" },
-        })
-      }
+      await logAuditEvent({
+        user:user,
+        actionType: "login",
+        entityType: "user",
+        entityId: user.uid,
+        details: { method: "password" }
+      });
 
       router.push("/dashboard")
       router.refresh()

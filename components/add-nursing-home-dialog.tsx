@@ -22,7 +22,7 @@ import { useForm } from "react-hook-form"
 import * as z from "zod"
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
-import { useUser } from "./providers/user-provider"
+import { useAuth } from "./providers/auth-provider"
 
 interface AddNursingHomeDialogProps {
   open: boolean
@@ -47,7 +47,7 @@ export default function AddNursingHomeDialog({ open, onOpenChange }: AddNursingH
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
-  const { facilityId } = useUser()
+  const { facilityId,user } = useAuth()
 
   const form = useForm<NursingHomeFormValues>({
     resolver: zodResolver(nursingHomeSchema),
@@ -90,10 +90,9 @@ export default function AddNursingHomeDialog({ open, onOpenChange }: AddNursingH
       }
 
       // Log nursing home creation
-      const user = await supabase.auth.getUser()
-      if (user.data?.user && data && data[0]) {
+      if (user && data && data[0]) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "create",
           entityType: "nursing_home",
           entityId: data[0].id,

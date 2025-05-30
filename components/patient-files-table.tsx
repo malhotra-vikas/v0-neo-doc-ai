@@ -21,6 +21,7 @@ import Link from "next/link"
 
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 interface FileRecord {
   id: string
@@ -46,6 +47,7 @@ export function PatientFilesTable({ files: initialFiles }: PatientFilesTableProp
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+  const { user } = useAuth()
 
   // Fetch case study highlight status for each file
   useEffect(() => {
@@ -90,10 +92,9 @@ export function PatientFilesTable({ files: initialFiles }: PatientFilesTableProp
       document.body.removeChild(a)
 
       // Log file download
-      const user = await supabase.auth.getUser()
-      if (user.data?.user) {
+      if (user) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "download",
           entityType: "patient_file",
           entityId: filePath,
@@ -131,10 +132,9 @@ export function PatientFilesTable({ files: initialFiles }: PatientFilesTableProp
       }
 
       // Log file deletion
-      const user = await supabase.auth.getUser()
-      if (user.data?.user) {
+      if (user) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "delete",
           entityType: "patient_file",
           entityId: fileToDelete.id,
@@ -211,10 +211,9 @@ export function PatientFilesTable({ files: initialFiles }: PatientFilesTableProp
       }
 
       // Log reprocessing event
-      const user = await supabase.auth.getUser()
-      if (user.data?.user) {
+      if (user) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "process",
           entityType: "patient_file",
           entityId: fileId,

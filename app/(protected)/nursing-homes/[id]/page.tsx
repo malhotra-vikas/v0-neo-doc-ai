@@ -4,23 +4,19 @@ import { notFound, redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageViewLogger } from "@/components/page-view-logger"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function NursingHomePage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
 
   const resolvedParams = await params;
   // Log the params to debug
-  console.log("Route params:", resolvedParams)
 
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+  const user = await getServerUser();  
+  
+  if (!user) {
     redirect("/")
   }
-
   // Fetch nursing home details
   const { data: nursingHome, error } = await supabase
     .from("nursing_homes")
@@ -38,7 +34,7 @@ export default async function NursingHomePage({ params }: { params: { id: string
   return (
     <div className="flex flex-col min-h-screen">
       <PageViewLogger
-        user={session.user}
+        user={user.user}
         pageName="Nursing Home Details"
         entityType="nursing_home"
         entityId={resolvedParams.id}

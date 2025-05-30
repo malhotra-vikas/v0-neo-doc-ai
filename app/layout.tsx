@@ -5,6 +5,7 @@ import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { PDFProcessingWorker } from "@/components/pdf-processing-worker"
 import { Footer } from "@/components/footer"
+import { AuthProvider } from "@/components/providers/auth-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -21,11 +22,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen flex flex-col`} suppressHydrationWarning>
-        <div className="flex-1">
-          {children}
-        </div>
-        <PDFProcessingWorker />
-        <Toaster />
+        <AuthProvider>
+          <div className="flex-1">
+            {children}
+          </div>
+          <PDFProcessingWorker />
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

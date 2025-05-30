@@ -1,22 +1,17 @@
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { notFound, redirect } from "next/navigation"
-import Link from "next/link"
-import DashboardHeader from "@/components/dashboard-header"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChevronLeft, Plus } from "lucide-react"
 import { PatientListClient } from "@/components/patient-list-client"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function NursingHomePatientsPage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
   const resolvedParams = await params
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+  const user = await getServerUser();  
+  
+  if (!user) {
     redirect("/")
   }
 

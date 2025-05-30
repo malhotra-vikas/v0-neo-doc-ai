@@ -26,17 +26,16 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AutoRefreshWrapper } from "@/components/auto-refresh-wrapper"
 import { PageViewLogger } from "@/components/page-view-logger"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function PDFQueuePage() {
     // Fix: Properly await cookies()
     const cookieStore = await cookies()
     const supabase = createServerComponentClient({ cookies: () => cookieStore })
 
-    const {
-        data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session) {
+      const user = await getServerUser();  
+   
+    if (!user) {
         redirect("/")
     }
 
@@ -69,10 +68,10 @@ export default async function PDFQueuePage() {
 
     return (
         <div className="flex flex-col min-h-screen">
-            <PageViewLogger user={session.user} pageName="PDF Queue" entityType="pdf_queue" entityId="admin" />
+            <PageViewLogger user={user.user} pageName="PDF Queue" entityType="pdf_queue" entityId="admin" />
 
             <main className="flex-1 container mx-auto py-6 px-4">
-                <AutoRefreshWrapper userId={session.user.id} pageName="PDF Queue">
+                <AutoRefreshWrapper userId={user.user.uid} pageName="PDF Queue">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                         <div className="flex items-center">
                             <div>

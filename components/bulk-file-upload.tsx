@@ -30,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "@/components/ui/badge"
 import { logger } from "@/lib/logger"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 const COMPONENT = "BulkFileUpload"
 
@@ -55,6 +56,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+  const { user } = useAuth()
 
   logger.debug(COMPONENT, "Component rendered", {
     nursingHomesCount: nursingHomes.length,
@@ -200,10 +202,9 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         logger.info(COMPONENT, "New patient created", { patientId, patientName })
 
         // Log patient creation
-        const user = await supabase.auth.getUser()
-        if (user.data?.user) {
+        if (user) {
           logAuditEvent({
-            user: user.data.user,
+            user: user,
             actionType: "create",
             entityType: "patient",
             entityId: patientId,
@@ -261,10 +262,9 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       logger.info(COMPONENT, "File metadata saved successfully")
 
       // Log file upload
-      const user = await supabase.auth.getUser()
-      if (user.data?.user && fileData && fileData[0]) {
+      if (user && fileData && fileData[0]) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "upload",
           entityType: "patient_file",
           entityId: fileData[0].id,

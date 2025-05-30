@@ -1,26 +1,43 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+
+-- Drop policies if they exist
+DROP POLICY IF EXISTS "Superadmin full access on users" ON users;
+DROP POLICY IF EXISTS "Superadmin full access on facilities" ON facilities;
+DROP POLICY IF EXISTS "Facility admin access on users" ON users;
+DROP POLICY IF EXISTS "Facility admin access on own facility" ON facilities;
+DROP POLICY IF EXISTS "Authenticated users can access their user_roles" ON user_roles;
+DROP POLICY IF EXISTS "Public read access to email only" ON users;
+DROP POLICY IF EXISTS "Full access on users" ON users;
+DROP POLICY IF EXISTS "Full access on facilities" ON facilities;
+DROP POLICY IF EXISTS "Full access on user_roles" ON user_roles;
+
+-- Drop triggers if they exist
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+DROP TRIGGER IF EXISTS update_facilities_updated_at ON facilities;
+
+-- Drop function
+DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
+
+-- Drop tables
+DROP TABLE IF EXISTS user_roles CASCADE;
+DROP TABLE IF EXISTS facilities CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+-- Drop enums
+DROP TYPE IF EXISTS user_role CASCADE;
+DROP TYPE IF EXISTS user_status CASCADE;
+
+
 -- Create role enum
 CREATE TYPE user_role AS ENUM ('superadmin', 'facility_admin', 'facility_user');
 
 -- Create user status enum
 CREATE TYPE user_status AS ENUM ('pending', 'active', 'inactive', 'suspended');
 
--- Create facilities table
-CREATE TABLE facilities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT NOT NULL,
-    logo_url TEXT,
-    address TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    created_by UUID REFERENCES auth.users(id)
-);
-
--- Create users table (extends Supabase auth.users)
 CREATE TABLE users (
-    id uuid primary key references auth.users(id) on delete cascade,
+    id TEXT primary key,
     email TEXT UNIQUE NOT NULL,
     first_name TEXT,
     last_name TEXT,
@@ -32,15 +49,26 @@ CREATE TABLE users (
     last_login TIMESTAMP WITH TIME ZONE
 );
 
+-- Create facilities table
+CREATE TABLE facilities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    logo_url TEXT,
+    address TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by TEXT REFERENCES users(id)
+);
+
 -- Create user_roles table for role-facility mapping
 CREATE TABLE user_roles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     facility_id UUID REFERENCES facilities(id) ON DELETE CASCADE,
     role user_role NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    created_by UUID REFERENCES users(id),
+    created_by TEXT REFERENCES users(id),
     CONSTRAINT unique_user_facility UNIQUE(user_id, facility_id)
 );
 
@@ -69,77 +97,50 @@ CREATE TRIGGER update_facilities_updated_at
     FOR EACH ROW
     EXECUTE PROCEDURE update_updated_at_column();
 
+    CREATE POLICY "Full access on users"
+    ON users FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Full access on facilities"
+    ON facilities FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Full access on user_roles"
+    ON user_roles FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+
+CREATE POLICY "Public read access to email only"
+ON users
+FOR SELECT
+TO public
+USING (true);
+
+
+
 -- Enable Row Level Security
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE facilities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies
+ALTER TABLE nursing_homes 
+ADD COLUMN facility_id UUID REFERENCES facilities(id) ON DELETE CASCADE;
 
--- Superadmin policies
-CREATE POLICY "Superadmin full access on users"
-    ON users FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_roles
-            WHERE user_id = auth.uid()
-            AND role = 'superadmin'
-        )
-    );
+UPDATE nursing_homes 
+SET facility_id = (SELECT id FROM facilities LIMIT 1)
+WHERE facility_id IS NULL;
 
-CREATE POLICY "Superadmin full access on facilities"
-    ON facilities FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_roles
-            WHERE user_id = auth.uid()
-            AND role = 'superadmin'
-        )
-    );
+CREATE INDEX idx_nursing_homes_facility_id ON nursing_homes(facility_id);
 
-CREATE POLICY "Facility admin access on users"
-    ON users FOR ALL
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_roles ur
-            WHERE ur.user_id = auth.uid()
-            AND ur.role = 'facility_admin'
-            AND ur.facility_id IN (
-                SELECT facility_id FROM user_roles
-                WHERE user_id = users.id
-            )
-        )
-    );
 
-CREATE POLICY "Facility admin access on own facility"
-    ON facilities FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_roles
-            WHERE user_id = auth.uid()
-            AND role = 'facility_admin'
-            AND facility_id = facilities.id
-        )
-    );
-
-    CREATE POLICY "Authenticated users can access their user_roles"
-    ON public.user_roles
-    AS PERMISSIVE
-    FOR ALL
-    TO authenticated
-    USING (
-    auth.uid() = user_id
-    )
-    WITH CHECK (
-    auth.uid() = user_id
-    );
 
 DO $$
 DECLARE
     uid uuid;
 BEGIN
-    SELECT id INTO uid FROM auth.users WHERE email = 'malhotra.vikas@gmail.com';
-
     INSERT INTO users (
         id,
         email,
@@ -147,7 +148,7 @@ BEGIN
         email_verified
     )
     VALUES (
-        uid,
+        '2983xSlD3SWRCXXfi9167LAM20h2',
         'malhotra.vikas@gmail.com',
         'active',
         true
@@ -158,43 +159,7 @@ BEGIN
         role
     )
     VALUES (
-        uid,
+        '2983xSlD3SWRCXXfi9167LAM20h2',
         'superadmin'
     );
 END $$;
-
-DROP POLICY "Facility admin access on users" ON users;
-
-
-CREATE POLICY "Facility admin access on users"
-ON users
-FOR ALL
-USING (
-  EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.role = 'facility_admin'
-  )
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = auth.uid()
-    AND ur.role = 'facility_admin'
-  )
-);
-
-CREATE POLICY "Public read access to email only"
-ON users
-FOR SELECT
-TO public
-USING (true);
-
-ALTER TABLE nursing_homes 
-ADD COLUMN facility_id UUID REFERENCES facilities(id) ON DELETE CASCADE;
-
-UPDATE nursing_homes 
-SET facility_id = (SELECT id FROM facilities LIMIT 1)
-WHERE facility_id IS NULL;
-
-CREATE INDEX idx_nursing_homes_facility_id ON nursing_homes(facility_id);

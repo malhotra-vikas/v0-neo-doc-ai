@@ -8,6 +8,7 @@ import { ChevronLeft, FileText, Download, RefreshCw } from "lucide-react"
 import { ReprocessButton } from "@/components/reprocess-button"
 import { PageViewLogger } from "@/components/page-view-logger"
 import { CaseStudyHighlight } from "@/components/case-study-highlight"
+import { getServerUser } from "@/lib/server/auth"
 
 export const dynamic = "force-dynamic"
 
@@ -30,11 +31,9 @@ export default async function PatientFileViewPage({
     const cookieStore = await cookies()
     const supabase = createServerComponentClient({ cookies: () => cookieStore })
 
-    const {
-        data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session) {
+    const user = await getServerUser();  
+   
+    if (!user) {
         redirect("/")
     }
 
@@ -79,7 +78,7 @@ export default async function PatientFileViewPage({
 
     return (
         <div className="flex flex-col min-h-screen">
-            <PageViewLogger user={session.user} pageName="View Patient File" entityType="patient_file" entityId={fileId} />
+            <PageViewLogger user={user.user} pageName="View Patient File" entityType="patient_file" entityId={fileId} />
 
             <main className="flex-1 container mx-auto py-6 px-4">
                 <div className="flex items-center justify-between mb-6">

@@ -33,10 +33,10 @@ import { logAuditEvent } from "@/lib/audit-logger"
 import { useEffect, useState } from "react"
 import { UserRole } from "@/types/enums"
 import { getClientDatabase } from "@/lib/services/supabase"
-import { useUser } from "./providers/user-provider"
+import { useAuth } from "./providers/auth-provider"
 
 export default function DashboardHeader() {
-  const { user, userRole, facilityId } = useUser()
+  const { user, userRole, facilityId,logout } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClientComponentClient()
@@ -79,12 +79,12 @@ export default function DashboardHeader() {
         user: user,
         actionType: "logout",
         entityType: "user",
-        entityId: user.id,
+        entityId: user.uid,
         details: { method: "manual" },
       })
     }
+    await logout();
 
-    await supabase.auth.signOut()
     router.push("/")
     router.refresh()
   }

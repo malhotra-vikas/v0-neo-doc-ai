@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 interface AddPatientDialogProps {
   open: boolean
@@ -35,6 +36,7 @@ export default function AddPatientDialog({ open, onOpenChange, nursingHomeId }: 
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+  const {user} = useAuth()
 
   // Update the handleSubmit function to log patient creation
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,10 +61,9 @@ export default function AddPatientDialog({ open, onOpenChange, nursingHomeId }: 
       }
 
       // Log patient creation
-      const user = await supabase.auth.getUser()
-      if (user.data?.user && data && data[0]) {
+      if (user && data && data[0]) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "create",
           entityType: "patient",
           entityId: data[0].id,

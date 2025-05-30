@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format as dateformat } from "date-fns"
 import { jsPDF } from "jspdf"
 import { useReactToPrint } from "react-to-print"
+import { useAuth } from "./providers/auth-provider"
 
 const months = [
     "January",
@@ -70,6 +71,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [useAISelection, setUseAISelection] = useState(false)
     const [isLoadingPatients, setIsLoadingPatients] = useState(false)
     const [isAISelecting, setIsAISelecting] = useState(false)
+    const { user } = useAuth()
 
     // Add effect to fetch patients when nursing home changes
     useEffect(() => {
@@ -169,10 +171,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             setSelectedPatients(selectedPatientIds)
 
             // Log AI selection
-            const user = await supabase.auth.getUser()
-            if (user.data?.user) {
+            if (user) {
                 logAuditEvent({
-                    user: user.data.user,
+                    user: user,
                     actionType: "ai_patient_selection",
                     entityType: "report",
                     entityId: selectedNursingHomeId,

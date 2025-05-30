@@ -7,6 +7,7 @@ import { PageViewLogger } from "@/components/page-view-logger"
 import { getServerDatabase } from "@/lib/services/supabase/get-service"
 import { NursingHome } from "@/types"
 import { UserRole } from "@/types/enums"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function BulkUploadPage() {
   // Fix: Properly await cookies()
@@ -14,15 +15,13 @@ export default async function BulkUploadPage() {
   const supabase = createServerComponentClient({ cookies: () => cookieStore })
   const db= getServerDatabase()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+   const user = await getServerUser();  
 
-  if (!session) {
+  if (!user) {
     redirect("/")
   }
 
- const facility = await db.getFacilityIdByUserId(session.user.id)
+ const facility = await db.getFacilityIdByUserId(user.user.uid)
   
   let nursingHomes:Pick<NursingHome,"id"|"name">[] = [];
   if(facility.data?.role == UserRole.SUPER_ADMIN){
@@ -36,7 +35,7 @@ export default async function BulkUploadPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <PageViewLogger user={session.user} pageName="Bulk Upload" />
+      <PageViewLogger user={user.user} pageName="Bulk Upload" />
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <h1 className="text-3xl font-bold mb-6">Bulk Patient File Upload</h1>

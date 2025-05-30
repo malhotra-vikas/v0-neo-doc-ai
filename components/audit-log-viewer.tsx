@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label"
 
 import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import type { User } from "@supabase/auth-helpers-nextjs"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +35,7 @@ import {
 } from "lucide-react"
 import { logAuditEvent, type AuditActionType, type AuditEntityType } from "@/lib/audit-logger"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { User } from "firebase/auth"
 
 interface AuditLog {
     id: string

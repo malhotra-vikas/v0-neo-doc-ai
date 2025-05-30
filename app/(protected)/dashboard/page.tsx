@@ -12,20 +12,19 @@ import { Building, Users, Upload } from "lucide-react" // Import missing variabl
 import { PageViewLogger } from "@/components/page-view-logger"
 import { getServerDatabase } from "@/lib/services/supabase/get-service"
 import { UserRole } from "@/types/enums"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function DashboardPage() {
   const cookieStore = await cookies()
   const supabase = createServerComponentClient({ cookies: () => cookieStore })
   const db = getServerDatabase()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const user = await getServerUser();  
 
-  if (!session) {
+  if (!user) {
     redirect("/")
   }
-  const facility = await db.getFacilityIdByUserId(session.user.id)
+  const facility = await db.getFacilityIdByUserId(user.user.uid)
   
   let nursingHomes = [];
   if(facility.data?.role == UserRole.SUPER_ADMIN){
@@ -56,13 +55,13 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <PageViewLogger user={session.user} pageName="Dashboard" />
+      <PageViewLogger user={user.user} pageName="Dashboard" />
 
       <main className="flex-1 container mx-auto py-8 px-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600 mt-1">Welcome back, {session.user.email?.split("@")[0] || "User"}</p>
+            <p className="text-gray-600 mt-1">Welcome back, {user.user.email?.split("@")[0] || "User"}</p>
           </div>
 
           <div className="mt-4 md:mt-0 flex items-center text-sm text-gray-600">

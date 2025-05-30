@@ -107,4 +107,11 @@ async getNursingHomesByFacilityId(facilityId: string) {
       .order("name");
   }
   
+  async getUserRoleByUserId(userId:string){
+    return await this.supabase
+    .from('user_roles')
+    .select('role,facility_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  }
 }

@@ -1,5 +1,5 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import type { User } from "@supabase/auth-helpers-nextjs"
+import { User } from "firebase/auth";
 
 export type AuditActionType =
     | "login"
@@ -12,6 +12,7 @@ export type AuditActionType =
     | "upload"
     | "process"
     | "generate_report"
+    | "ai_patient_selection"
 
 export type AuditEntityType =
     | "user"
@@ -22,6 +23,8 @@ export type AuditEntityType =
     | "pdf_queue"
     | "report"
     | "facility"
+    | "audit_logs"
+    | "page"
 
 interface AuditLogParams {
     user: User
@@ -46,7 +49,7 @@ export async function logAuditEvent({
 
         // Log the audit event
         await supabase.rpc("add_audit_log", {
-            p_user_id: user?.id,
+            p_user_id: user?.uid,
             p_user_email: user?.email,
             p_action_type: actionType,
             p_entity_type: entityType,

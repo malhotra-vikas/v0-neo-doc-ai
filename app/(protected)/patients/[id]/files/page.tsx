@@ -6,15 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronLeft } from "lucide-react"
 import { PatientFilesTable } from "@/components/patient-files-table"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function PatientFilesPage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const user = await getServerUser();  
 
-  if (!session) {
+  if (!user) {
     redirect("/")
   }
 

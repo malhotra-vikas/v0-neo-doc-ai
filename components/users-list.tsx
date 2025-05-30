@@ -28,10 +28,9 @@ import { Plus, Mail, UserCircle } from "lucide-react";
 import { CreateUserForm } from "./create-user-form";
 import { useToast } from "@/hooks/use-toast";
 import { UserRole } from "@/types/enums";
-import { useUser } from "./providers/user-provider";
 import { getClientDatabase } from "@/lib/services/supabase";
 import { UserRoleWithUser } from "@/types";
-
+import { useAuth } from "./providers/auth-provider";
 
 interface UsersListProps {
   facilityId?: string;
@@ -44,7 +43,7 @@ export function UsersList({
   facilityName,
   isSuperAdminView = false 
 }: UsersListProps) {
-  const { user, userRole } = useUser();
+  const { user, userRole } = useAuth();
   const db = getClientDatabase()
   const [users, setUsers] = useState<UserRoleWithUser[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -58,7 +57,7 @@ export function UsersList({
     setIsLoading(true);
     try {
       if (isSuperAdminView) {
-        const { data } = await db.getUsersWithRole(null, UserRole.SUPER_ADMIN,user?.id)
+        const { data } = await db.getUsersWithRole(null, UserRole.SUPER_ADMIN,user?.uid)
         setUsers(data || []);
       } else {
         // Fetch facility users

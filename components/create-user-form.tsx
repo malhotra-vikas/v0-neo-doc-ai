@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useUser } from "@/components/providers/user-provider"
+import { useAuth } from "./providers/auth-provider"
 
 const COMPONENT = "CreateUserForm"
 
@@ -38,7 +38,7 @@ export function CreateUserForm({ facilityId, onSuccess, role,isInsertSuperAdmin 
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
   const db = getClientDatabase()
-  const { userRole } = useUser()
+  const { userRole } = useAuth()
   
   const isSuperAdmin = userRole === UserRole.SUPER_ADMIN
 

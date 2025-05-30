@@ -5,6 +5,7 @@ import { cookies } from "next/headers"
 import OpenAI from "openai";
 import { logServerAuditEvent } from "@/lib/audit-logger"
 import { revalidatePath } from "next/cache"
+import { getServerUser } from "@/lib/server/auth";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -64,10 +65,9 @@ export async function generateCaseStudyHighlightForPatient(patientId: string) {
         const supabase = createServerActionClient({ cookies })
 
         // Get the current user for audit logging
-        const {
-            data: { session },
-        } = await supabase.auth.getSession()
-        const user = session?.user
+        const serverUser = await getServerUser();  
+     
+        const user = serverUser?.user
 
         if (!user) {
             throw new Error("You must be logged in to generate case study highlights")
@@ -184,10 +184,8 @@ export async function generateCaseStudyHighlight(fileId: string) {
     const supabase = createServerActionClient({ cookies })
 
     // Get the current user for audit logging
-    const {
-        data: { session },
-    } = await supabase.auth.getSession()
-    const user = session?.user
+    const serverUser = await getServerUser();  
+    const user = serverUser?.user
 
     if (!user) {
         throw new Error("You must be logged in to generate case study highlights")
@@ -196,7 +194,7 @@ export async function generateCaseStudyHighlight(fileId: string) {
     try {
         // Log the start of the generation process
         await logServerAuditEvent(supabase, {
-            userId: user.id,
+            userId: user.uid,
             userEmail: user.email || "",
             actionType: "process",
             entityType: "patient_file",
@@ -303,7 +301,7 @@ ${fileData.parsed_text.substring(0, 4000)} // Limit to 4000 chars to avoid token
 
         // Log the successful generation
         await logServerAuditEvent(supabase, {
-            userId: user.id,
+            userId: user.uid,
             userEmail: user.email || "",
             actionType: "process",
             entityType: "patient_file",
@@ -323,7 +321,7 @@ ${fileData.parsed_text.substring(0, 4000)} // Limit to 4000 chars to avoid token
         // Log the error
         if (user) {
             await logServerAuditEvent(supabase, {
-                userId: user.id,
+                userId: user.uid,
                 userEmail: user.email || "",
                 actionType: "process",
                 entityType: "patient_file",

@@ -1,7 +1,19 @@
+
+DROP FUNCTION IF EXISTS add_audit_log;
+
+-- Drop indexes
+DROP INDEX IF EXISTS audit_logs_user_id_idx;
+DROP INDEX IF EXISTS audit_logs_action_type_idx;
+DROP INDEX IF EXISTS audit_logs_entity_type_idx;
+DROP INDEX IF EXISTS audit_logs_created_at_idx;
+
+-- Drop table
+DROP TABLE IF EXISTS audit_logs CASCADE;
+
 -- Create audit_logs table
 CREATE TABLE audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES auth.users(id),
+  user_id TEXT REFERENCES users(id),
   user_email TEXT,
   action_type TEXT NOT NULL,
   entity_type TEXT NOT NULL,
@@ -10,7 +22,7 @@ CREATE TABLE audit_logs (
   ip_address TEXT,
   user_agent TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+); 
 
 -- Create index for faster queries
 CREATE INDEX audit_logs_user_id_idx ON audit_logs(user_id);
@@ -20,7 +32,7 @@ CREATE INDEX audit_logs_created_at_idx ON audit_logs(created_at);
 
 -- Create function to add audit log
 CREATE OR REPLACE FUNCTION add_audit_log(
-  p_user_id UUID,
+  p_user_id TEXT,
   p_user_email TEXT,
   p_action_type TEXT,
   p_entity_type TEXT,

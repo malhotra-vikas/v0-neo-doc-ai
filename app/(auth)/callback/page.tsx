@@ -50,18 +50,18 @@ function CallbackPage() {
     const validateAccess = async () => {
       try {
         const urlParams = new URLSearchParams(window.location.hash.substring(1));
-        const refreshToken = urlParams.get('refresh_token');
-        if (refreshToken) {
-          await supabase.auth.refreshSession({ refresh_token: refreshToken });
-        }
-        const type = urlParams.get('type')
-        setType(type || '')
-        console.log("urlParams", urlParams)
-        if (!type || (type !== AuditActionType.INVITE && type !== AuditActionType.RECOVERY)) {
-          logger.info(COMPONENT, "Invalid access attempt - missing parameters")
-          router.replace('/login')
-          return
-        }
+        console.log("urlParams",urlParams)
+        // const refreshToken = urlParams.get('refresh_token');
+        // if (refreshToken) {
+        //   await supabase.auth.refreshSession({ refresh_token: refreshToken });
+        // }
+        // const type = urlParams.get('type')
+        // setType(type ?? '')
+        // if (!type || (type !== AuditActionType.INVITE && type !== AuditActionType.RECOVERY)) {
+        //   logger.info(COMPONENT, "Invalid access attempt - missing parameters")
+        //   router.replace('/login')
+        //   return
+        // }
 
         setIsValidAccess(true)
         setLoading(false)

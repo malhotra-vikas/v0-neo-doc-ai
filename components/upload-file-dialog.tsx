@@ -22,6 +22,7 @@ import { Upload } from "lucide-react"
 
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 interface UploadFileDialogProps {
   open: boolean
@@ -47,6 +48,7 @@ export default function UploadFileDialog({
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+  const { user } = useAuth()
 
   const fileTypes = ["Patients", "CCM", "Non CCM", "Bamboo Report"]
 
@@ -131,10 +133,9 @@ export default function UploadFileDialog({
       console.log("Database record inserted:", insertData)
 
       // Log file upload
-      const user = await supabase.auth.getUser()
-      if (user.data?.user && insertData && insertData[0]) {
+      if (user && insertData && insertData[0]) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "upload",
           entityType: "nursing_home_file",
           entityId: insertData[0].id,

@@ -5,6 +5,7 @@ import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 import { logger } from "@/lib/logger"
 import { logServerAuditEvent } from "@/lib/audit-logger"
 import { generateCaseStudyHighlight, generateCaseStudyHighlightForPatient } from "@/app/actions/generate-case-study"
+import { getServerUser } from "@/lib/server/auth"
 
 const COMPONENT = "ProcessPDFQueue"
 
@@ -24,10 +25,9 @@ export async function GET(request: Request) {
         logger.debug(COMPONENT, "Supabase client created")
 
         // Get the session for audit logging
-        const {
-            data: { session },
-        } = await supabase.auth.getSession()
-        const user = session?.user
+        const serverUser = await getServerUser();  
+      
+        const user = serverUser?.user
 
         // Get the next pending item from the queue
         logger.info(COMPONENT, "Fetching next pending item from queue")

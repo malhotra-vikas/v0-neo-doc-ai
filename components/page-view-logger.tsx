@@ -2,13 +2,13 @@
 
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
-import type { User } from "@supabase/auth-helpers-nextjs"
-import { logAuditEvent } from "@/lib/audit-logger"
+import { AuditEntityType, logAuditEvent } from "@/lib/audit-logger"
+import { User } from "firebase/auth"
 
 interface PageViewLoggerProps {
     user: User
     pageName: string
-    entityType?: string
+    entityType?: AuditEntityType | "page"
     entityId?: string
 }
 

@@ -1,105 +1,84 @@
 'use server'
 
-import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { UserRole, UserStatus } from '@/types/enums'
 import { getServerDatabase } from '@/lib/services/supabase/get-service'
+import { getFirebaseAdmin } from '@/lib/firebase/admin'
 
 const COMPONENT = "InviteUserAction"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-export async function inviteUser(email: string, facilityId?: string,role: UserRole = UserRole.FACILITY_ADMIN) {
-    const db =getServerDatabase()
+export async function inviteUser(email: string, facilityId?: string, role: UserRole = UserRole.FACILITY_ADMIN) {
+  const db = getServerDatabase()
+  const auth = getFirebaseAdmin()
 
   try {
     let facility: { name?: string } | undefined;
-    if(facilityId){
+    if (facilityId) {
       const { data } = await db.getFacility(facilityId)
       facility = data;
     }
 
-    const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
+    const inviteData = await auth.createUser({
       email,
-      {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/callback`,
-        data: {
-          facility_id: facilityId,
-          facility_name: facility?.name
-        }
-      }
-    )
+      emailVerified: false,
+    });
 
-    if (inviteError) {
-      logger.error(COMPONENT, "Failed to send invite", { 
-        error: inviteError,
-        email 
-      })
-      throw new Error("Failed to send invitation email")
-    }
-
-    if (!inviteData?.user?.id) {
+    if (!inviteData.uid) {
       logger.error(COMPONENT, "No user ID in invite response")
       throw new Error("Invalid invite response")
     }
 
-    console.log("Invite data:", inviteData)
-
     const { error: userError } = await db.createUser({
-        id: inviteData.user.id,
-        email,
-        status: UserStatus.PENDING
-      }); 
+      id: inviteData.uid,
+      email,
+      status: UserStatus.PENDING
+    });
 
     if (userError) {
-      logger.error(COMPONENT, "Failed to create user record", { 
+      logger.error(COMPONENT, "Failed to create user record", {
         error: userError,
-        userId: inviteData.user.id 
+        userId: inviteData.uid
       })
       throw new Error("Failed to create user record")
     }
 
-    //Create facility association
     const { error: facilityError2 } = await db.assignUserRole({
-        user_id: inviteData.user.id,
-        facility_id: facilityId,
-        role: role
-      })
+      user_id: inviteData.uid,
+      facility_id: facilityId,
+      role: role
+    })
 
     if (facilityError2) {
-      logger.error(COMPONENT, "Failed to associate user with facility", { 
+      logger.error(COMPONENT, "Failed to associate user with facility", {
         error: facilityError2,
-        userId: inviteData.user.id,
-        facilityId 
+        userId: inviteData.uid,
+        facilityId
       })
       throw new Error("Failed to associate user with facility")
     }
 
-    logger.info(COMPONENT, "User invited successfully", { 
+    logger.info(COMPONENT, "User invited successfully", {
       email,
-      userId: inviteData.user.id,
+      userId: inviteData.uid,
       facilityId,
       facilityName: facility?.name
     })
 
-    return { 
-      success: true, 
-      userId: inviteData.user.id,
+    return {
+      success: true,
+      userId: inviteData.uid,
       email,
       facilityName: facility?.name
     }
 
   } catch (error: any) {
-    logger.error(COMPONENT, "Invite user error", { 
+    logger.error(COMPONENT, "Invite user error", {
       error: error.message,
       email,
       facilityId,
       stack: error.stack
     })
-    
+
     throw {
       code: 'INVITE_ERROR',
       message: error.message || 'Failed to invite user',

@@ -3,27 +3,17 @@ import { cookies } from "next/headers"
 import { UsersList } from "@/components/users-list"
 import { redirect } from "next/navigation"
 import { UserRole } from "@/types/enums"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function AdminsPage() {
-  const supabase = createServerComponentClient({ cookies })
   
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
+ const user = await getServerUser();
+ 
+ if (!user) {
     redirect("/login")
   }
-  console.log("AdminsPage session",  session.user.id)
-
-  // Get current user's role
-  const { data: currentUserRole } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', session.user.id)
-    .single()
-
-  if (currentUserRole?.role !== UserRole.SUPER_ADMIN) {
+ 
+  if (user.role !== UserRole.SUPER_ADMIN) {
     redirect("/dashboard")
   }
 

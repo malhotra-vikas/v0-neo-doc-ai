@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import Image from "next/image"
 import { logger } from "@/lib/logger"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 const COMPONENT = "CreateFacilityForm"
 
@@ -41,6 +42,7 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+  const { user } = useAuth()
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -104,9 +106,8 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
       return
     }
 
-    const user = await supabase.auth.getUser()
       if (user) {
-          logger.info(COMPONENT, "Creating facility",JSON.stringify({ name: state.name, user: user.data.user }))
+          logger.info(COMPONENT, "Creating facility",JSON.stringify({ name: state.name, user: user}))
       }
     try {
       // Upload logo if selected
@@ -133,7 +134,7 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
           {
             name: state.name,
             logo_url: logoUrl,
-            created_by: (await supabase.auth.getUser()).data.user?.id
+            created_by: user?.uid
           }
         ])
         .select()
@@ -141,10 +142,9 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
 
       if (facilityError) throw facilityError
 
-      const user = await supabase.auth.getUser()
-      if (user.data?.user && facility) {
+      if (user && facility) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "create",
           entityType: "facility",
           entityId: facility.id,

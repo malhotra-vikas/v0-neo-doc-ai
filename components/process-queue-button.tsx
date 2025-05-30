@@ -7,11 +7,13 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useAuth } from "./providers/auth-provider"
 
 export function ProcessQueueButton() {
     const [isProcessing, setIsProcessing] = useState(false)
     const { toast } = useToast()
     const router = useRouter()
+    const { user } = useAuth() 
 
     const handleProcessQueue = async () => {
         if (isProcessing) return
@@ -30,10 +32,9 @@ export function ProcessQueueButton() {
             const supabase = createClientComponentClient()
 
             // Log the processing event
-            const user = await supabase.auth.getUser()
-            if (user.data?.user) {
+            if (user) {
                 logAuditEvent({
-                    user: user.data.user,
+                    user: user,
                     actionType: "process",
                     entityType: "pdf_queue",
                     entityId: result.file_id || "batch",

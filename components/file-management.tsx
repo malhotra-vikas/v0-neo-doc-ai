@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import UploadFileDialog from "./upload-file-dialog"
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
+import { useAuth } from "./providers/auth-provider"
 
 interface NursingHome {
   id: string
@@ -45,6 +46,7 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
   const router = useRouter()
   const supabase = createClientComponentClient()
   const { toast } = useToast()
+  const { user } = useAuth()
 
   const filteredFiles = files.filter(
     (file) => file.nursing_home_id === selectedHomeId && file.month === selectedMonth && file.year === selectedYear,
@@ -89,10 +91,9 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
       document.body.removeChild(a)
 
       // Log file download
-      const user = await supabase.auth.getUser()
-      if (user.data?.user) {
+      if (user) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "download",
           entityType: "nursing_home_file",
           entityId: filePath,
@@ -129,10 +130,9 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
       }
 
       // Log file deletion
-      const user = await supabase.auth.getUser()
-      if (user.data?.user) {
+      if (user) {
         logAuditEvent({
-          user: user.data.user,
+          user: user,
           actionType: "delete",
           entityType: "nursing_home_file",
           entityId: id,

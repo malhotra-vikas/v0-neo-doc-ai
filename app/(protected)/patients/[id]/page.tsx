@@ -7,16 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChevronLeft } from "lucide-react"
 import { PageViewLogger } from "@/components/page-view-logger"
+import { getServerUser } from "@/lib/server/auth"
 
 export default async function PatientPage({ params }: { params: { id: string } }) {
   const supabase = createServerComponentClient({ cookies })
   const resolvedParams = await params
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const user = await getServerUser();  
 
-  if (!session) {
+  if (!user) {
     redirect("/")
   }
 
@@ -36,7 +35,7 @@ export default async function PatientPage({ params }: { params: { id: string } }
 
   return (
     <div className="flex flex-col min-h-screen">
-      <PageViewLogger user={session.user} pageName="Patient Details" entityType="patient" entityId={resolvedParams.id} />
+      <PageViewLogger user={user.user} pageName="Patient Details" entityType="patient" entityId={resolvedParams.id} />
 
       <main className="flex-1 container mx-auto py-6 px-4">
         <div className="flex items-center mb-6">
