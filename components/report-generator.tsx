@@ -41,7 +41,7 @@ interface NursingHome {
 interface CaseStudyHighlight {
     id: string
     patient_id: string
-    file_id: string
+    file_id?: string
     highlight_text: string
     created_at: string
     patient_name?: string
@@ -242,14 +242,12 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Get case studies for selected patients in the date range
             const { data, error } = await supabase
-                .from("case_study_highlights")
+                .from("patient_case_study_highlights")
                 .select(`
                 id, 
                 patient_id, 
-                file_id, 
                 highlight_text, 
-                created_at,
-                patient_files(file_name)
+                created_at
             `)
                 .in("patient_id", patientIds)
                 .gte("created_at", startDate)
@@ -266,11 +264,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 return {
                     id: cs.id,
                     patient_id: cs.patient_id,
-                    file_id: cs.file_id,
                     highlight_text: cs.highlight_text,
                     created_at: cs.created_at,
                     patient_name: patient?.name || "Unknown Patient",
-                    file_name: cs.patient_files?.file_name || "Unknown File",
                 }
             })
 
@@ -570,9 +566,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                                         caseStudies.map((study) => (
                                             <div key={study.id} className="border rounded-md p-4">
                                                 <p className="text-sm font-medium">{study.patient_name}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {study.file_name} - {format(new Date(study.created_at), "MMM dd, yyyy")}
-                                                </p>
                                                 <p className="text-sm mt-2">{study.highlight_text}</p>
                                             </div>
                                         ))
