@@ -1,8 +1,11 @@
 "use server"
 
 import { logger } from "@/lib/logger"
-import { getServerDatabase } from "@/lib/services/supabase/get-service"
+import { getFirebaseAdmin } from "@/lib/firebase/admin"
+import { getAuth, sendPasswordResetEmail } from "firebase/auth"
 import { createClient } from "@supabase/supabase-js"
+import { app } from "@/config/firebase/firebase"
+import { ActionCodeSettings } from "firebase-admin/auth"
 
 const COMPONENT = "reset-password-action"
 
@@ -11,25 +14,26 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-
 export async function initiatePasswordReset(email: string) {
-     const db =getServerDatabase()
+  const auth = getAuth(app)
 
   try {
-    const { data: user } = await db.getUserByEmail(email)
-    console.log("User data:", user,email)
+    // Check if user exists in Firebase
+    const adminAuth = getFirebaseAdmin()
+    const userRecord = await adminAuth.getUserByEmail(email)
     
-    if (!user) {
-      throw ("No account found with this email address")
+    if (!userRecord) {
+      logger.error(COMPONENT, "No user found with email", { email })
+      throw new Error("No account found with this email address")
     }
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/callback`,
+
+    // Send password reset email
+    await sendPasswordResetEmail(auth, email, {
+      url: `${process.env.NEXT_PUBLIC_APP_URL}/callback?type=resetPassword`,
+      handleCodeInApp: true,
     })
 
-    if (resetError) {
-     logger.error(COMPONENT, "Failed to send reset email",resetError)
-      throw ("Failed to send reset email")
-    }
+    logger.info(COMPONENT, "Password reset email sent", { email })
 
     return {
       success: true,
@@ -37,10 +41,14 @@ export async function initiatePasswordReset(email: string) {
     }
 
   } catch (error: any) {
-    logger.error(COMPONENT, "Failed to send reset email",error)    
+    logger.error(COMPONENT, "Failed to send reset email", {
+      error: error.message,
+      email
+    })    
+    
     return {
       success: false,
-      error: error || error.message || "Failed to send reset link"
+      error: error.message || "Failed to send reset link"
     }
   }
 }

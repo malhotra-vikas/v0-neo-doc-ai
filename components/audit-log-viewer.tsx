@@ -53,7 +53,7 @@ interface AuditLog {
 interface AuditLogViewerProps {
     initialLogs: AuditLog[]
     users: { user_id: string; user_email: string }[]
-    currentUser: User
+    currentUser: User |  Omit<User,'toJSON'>
 }
 
 export function AuditLogViewer({ initialLogs, users, currentUser }: AuditLogViewerProps) {

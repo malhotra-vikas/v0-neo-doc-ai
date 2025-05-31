@@ -6,7 +6,7 @@ import { AuditEntityType, logAuditEvent } from "@/lib/audit-logger"
 import { User } from "firebase/auth"
 
 interface PageViewLoggerProps {
-    user: User
+    user: User |  Omit<User,'toJSON'>
     pageName: string
     entityType?: AuditEntityType | "page"
     entityId?: string

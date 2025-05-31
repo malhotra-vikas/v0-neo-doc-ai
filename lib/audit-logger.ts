@@ -27,7 +27,7 @@ export type AuditEntityType =
     | "page"
 
 interface AuditLogParams {
-    user: User
+    user: User | Omit<User,'toJSON'>
     actionType: AuditActionType
     entityType: AuditEntityType
     entityId?: string

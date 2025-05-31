@@ -5,7 +5,7 @@ import { getServerDatabase } from '../services/supabase/get-service'
 import { User } from 'firebase/auth'
 
 interface ServerUser {
-    user: User
+    user: Omit<User,'toJSON'>
     role: UserRole | null
     facilityId: string | null
 }
@@ -26,7 +26,7 @@ export async function getServerUser(): Promise<ServerUser | null> {
         const { data: roleData } = await db.getUserRoleByUserId(decodedToken.uid)
 
         // Convert admin SDK user to Auth user type
-        const user: User = {
+        const user = {
             uid: firebaseUser.uid,
             email: firebaseUser.email ?? '',
             emailVerified: firebaseUser.emailVerified,
@@ -53,10 +53,8 @@ export async function getServerUser(): Promise<ServerUser | null> {
                 signInSecondFactor: null,
             }),
             reload: async () => Promise.resolve(),
-            toJSON: () => ({ uid: firebaseUser.uid }),
             providerId:""
-        }
-
+        } 
         return {
             user,
             role: roleData?.role || null,

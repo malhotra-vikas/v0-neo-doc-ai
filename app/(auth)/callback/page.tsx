@@ -15,6 +15,8 @@ import { AuditActionType, UserStatus } from '@/types/enums'
 import { AuthHero } from "@/components/auth-hero"
 import { Logo } from "@/components/logo"
 import { Suspense } from "react"
+import { getAuth, applyActionCode, updatePassword, signInWithEmailAndPassword } from 'firebase/auth'
+import { app } from '@/config/firebase/firebase'
 
 const COMPONENT = 'SetPasswordPage'
 
@@ -34,35 +36,32 @@ export default function CallbackPageWrapper() {
 }
 
 function CallbackPage() {
+  const auth = getAuth(app)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isValidAccess, setIsValidAccess] = useState(false)
   const [type, setType] = useState('');
+  const [email, setEmail] = useState('');
 
   const searchParams = useSearchParams()
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClientComponentClient()
 
+
   useEffect(() => {
     const validateAccess = async () => {
       try {
-        const urlParams = new URLSearchParams(window.location.hash.substring(1));
-        console.log("urlParams",urlParams)
-        // const refreshToken = urlParams.get('refresh_token');
-        // if (refreshToken) {
-        //   await supabase.auth.refreshSession({ refresh_token: refreshToken });
-        // }
-        // const type = urlParams.get('type')
-        // setType(type ?? '')
-        // if (!type || (type !== AuditActionType.INVITE && type !== AuditActionType.RECOVERY)) {
-        //   logger.info(COMPONENT, "Invalid access attempt - missing parameters")
-        //   router.replace('/login')
-        //   return
-        // }
-
+        const emailVal = searchParams.get('email') ? decodeURIComponent(searchParams.get('email')!) : null
+        const type = searchParams.get('type')
+        if (!emailVal || !type) {
+          logger.error(COMPONENT, "Missing parameters")
+          throw new Error('Missing required parameters')
+        }
+        setEmail(emailVal)
+        setType(type)
         setIsValidAccess(true)
         setLoading(false)
       } catch (error) {
@@ -72,7 +71,7 @@ function CallbackPage() {
     }
 
     validateAccess()
-  }, [searchParams, router, supabase.auth])
+  }, [searchParams, router])
 
   const validatePassword = (password: string): string[] => {
     try {
@@ -99,41 +98,40 @@ function CallbackPage() {
       if (errors.length > 0) {
         throw new Error(errors.join('\n'))
       }
-      const urlParams = new URLSearchParams(window.location.hash.substring(1));
-      const refreshToken = urlParams.get('refresh_token');
-      if (refreshToken) {
-        await supabase.auth.refreshSession({ refresh_token: refreshToken });
+      const oobCode = searchParams.get('oobCode')
+      if (oobCode) {
+        await applyActionCode(auth, oobCode)
       }
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: password
-      })
-
-      if (updateError) throw updateError
-
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('User not found')
-
-      if (type === AuditActionType.INVITE) {
-        const { error: statusError } = await supabase
-          .from('users')
-          .update({ status: UserStatus.ACTIVE })
-          .eq('id', user.id)
-
-        if (statusError) throw statusError
+      if (!email) {
+        throw new Error('Email not found')
       }
+      await signInWithEmailAndPassword(auth, email, 'password')
+      const user = auth.currentUser
+      if (!user) {
+        throw new Error('User not found')
+      }
+      await updatePassword(user, password)
+
+      const { error: statusError } = await supabase
+        .from('users')
+        .update({ status: UserStatus.ACTIVE })
+        .eq('id', user.uid)
+
+      if (statusError) throw statusError
 
       toast({
         variant: "default",
         title: "Password Set Successfully",
         description: "You can now login with your email and password",
       })
-
+      await auth.signOut()
       router.push('/login')
+
     } catch (error: any) {
+      logger.error(COMPONENT, "Password update error", error)
       setError(error.message)
       toast({
-        variant: "default",
+        variant: "destructive",
         title: "Error",
         description: error.message
       })
