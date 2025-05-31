@@ -5,7 +5,6 @@ CREATE TABLE IF NOT EXISTS patient_case_study_highlights (
   highlight_text TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  last_file_count INTEGER NOT NULL DEFAULT 0,
   UNIQUE(patient_id)
 );
 
