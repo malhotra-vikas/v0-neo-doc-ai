@@ -1,6 +1,5 @@
-import { AuthProvider } from "@/components/providers/auth-provider"
+import { AuthGuard } from "@/components/auth-guard"
 import DashboardHeader from "@/components/dashboard-header"
-import { Footer } from "@/components/footer"
 
 export default function ProtectedLayout({
   children,
@@ -8,12 +7,11 @@ export default function ProtectedLayout({
   children: React.ReactNode
 }) {
   return (
-    <AuthProvider>
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        <DashboardHeader />
-        <main className="flex-1">{children}</main>
-      </div>
-      <Footer />
-    </AuthProvider>
+    <AuthGuard>
+      <DashboardHeader />
+      <main className="container mx-auto py-6">
+        {children}
+      </main>
+    </AuthGuard>
   )
 }

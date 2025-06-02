@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { PDFProcessingWorker } from "@/components/pdf-processing-worker"
 import { Footer } from "@/components/footer"
 import { AuthProvider } from "@/components/providers/auth-provider"
+import { AuthGuard } from "@/components/auth-guard"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -23,11 +24,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen flex flex-col`} suppressHydrationWarning>
         <AuthProvider>
-          <div className="flex-1">
-            {children}
-          </div>
-          <PDFProcessingWorker />
-          <Toaster />
+          <AuthGuard>
+            <div className="flex-1">
+              {children}
+            </div>
+            <PDFProcessingWorker />
+            <Toaster />
+          </AuthGuard>
         </AuthProvider>
       </body>
     </html>

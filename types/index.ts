@@ -60,3 +60,16 @@ name: string;
 facility_id: string;
 address: string;
 } 
+
+export interface SerializableUser {
+    uid: string
+    email: string
+    emailVerified: boolean
+    displayName: string
+    photoURL: string
+    phoneNumber: string
+    metadata: {
+        creationTime?: string
+        lastSignInTime?: string
+    }
+}

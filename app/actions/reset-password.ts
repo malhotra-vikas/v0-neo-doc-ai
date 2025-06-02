@@ -29,7 +29,7 @@ export async function initiatePasswordReset(email: string) {
 
     // Send password reset email
     await sendPasswordResetEmail(auth, email, {
-      url: `${process.env.NEXT_PUBLIC_APP_URL}/callback?type=resetPassword`,
+      url: `${process.env.NEXT_PUBLIC_APP_URL}/callback`,
       handleCodeInApp: true,
     })
 

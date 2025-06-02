@@ -20,11 +20,12 @@ export default async function DashboardPage() {
   const db = getServerDatabase()
 
   const user = await getServerUser();  
+  console.log("User in Dashboard:", user)
 
   if (!user) {
     redirect("/")
   }
-  const facility = await db.getFacilityIdByUserId(user.user.uid)
+  const facility = await db.getFacilityIdByUserId(user.user.uid ?? "")
   
   let nursingHomes = [];
   if(facility.data?.role == UserRole.SUPER_ADMIN){

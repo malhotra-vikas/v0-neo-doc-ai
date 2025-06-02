@@ -21,7 +21,6 @@ interface NursingHomesListProps {
 
 export default function NursingHomesList({ nursingHomes }: NursingHomesListProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">

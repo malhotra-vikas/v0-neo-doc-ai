@@ -4,9 +4,10 @@ import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { AuditEntityType, logAuditEvent } from "@/lib/audit-logger"
 import { User } from "firebase/auth"
+import { SerializableUser } from "@/types"
 
 interface PageViewLoggerProps {
-    user: User |  Omit<User,'toJSON'>
+    user: User | SerializableUser
     pageName: string
     entityType?: AuditEntityType | "page"
     entityId?: string

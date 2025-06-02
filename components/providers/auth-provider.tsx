@@ -1,11 +1,11 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { User, signInWithEmailAndPassword, signOut } from 'firebase/auth'
-import { useRouter } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { auth } from '@/config/firebase/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
-import { UserRole } from '@/types/enums'
+import { UserRole, UserStatus } from '@/types/enums'
 import { getClientDatabase } from '@/lib/services/supabase'
 
 interface AuthContextType {
@@ -27,42 +27,85 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<User | null>(null)
-    const [userRole, setUserRole] = useState<UserRole | null>(null)
-    const [facilityId, setFacilityId] = useState<string | null>(null)
-    const [loading, setLoading] = useState(true)
-    const router = useRouter()
+    const [state, setState] = useState({
+        user: null as User | null,
+        userRole: null as UserRole | null,
+        facilityId: null as string | null,
+        loading: true,
+    })
+    const handleLogout = useCallback(async () => {
+        try {
+            await fetch('/api/auth/session', { method: 'DELETE' })
+            await signOut(auth)
+            redirect("/login")
+        } catch (error) {
+            console.error('Logout error:', error)
+        }
+    }, [])
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                setUser(user)
+            try {
+                if (user) {
+                    const db = getClientDatabase()
+                    const { data: roleData, error } = await db.getUserRoleByUserId(user.uid)
 
-                const db = getClientDatabase()
-                const { data: roleData, error } = await db.getUserRoleByUserId(user.uid)
+                    if (error) {
+                        console.error('Error fetching user role:', error)
+                        await handleLogout()
+                        return
+                    }
 
-                if (!error && roleData) {
-                    setUserRole(roleData.role)
-                    setFacilityId(roleData.facility_id)
+                    setState(prev => ({
+                        ...prev,
+                        user,
+                        userRole: roleData?.role || null,
+                        facilityId: roleData?.facility_id || null,
+                        loading: false
+                    }))
+                } else {
+                    setState(prev => ({
+                        ...prev,
+                        user: null,
+                        userRole: null,
+                        facilityId: null,
+                        loading: false
+                    }))
                 }
-            } else {
-                setUser(null)
-                setUserRole(null)
-                setFacilityId(null)
-                router.push('/login')
+            } catch (error) {
+                console.error('Auth state change error:', error)
+                await handleLogout()
             }
-            setLoading(false)
         })
 
         return () => unsubscribe()
-    }, [router])
+    }, [handleLogout])
 
     const signIn = async (email: string, password: string) => {
-         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password)
+        try {
+            setState(prev => ({ ...prev, loading: true }))
             
+            const db = getClientDatabase()
+            const { data: userData, error: userError } = await db.getUserStatusByEmail(email)
+
+            if (userError || !userData) {
+                throw new Error('Failed to verify user status')
+            }
+
+            if (userData.status !== UserStatus.ACTIVE) {
+                throw new Error('Your account is not active. Please contact support.')
+            }
+
+            const userCredential = await signInWithEmailAndPassword(auth, email, password)
             const idToken = await userCredential.user.getIdToken()
             
+            const { data: roleData, error: roleError } = await db.getUserRoleByUserId(userCredential.user.uid)
+            
+            if (roleError) {
+                throw new Error('Failed to fetch user role')
+            }
+
+            // Create session first
             const response = await fetch('/api/auth/session', {
                 method: 'POST',
                 headers: {
@@ -70,42 +113,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 },
                 body: JSON.stringify({ idToken })
             })
-
             if (!response.ok) {
                 throw new Error('Failed to create session')
             }
 
+            setState(prev => ({
+                ...prev,
+                user: userCredential.user,
+                userRole: roleData?.role || null,
+                facilityId: roleData?.facility_id || null,
+                loading: false,
+            }))
+
             return userCredential.user
         } catch (error) {
-            console.error('Sign in error:', error)
-            throw error
-        }
-    }
-
-    const logout = async () => {
-        try {
-            await signOut(auth)
-            // Clear session cookie
-            await fetch('/api/auth/session', {
-                method: 'DELETE'
-            })
-            router.push('/login')
-        } catch (error) {
-            console.error('Logout error:', error)
+            setState(prev => ({ ...prev, loading: false }))
             throw error
         }
     }
 
     return (
         <AuthContext.Provider value={{
-            user,
-            loading,
-            userRole,
-            facilityId,
+            user: state.user,
+            loading: state.loading,
+            userRole: state.userRole,
+            facilityId: state.facilityId,
             signIn,
-            logout
+            logout: handleLogout
         }}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     )
 }

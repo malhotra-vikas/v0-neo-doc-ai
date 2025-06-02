@@ -15,7 +15,7 @@ import { AuditActionType, UserStatus } from '@/types/enums'
 import { AuthHero } from "@/components/auth-hero"
 import { Logo } from "@/components/logo"
 import { Suspense } from "react"
-import { getAuth, applyActionCode, updatePassword, signInWithEmailAndPassword } from 'firebase/auth'
+import { getAuth, applyActionCode, updatePassword, signInWithEmailAndPassword, verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth'
 import { app } from '@/config/firebase/firebase'
 
 const COMPONENT = 'SetPasswordPage'
@@ -39,39 +39,50 @@ function CallbackPage() {
   const auth = getAuth(app)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isValidAccess, setIsValidAccess] = useState(false)
-  const [type, setType] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('')
+  const [mode, setMode] = useState<'verifyEmail' | 'resetPassword' | null>(null)
+  const [verificationComplete, setVerificationComplete] = useState(false)
 
   const searchParams = useSearchParams()
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClientComponentClient()
 
-
   useEffect(() => {
     const validateAccess = async () => {
       try {
-        const emailVal = searchParams.get('email') ? decodeURIComponent(searchParams.get('email')!) : null
-        const type = searchParams.get('type')
-        if (!emailVal || !type) {
-          logger.error(COMPONENT, "Missing parameters")
-          throw new Error('Missing required parameters')
+        const mode = searchParams.get('mode')
+        const oobCode = searchParams.get('oobCode')
+        
+        if (!oobCode || !mode) {
+          throw new Error('Invalid verification link')
         }
-        setEmail(emailVal)
-        setType(type)
-        setIsValidAccess(true)
+
+        if (mode === 'verifyEmail') {
+          const continueUrl = searchParams.get('continueUrl')
+          const urlParams = new URLSearchParams(new URL(continueUrl!).search)
+          const emailParam = urlParams.get('email')
+          if (emailParam) {
+            setEmail(decodeURIComponent(decodeURIComponent(emailParam)))
+          }
+        } else if (mode === 'resetPassword') {
+          const email = await verifyPasswordResetCode(auth, oobCode)
+          setEmail(email)
+        }
+
+        setMode(mode as 'verifyEmail' | 'resetPassword')
         setLoading(false)
       } catch (error) {
         logger.error(COMPONENT, "Error validating access", error)
-        router.replace('/login')
+        setError('Invalid or expired link')
+        setLoading(false)
       }
     }
 
     validateAccess()
-  }, [searchParams, router])
+  }, [searchParams, auth])
 
   const validatePassword = (password: string): string[] => {
     try {
@@ -91,44 +102,54 @@ function CallbackPage() {
     setError(null)
 
     try {
+      const oobCode = searchParams.get('oobCode')
+      if (!oobCode) {
+        throw new Error('Invalid verification code')
+      }
       if (password !== confirmPassword) {
         throw new Error("Passwords don't match")
       }
+
       const errors = validatePassword(password)
       if (errors.length > 0) {
         throw new Error(errors.join('\n'))
       }
-      const oobCode = searchParams.get('oobCode')
-      if (oobCode) {
-        await applyActionCode(auth, oobCode)
-      }
-      if (!email) {
-        throw new Error('Email not found')
-      }
+
+       if (mode === 'resetPassword') {
+      await confirmPasswordReset(auth, oobCode, password)
+    } else {
+      await applyActionCode(auth, oobCode)
+      
       await signInWithEmailAndPassword(auth, email, 'password')
       const user = auth.currentUser
       if (!user) {
         throw new Error('User not found')
       }
-      await updatePassword(user, password)
-
+      // Update user status in Supabase
       const { error: statusError } = await supabase
         .from('users')
-        .update({ status: UserStatus.ACTIVE })
+        .update({ 
+          status: UserStatus.ACTIVE,
+          email_verified: true 
+        })
         .eq('id', user.uid)
-
+  
       if (statusError) throw statusError
-
+      await updatePassword(user, password)
+    }
+      await auth.signOut()
+      
       toast({
         variant: "default",
-        title: "Password Set Successfully",
-        description: "You can now login with your email and password",
+        title: "Success!",
+        description: mode === 'verifyEmail' 
+          ? "Email verified and password set successfully" 
+          : "Password reset successfully"
       })
-      await auth.signOut()
-      router.push('/login')
 
+      router.push('/login')
     } catch (error: any) {
-      logger.error(COMPONENT, "Password update error", error)
+      logger.error(COMPONENT, "Operation failed", error)
       setError(error.message)
       toast({
         variant: "destructive",
@@ -140,76 +161,56 @@ function CallbackPage() {
     }
   }
 
-  if (!isValidAccess || loading) {
-    return (
-      <main className="flex min-h-screen flex-col">
-        <div className="flex-1 flex flex-col md:flex-row">
-          <div className="w-full md:w-1/2 flex flex-col items-center justify-center p-8 md:p-16">
-            <div className="w-full max-w-md">
-              <Logo size="lg" />
-              <Card className="mt-8">
-                <CardContent className="p-8">
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
-                    <p className="text-sm text-gray-600">
-                      {!isValidAccess ? "Validating access..." : "Loading..."}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-          <AuthHero />
-        </div>
-      </main>
-    )
-  }
-
   return (
     <main className="flex min-h-screen flex-col">
       <div className="flex-1 flex flex-col md:flex-row">
         <div className="w-full md:w-1/2 flex flex-col items-center justify-center p-8 md:p-16">
           <div className="w-full max-w-md">
-            <div className="mb-8">
-              <Logo size="lg" />
-              <h1 className="mt-6 text-3xl font-bold text-gray-900">{type == AuditActionType.INVITE ? 'Set Your Password' : 'Reset Your Password'}</h1>
-              <p className="mt-2 text-gray-600">
-                Create a strong password to secure your account
-              </p>
-            </div>
-
-            <Card>
+            <Logo size="lg" />
+            <Card className="mt-8">
+              <CardHeader>
+                <CardTitle>
+                  {mode === 'resetPassword' 
+                      ? 'Reset Password' 
+                      : 'Set Password'}
+                </CardTitle>
+                <CardDescription>
+                 Create a strong password to secure your account
+                </CardDescription>
+              </CardHeader>
               <CardContent className="p-6">
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {error && (
                     <Alert variant="destructive">
-                      <AlertDescription className="whitespace-pre-line">
-                        {error}
-                      </AlertDescription>
+                      <AlertDescription>{error}</AlertDescription>
                     </Alert>
                   )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password">New Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
+                  {(
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="password">New Password</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password</Label>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmPassword">Confirm Password</Label>
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <Button
                     type="submit"
@@ -219,11 +220,13 @@ function CallbackPage() {
                     {loading ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                        Setting Password...
+                        {!verificationComplete && mode === 'verifyEmail' 
+                          ? 'Setting Password..' 
+                          : 'Setting Password...'}
                       </>
-                    ) :
-                      type == AuditActionType.INVITE ? 'Set Password' : 'Reset Password'
-                    }
+                    ) : !verificationComplete && mode === 'verifyEmail'
+                      ? 'Set Password'
+                      : 'Reset Password'}
                   </Button>
                 </form>
               </CardContent>

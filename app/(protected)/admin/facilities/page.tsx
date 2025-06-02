@@ -8,22 +8,13 @@ export default async function FacilitiesPage() {
   const supabase = createServerComponentClient({ cookies })
 
    const user = await getServerUser();  
-
-  const { data: facilities } = await supabase
-  .from('facilities')
-  .select(`
-    *,
-    user_roles (
-      id
-    )
-  `);
   
   return (
     <>
       <PageViewLogger user={user!.user} pageName="Facilities" />
       <main className="flex-1 container mx-auto py-6 px-4">
         <h1 className="text-3xl font-bold mb-6">Facilities Management</h1>
-        <FacilitiesList facilities={facilities || []} />
+        <FacilitiesList />
       </main>
     </>
   )

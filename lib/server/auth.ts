@@ -2,66 +2,71 @@ import { cookies } from 'next/headers'
 import { getFirebaseAdmin } from '@/lib/firebase/admin'
 import { UserRole } from '@/types/enums'
 import { getServerDatabase } from '../services/supabase/get-service'
-import { User } from 'firebase/auth'
+import { SerializableUser } from '@/types'
+
 
 interface ServerUser {
-    user: Omit<User,'toJSON'>
+    user: SerializableUser
     role: UserRole | null
     facilityId: string | null
 }
 
+
 export async function getServerUser(): Promise<ServerUser | null> {
+  let attempts = 0;
+  const maxAttempts = 5;
+  const interval = 500;
+
+  while (attempts < maxAttempts) {
     try {
-        const cookieStore = await cookies()
-        const sessionCookie = cookieStore.get('session')?.value
-
-        if (!sessionCookie) {
-            return null
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get('session')?.value;
+ 
+      if (!sessionCookie) {
+        attempts++;
+        if (attempts === maxAttempts) {
+          return null
         }
-        const auth = getFirebaseAdmin()
-        const decodedToken = await auth.verifySessionCookie(sessionCookie, true)
-        const firebaseUser = await auth.getUser(decodedToken.uid)
+        await new Promise(resolve => setTimeout(resolve, interval));
+        continue;
+      }
 
-        const db = getServerDatabase()
-        const { data: roleData } = await db.getUserRoleByUserId(decodedToken.uid)
+      const auth = getFirebaseAdmin();
+      const decodedToken = await auth.verifySessionCookie(sessionCookie, true);
+      const firebaseUser = await auth.getUser(decodedToken.uid);
 
-        // Convert admin SDK user to Auth user type
-        const user = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email ?? '',
-            emailVerified: firebaseUser.emailVerified,
-            displayName: firebaseUser.displayName ?? '',
-            photoURL: firebaseUser.photoURL ?? '',
-            phoneNumber: firebaseUser.phoneNumber ?? '',
-            isAnonymous: false,
-            tenantId: firebaseUser.tenantId ?? '',
-            providerData: firebaseUser.providerData,
-            metadata: {
-                creationTime: firebaseUser.metadata.creationTime,
-                lastSignInTime: firebaseUser.metadata.lastSignInTime,
-            },
-            refreshToken: '', // Admin SDK doesn't have refresh tokens
-            delete: async () => Promise.resolve(),
-            getIdToken: async () => Promise.resolve(''),
-            getIdTokenResult: async () => Promise.resolve({
-                token: '',
-                authTime: '',
-                issuedAtTime: '',
-                expirationTime: '',
-                signInProvider: null,
-                claims: {},
-                signInSecondFactor: null,
-            }),
-            reload: async () => Promise.resolve(),
-            providerId:""
-        } 
-        return {
-            user,
-            role: roleData?.role || null,
-            facilityId: roleData?.facility_id || null
+      const db = getServerDatabase();
+      const { data: roleData } = await db.getUserRoleByUserId(decodedToken.uid);
+
+      const serializableUser: SerializableUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        emailVerified: firebaseUser.emailVerified,
+        displayName: firebaseUser.displayName || '',
+        photoURL: firebaseUser.photoURL || '',
+        phoneNumber: firebaseUser.phoneNumber || '',
+        metadata: {
+          creationTime: firebaseUser.metadata.creationTime,
+          lastSignInTime: firebaseUser.metadata.lastSignInTime
         }
+      };
+
+      return {
+          user: serializableUser,
+          role: roleData?.role || null,
+          facilityId: roleData?.facility_id || null
+      };
+
     } catch (error) {
-        console.error('Server auth error:', error)
-        return null
+      attempts++;
+      if (attempts === maxAttempts) {
+        console.error('Server auth error:', error);
+        return null;
+      }
+      // Wait before next attempt
+      await new Promise(resolve => setTimeout(resolve, interval));
     }
+  }
+
+  return null
 }

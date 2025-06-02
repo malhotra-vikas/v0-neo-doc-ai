@@ -110,7 +110,6 @@ export function UsersList({
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -148,11 +147,6 @@ export function UsersList({
                   </TableCell>
                   <TableCell>
                     {new Date(user.created_at).toLocaleDateString("en-GB")}
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="outline" size="sm">
-                      Manage Access
-                    </Button>
                   </TableCell>
                 </TableRow>
               ))

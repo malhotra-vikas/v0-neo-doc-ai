@@ -36,6 +36,7 @@ import {
 import { logAuditEvent, type AuditActionType, type AuditEntityType } from "@/lib/audit-logger"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { User } from "firebase/auth"
+import { SerializableUser } from "@/types"
 
 interface AuditLog {
     id: string
@@ -53,7 +54,7 @@ interface AuditLog {
 interface AuditLogViewerProps {
     initialLogs: AuditLog[]
     users: { user_id: string; user_email: string }[]
-    currentUser: User |  Omit<User,'toJSON'>
+    currentUser: User |  SerializableUser
 }
 
 export function AuditLogViewer({ initialLogs, users, currentUser }: AuditLogViewerProps) {

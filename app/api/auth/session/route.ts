@@ -21,7 +21,6 @@ export async function POST(req: NextRequest) {
             sameSite: 'lax',
             path: '/'
         })
-
         return NextResponse.json({ success: true })
     } catch (error) {
         console.error('Session creation error:', error)

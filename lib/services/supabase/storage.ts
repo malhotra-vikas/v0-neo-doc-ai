@@ -1,23 +1,26 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 export class StorageService {
-  private supabase = createServerComponentClient({ cookies })
+  private supabase = createClientComponentClient()
   private FACILITY_LOGOS_BUCKET = 'facility-logos'
   private DOCUMENTS_BUCKET = 'documents'
 
-  async uploadFacilityLogo(facilityId: string, file: File) {
-    const path = `${facilityId}/${file.name}`
+  async uploadFacilityLogo(filePath: string, file: File) {
     return await this.supabase.storage
       .from(this.FACILITY_LOGOS_BUCKET)
-      .upload(path, file)
+      .upload(filePath, file)
   }
 
-  async getFacilityLogo(path: string) {
-    return await this.supabase.storage
+  async getFacilityLogoUrl(path: string | null) {
+    if (!path) return null
+
+    const { data } = this.supabase.storage
       .from(this.FACILITY_LOGOS_BUCKET)
-      .download(path)
+      .getPublicUrl(path)
+
+    return data.publicUrl
   }
+
 
   async uploadDocument(facilityId: string, file: File) {
     const path = `${facilityId}/${file.name}`

@@ -3,35 +3,43 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { Upload, Building2, ImagePlus, Loader2 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ImagePlus, Loader2 } from "lucide-react"
 import Image from "next/image"
 import { logger } from "@/lib/logger"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { useAuth } from "./providers/auth-provider"
+import { Timer } from "@/lib/timer"
+import { StorageService } from "@/lib/services/supabase/storage"
+import { getClientDatabase } from "@/lib/services/supabase"
 
 const COMPONENT = "CreateFacilityForm"
 
-interface CreateFacilityFormProps {
-   onSuccess?: () => void  
+interface Facility {
+  id: string
+  name: string
+  logo_url?: string
 }
 
-export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
-  // Move useState declarations inside useEffect to avoid hydration mismatch
+interface CreateFacilityFormProps {
+  onSuccess?: () => void
+  facility?: Facility
+}
+
+export function CreateFacilityForm({ onSuccess, facility }: CreateFacilityFormProps) {
   const [state, setState] = useState({
-    name: "",
+    name: facility?.name || "",
     logo: null as File | null,
-    logoPreview: "",
+    logoPreview: facility?.logo_url || "",
     loading: false,
     error: null as string | null
   })
+  const storageService = new StorageService()
 
-  // Use useEffect to handle initial client-side setup
   useEffect(() => {
     logger.debug(COMPONENT, "Component mounted", {
       hasLogo: !!state.logo,
@@ -43,6 +51,25 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
   const supabase = createClientComponentClient()
   const { toast } = useToast()
   const { user } = useAuth()
+  const db = getClientDatabase();
+
+  useEffect(() => {
+    const loadFacilityLogo = async () => {
+      if (facility?.logo_url) {
+        try {
+          const logoUrl = await storageService.getFacilityLogoUrl(facility.logo_url)
+          if (logoUrl) {
+            setState(prev => ({ ...prev, logoPreview: logoUrl }))
+          }
+        } catch (error) {
+          logger.error(COMPONENT, "Error loading facility logo", { error })
+        }
+      }
+    }
+
+    loadFacilityLogo()
+  }, [facility?.logo_url])
+
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -59,9 +86,9 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
       setState(prev => ({ ...prev, logo: file }))
       const reader = new FileReader()
       reader.onloadend = () => {
-        setState(prev => ({ 
-          ...prev, 
-          logoPreview: reader.result as string 
+        setState(prev => ({
+          ...prev,
+          logoPreview: reader.result as string
         }))
       }
       reader.readAsDataURL(file)
@@ -72,109 +99,74 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
         fileType: file.type
       })
     }
-  } 
-    const handleSubmit = async (e: React.FormEvent) => {
+  }
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setState(prev => ({ ...prev, loading: true, error: null }))
-
-    const timer = logger.timing(COMPONENT, "create-facility")
-    logger.info(COMPONENT, "Creating facility", { name: state.name })
-
-    const { data: existingFacility, error: checkError } = await supabase
-      .from('facilities')
-      .select('id')
-      .eq('name', state.name)
-      .single()
-
-    if (existingFacility) {
-      setState(prev => ({ ...prev, loading: false, error: "A facility with this name already exists" }))
-      toast({
-        title: "Error",
-        description: "A facility with this name already exists. Please choose a different name.",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (checkError && checkError.code !== 'PGRST116') {  // PGRST116 means no rows returned
-      setState(prev => ({ ...prev, loading: false, error: checkError.message }))
-      toast({
-        title: "Error",
-        description: "Failed to validate facility name. Please try again.",
-        variant: "destructive"
-      })
-      return
-    }
-
-      if (user) {
-          logger.info(COMPONENT, "Creating facility",JSON.stringify({ name: state.name, user: user}))
-      }
     try {
-      // Upload logo if selected
-      let logoUrl = null
-      if (state.logo) {
-        logger.debug(COMPONENT, "Uploading logo")
-        const fileExt = state.logo.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
-        const filePath = `${state.name}/${fileName}`
-
-        const { error: uploadError } = await supabase.storage
-          .from('facility-logos')
-          .upload(filePath, state.logo)
-
-        if (uploadError) throw uploadError
-
-        logoUrl = filePath
-
-        logger.info(COMPONENT, "Logo uploaded successfully", { filePath })
+      // Check if facility name exists
+      const exists = await db.checkFacilityNameExists(state.name, facility?.id)
+      if (exists) {
+        throw new Error('A facility with this name already exists')
       }
-      const { data: facility, error: facilityError } = await supabase
-        .from('facilities')
-        .insert([
-          {
-            name: state.name,
-            logo_url: logoUrl,
-            created_by: user?.uid
-          }
-        ])
-        .select()
-        .single()
 
-      if (facilityError) throw facilityError
+      // Handle logo upload if needed
+      let logoUrl:string = facility?.logo_url ?? ''
+      if (state.logo) {
+        const fileExt = state.logo.name.split('.').pop()
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${state.name}/${fileName}`
+        logoUrl = filePath;
+        await storageService.uploadFacilityLogo(filePath,state.logo )
+      }
 
-      if (user && facility) {
-        logAuditEvent({
-          user: user,
-          actionType: "create",
-          entityType: "facility",
-          entityId: facility.id,
-          details: {
-            name: state.name,
-            has_logo: !!logoUrl
-          }
+      // Create or update facility
+      if (facility) {
+        const { data, error } = await db.updateFacility(facility.id, {
+          name: state.name,
+          logo_url: logoUrl,
+          updated_by: user?.uid ?? ''
+        })
+        
+        if (error) throw error
+
+        toast({
+          title: "Success!",
+          description: "The facility has been updated successfully."
+        })
+      } else {
+        const { data, error } = await db.createFacility({
+          name: state.name,
+          logo_url: logoUrl,
+          created_by: user?.uid ?? ''
+        })
+
+        if (error) throw error
+
+        if (user && data) {
+          logAuditEvent({
+            user,
+            actionType: "create",
+            entityType: "facility",
+            entityId: data.id,
+            details: { name: state.name, has_logo: !!logoUrl }
+          })
+        }
+
+        toast({
+          title: "Success!",
+          description: "The facility has been created successfully.",
+          variant: "success"
         })
       }
 
-      const processingTime = timer.end()
-      logger.info(COMPONENT, "Facility created successfully", {
-        facilityId: facility.id,
-        processingTime
-      })
-      toast({
-        title: "Success!",
-        description: "The facility has been created successfully.",
-        variant: "success"
-      })
-     onSuccess?.()
-
-      router.push('/admin/facilities')
+      onSuccess?.()
       router.refresh()
     } catch (error: any) {
-      logger.error(COMPONENT, "Error creating facility", error)
       setState(prev => ({ ...prev, error: error.message }))
       toast({
         title: "Error",
-        description: "Failed to create facility. Please try again.",
+        description: error.message ?? "Failed to process facility. Please try again.",
         variant: "destructive"
       })
     } finally {
@@ -191,9 +183,9 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
             <Input
               id="name"
               value={state.name}
-              onChange={(e) => setState(prev => ({ 
-                ...prev, 
-                name: e.target.value 
+              onChange={(e) => setState(prev => ({
+                ...prev,
+                name: e.target.value
               }))}
               placeholder="Enter facility name"
               required
@@ -201,13 +193,14 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
             />
           </div>
 
+          {/* Show logo section for both create and edit */}
           <div className="space-y-2">
             <Label htmlFor="logo">Facility Logo</Label>
             <div className="flex items-center space-x-4">
-              {state.logoPreview && (
+              {(state.logoPreview || facility?.logo_url) && (
                 <div className="relative w-20 h-20 rounded-lg overflow-hidden border">
                   <Image
-                    src={state.logoPreview}
+                    src={state.logoPreview || facility?.logo_url || ''}
                     alt="Logo preview"
                     fill
                     className="object-cover"
@@ -218,7 +211,7 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
                 <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <ImagePlus className="w-8 h-8 mb-2 text-gray-400" />
-                    <p className="text-sm text-gray-500">Click to upload logo</p>
+                    <p className="text-sm text-gray-500">Click to {facility ? 'change' : 'upload'} logo</p>
                     <p className="text-xs text-gray-400 mt-1">PNG, JPG up to 5MB</p>
                   </div>
                   <Input
@@ -241,12 +234,10 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
             {state.loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating Facility...
+                {facility ? "Updating Facility..." : "Creating Facility..."}
               </>
             ) : (
-              <>
-                Create Facility
-              </>
+              <>{facility ? "Update Facility" : "Create Facility"}</>
             )}
           </Button>
         </form>
@@ -254,7 +245,10 @@ export function CreateFacilityForm({ onSuccess }: CreateFacilityFormProps) {
 
       <CardFooter className="bg-slate-50 border-t px-6 py-4">
         <p className="text-xs text-muted-foreground">
-          Created facilities will be available for user assignment and document management.
+          {facility
+            ? "Update facility information to manage access and documentation."
+            : "Created facilities will be available for user assignment and document management."
+          }
         </p>
       </CardFooter>
     </Card>

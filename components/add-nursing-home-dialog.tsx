@@ -77,9 +77,12 @@ export default function AddNursingHomeDialog({ open, onOpenChange }: AddNursingH
           {
             name: values.name,
             address: formattedAddress,
-            // phone: values.phone || null,
-            // email: values.email || null,
-            // website: values.website || null,
+            city: values.city || "",
+            state: values.state || "",
+            zipCode: values.zipCode || "",
+            phone: values.phone || "",
+            email: values.email || "",
+            website: values.website || "",
             facility_id: facilityId,
           },
         ])

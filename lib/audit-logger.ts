@@ -1,3 +1,4 @@
+import { SerializableUser } from "@/types";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { User } from "firebase/auth";
 
@@ -27,7 +28,7 @@ export type AuditEntityType =
     | "page"
 
 interface AuditLogParams {
-    user: User | Omit<User,'toJSON'>
+    user: User | SerializableUser
     actionType: AuditActionType
     entityType: AuditEntityType
     entityId?: string
