@@ -43,6 +43,9 @@ interface CaseStudyHighlight {
     patient_id: string
     file_id?: string
     highlight_text: string
+    interventions?: string[]
+    outcomes?: string[]
+    clinical_risks?: string[]
     created_at: string
     patient_name?: string
     file_name?: string
@@ -63,6 +66,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [isLoadingCaseStudies, setIsLoadingCaseStudies] = useState(false)
     const reportRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
+    const [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
 
     // Add patient selection state
     const [selectedPatients, setSelectedPatients] = useState<string[]>([])
@@ -244,11 +248,14 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const { data, error } = await supabase
                 .from("patient_case_study_highlights")
                 .select(`
-                id, 
-                patient_id, 
-                highlight_text, 
-                created_at
-            `)
+                    id, 
+                    patient_id, 
+                    highlight_text, 
+                    interventions,
+                    outcomes,
+                    clinical_risks,
+                    created_at
+                `)
                 .in("patient_id", patientIds)
                 .gte("created_at", startDate)
                 .lte("created_at", endDate)
@@ -265,14 +272,34 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     id: cs.id,
                     patient_id: cs.patient_id,
                     highlight_text: cs.highlight_text,
+                    interventions: cs.interventions,
+                    outcomes: cs.outcomes,
+                    clinical_risks: cs.clinical_risks,
                     created_at: cs.created_at,
                     patient_name: patient?.name || "Unknown Patient",
                 }
             })
 
             setCaseStudies(formattedCaseStudies)
-        } catch (error) {
-            console.error("Error fetching case studies:", error)
+
+            // Now categorize interventions
+            const allInterventions = [
+                ...new Set(
+                    formattedCaseStudies
+                        .flatMap((cs) => cs.interventions || [])
+                        .filter(Boolean)
+                ),
+            ]
+
+            if (allInterventions.length > 0) {
+                console.log("BEfore categorization - allInterventions - ", allInterventions)
+                const categorized = await categorizeInterventionsWithOpenAI(allInterventions)
+                setCategorizedInterventions(categorized)
+            }
+
+        } catch (error: any) {
+            console.error("Error fetching case studies:", error?.message || error || "Unknown error")
+
             toast({
                 title: "Error",
                 description: "Failed to fetch case studies. Please try again.",
@@ -355,6 +382,43 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     const formatDate = (date: Date): string => {
         return dateformat(date, "PPP")
+    }
+
+    async function categorizeInterventionsWithOpenAI(interventions: string[]) {
+        const prompt = `
+Given the following list of healthcare interventions, categorize them into subcategories:
+- Transitional Support
+- Engagement & Education
+- Care Navigation
+- Rehabilitation & Mobility Support
+- Behavioral & Psychosocial Support
+- Nutrition & Functional Recovery
+- Clinical Risk Management
+
+Respond with structured JSON:
+{
+  "Transitional Support": [...],
+  "Clinical Risk Management": [...],
+  "Engagement & Education": [...],
+  "Care Navigation": [...],
+  "Rehabilitation & Mobility Support": [...],
+  "Behavioral & Psychosocial Support": [...],
+  "Nutrition & Functional Recovery": [...]
+}
+
+Interventions:
+${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
+`
+
+        const response = await fetch("/api/openai-categorize", {
+            method: "POST",
+            body: JSON.stringify({ prompt }),
+            headers: { "Content-Type": "application/json" },
+        })
+
+        const json = await response.json()
+        console.log("Sub Categorization respons eis ", json)
+        return json.categories
     }
 
     const getPatientInitials = (name: string): string => {
@@ -562,6 +626,71 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                             </TabsList>
                             <TabsContent value="preview" className="space-y-4">
                                 <div ref={reportRef} className="space-y-4">
+
+                                    {/* Patient Snapshot Overview: 30-Day Readmissions */}
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2">(WORK IN PROGRESS) Patient Snapshot Overview: 30-Day Readmissions</h3>
+                                    </div>
+
+                                    {/* Interventions Section */}
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2">🧰 Interventions Delivered</h3>
+                                        {Object.entries(categorizedInterventions)
+                                            .filter(([_, items]) => items.length > 0)
+                                            .map(([subcategory, items]) => (
+                                                <div key={subcategory} className="mb-4">
+                                                    <h4 className="text-md font-semibold">{subcategory}</h4>
+                                                    <ul className="list-disc list-inside ml-4 text-sm">
+                                                        {items.map((item, index) => (
+                                                            <li key={index}>{item}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            ))}
+                                    </div>
+
+                                    {/* Puzzle TouchPoint Summary Section */}
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2">(WORK IN PROGRESS) Puzzle Touchpoints</h3>
+                                    </div>
+
+                                    {/* Outcomes Section */}
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2">📈 Key Interventions and Outcomes</h3>
+                                        <ul className="list-disc list-inside ml-4 text-sm">
+                                            {[
+                                                ...new Set(
+                                                    caseStudies
+                                                        .flatMap((study) => study.outcomes || [])
+                                                        .filter(Boolean)
+                                                ),
+                                            ].map((item, i) => (
+                                                <li key={i}>{item}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+
+                                    {/* Clinical Risks Section */}
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2">⚠️ Top Clinical Risks Identified at Discharge</h3>
+                                        <ul className="list-disc list-inside ml-4 text-sm">
+                                            {[
+                                                ...new Set(
+                                                    caseStudies
+                                                        .flatMap((study) => study.clinical_risks || [])
+                                                        .filter(Boolean)
+                                                ),
+                                            ]
+                                                .slice(0, 30) // Optional: limit for readability
+                                                .map((item, i) => (
+                                                    <li key={i}>{item}</li>
+                                                ))}
+                                        </ul>
+                                        {caseStudies.flatMap((s) => s.clinical_risks || []).length > 30 && (
+                                            <p className="text-xs italic text-muted-foreground mt-2">Showing top 30 risks. Refine in filters for more detail.</p>
+                                        )}
+                                    </div>
+
                                     {caseStudies.length > 0 ? (
                                         caseStudies.map((study) => (
                                             <div key={study.id} className="border rounded-md p-4">
