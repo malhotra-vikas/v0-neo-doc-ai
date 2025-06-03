@@ -73,3 +73,9 @@ export interface SerializableUser {
         lastSignInTime?: string
     }
 }
+
+export interface ServerUser {
+    user: SerializableUser
+    role: UserRole | null
+    facilityId: string | null
+}

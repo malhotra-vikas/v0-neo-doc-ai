@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { redirect, useRouter } from "next/navigation"
+import {  useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +29,7 @@ export default function LoginForm() {
     setLoading(true)
     setError(null)
 
+
     try {
       const user = await signIn(email, password);
 
@@ -39,8 +40,6 @@ export default function LoginForm() {
         entityId: user.uid,
         details: { method: "password" }
       });
-      redirect("/dashboard")
-      router.refresh()
     } catch (error: any) {
       setError(error.message || "Failed to sign in")
     } finally {

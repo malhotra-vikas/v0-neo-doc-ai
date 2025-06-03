@@ -2,14 +2,9 @@ import { cookies } from 'next/headers'
 import { getFirebaseAdmin } from '@/lib/firebase/admin'
 import { UserRole } from '@/types/enums'
 import { getServerDatabase } from '../services/supabase/get-service'
-import { SerializableUser } from '@/types'
+import { SerializableUser, ServerUser } from '@/types'
 
 
-interface ServerUser {
-    user: SerializableUser
-    role: UserRole | null
-    facilityId: string | null
-}
 
 
 export async function getServerUser(): Promise<ServerUser | null> {
@@ -26,6 +21,19 @@ export async function getServerUser(): Promise<ServerUser | null> {
         attempts++;
         if (attempts === maxAttempts) {
           return null
+        }
+        await new Promise(resolve => setTimeout(resolve, interval));
+        continue;
+      }
+
+      try {
+        const auth = getFirebaseAdmin();
+        await auth.verifySessionCookie(sessionCookie, true);
+      } catch (error) {
+        attempts++;
+        if (attempts === maxAttempts) {
+          console.error('Invalid session cookie:', error);
+          return null;
         }
         await new Promise(resolve => setTimeout(resolve, interval));
         continue;

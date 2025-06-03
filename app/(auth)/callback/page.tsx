@@ -39,11 +39,10 @@ function CallbackPage() {
   const auth = getAuth(app)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [mode, setMode] = useState<'verifyEmail' | 'resetPassword' | null>(null)
-  const [verificationComplete, setVerificationComplete] = useState(false)
 
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -73,11 +72,9 @@ function CallbackPage() {
         }
 
         setMode(mode as 'verifyEmail' | 'resetPassword')
-        setLoading(false)
       } catch (error) {
         logger.error(COMPONENT, "Error validating access", error)
         setError('Invalid or expired link')
-        setLoading(false)
       }
     }
 
@@ -149,7 +146,6 @@ function CallbackPage() {
 
       router.push('/login')
     } catch (error: any) {
-      logger.error(COMPONENT, "Operation failed", error)
       setError(error.message)
       toast({
         variant: "destructive",
@@ -159,6 +155,32 @@ function CallbackPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (error) {
+    return (
+      <main className="flex min-h-screen flex-col">
+        <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <div className="w-full max-w-md text-center">
+            <Logo size="lg" />
+            <Card>
+              <CardContent className="p-6">
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+                <Button
+                  onClick={() => router.push('/login')}
+                  className="w-full"
+                  variant="outline"
+                >
+                  Back to Login
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -220,11 +242,11 @@ function CallbackPage() {
                     {loading ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                        {!verificationComplete && mode === 'verifyEmail' 
+                        {mode === 'verifyEmail' 
                           ? 'Setting Password..' 
                           : 'Setting Password...'}
                       </>
-                    ) : !verificationComplete && mode === 'verifyEmail'
+                    ) : mode === 'verifyEmail'
                       ? 'Set Password'
                       : 'Reset Password'}
                   </Button>

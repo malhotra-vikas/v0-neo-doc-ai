@@ -7,11 +7,11 @@ export default function ProtectedLayout({
   children: React.ReactNode
 }) {
   return (
-    <AuthGuard>
+    <>
       <DashboardHeader />
       <main className="container mx-auto py-6">
         {children}
       </main>
-    </AuthGuard>
+    </>
   )
 }

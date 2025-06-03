@@ -12,16 +12,17 @@ export async function POST(req: NextRequest) {
             expiresIn: EXPIRES_IN
         })
 
-        // Add await here
-        const cookieStore = await cookies()
-        cookieStore.set('session', sessionCookie, {
+        const response = NextResponse.json({ success: true })
+        
+        response.cookies.set('session', sessionCookie, {
             maxAge: EXPIRES_IN / 1000,
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/'
         })
-        return NextResponse.json({ success: true })
+
+        return response
     } catch (error) {
         console.error('Session creation error:', error)
         return NextResponse.json(

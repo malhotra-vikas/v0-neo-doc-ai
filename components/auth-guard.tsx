@@ -19,16 +19,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         if (!loading) {
             const isPublicPath = PUBLIC_PATHS.includes(pathname)
             const isRootPath = pathname === '/'
-
-            if (!user && !isPublicPath) {
+            
+            if (!user && !isPublicPath && pathname !== DEFAULT_PUBLIC_PATH) {
                 setIsNavigating(true)
                 router.replace(DEFAULT_PUBLIC_PATH)
-            } else if (user && (isPublicPath || isRootPath)) {
+            } else if (user && ((isPublicPath || isRootPath) && pathname !== DEFAULT_AUTH_PATH)) {
                 setIsNavigating(true)
                 router.replace(DEFAULT_AUTH_PATH)
             } else {
                 setIsNavigating(false)
             }
+        } else {
+            setIsNavigating(loading && !user && pathname !== DEFAULT_PUBLIC_PATH)
         }
     }, [user, loading, pathname, router])
 
