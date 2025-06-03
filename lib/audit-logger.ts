@@ -12,6 +12,7 @@ export type AuditActionType =
     | "upload"
     | "process"
     | "generate_report"
+    | "ai_patient_selection"
 
 export type AuditEntityType =
     | "user"
