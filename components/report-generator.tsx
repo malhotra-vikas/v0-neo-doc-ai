@@ -348,7 +348,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
-                logoPath: '/logo.png',
+                logoPath: '/puzzle_background.png',
                 categorizedInterventions,
                 returnBlob: true
             });
@@ -393,7 +393,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
-                logoPath: '/logo.png',
+                logoPath: '/puzzle_background.png',
                 categorizedInterventions
             })
 
@@ -425,7 +425,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
-                logoPath: '/logo.png',
+                logoPath: '/puzzle_background.png',
                 categorizedInterventions,
                 returnBlob: false 
             });

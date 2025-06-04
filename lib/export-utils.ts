@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { Document, Paragraph, TextRun, HeadingLevel, ImageRun, Tab, AlignmentType, BorderStyle, Packer, IStylesOptions, Footer } from 'docx';
+import { Document, Paragraph, TextRun, HeadingLevel, ImageRun, Tab, AlignmentType, BorderStyle, Packer, IStylesOptions, Footer, PageNumber, TableRow, TableCell, Table, WidthType, LineRuleType } from 'docx';
 
 const COLORS = {
     PUZZLE_BLUE: '#28317c',
@@ -10,14 +10,13 @@ const COLORS = {
     PATIENT_DETAILS: '#bab4bf',
     LIGHT_GRAY: '#e5e7eb',
     CARD1: {
-        BACKGROUND: '#e8e0f0',
+        BACKGROUND: '#ffffff',
         TITLE: '#97939a',
         TEXT: '#8a8a8e',
         BORDER: '#5d6a90'
     },
-    // Second card theme
     CARD2: {
-        BACKGROUND: '#c8e8f2',
+        BACKGROUND: '#ffffff',
         TITLE: '#7d8689',
         TEXT: '#727f84',
         BORDER: '#5d6a90'
@@ -66,7 +65,7 @@ export const exportToPDF = async ({
     nursingHomeName,
     monthYear,
     caseStudies,
-    logoPath = "/placeholder-logo.png",
+    logoPath = "/puzzle_background.png",
     categorizedInterventions,
     returnBlob = false
 }: ExportPDFOptions): Promise<void | Blob> => {
@@ -77,7 +76,7 @@ export const exportToPDF = async ({
     let yPosition = 10;
 
     try {
-        // Load and add logo
+        // Load and add full-width header image
         const img = new Image();
         img.src = logoPath;
         await new Promise((resolve, reject) => {
@@ -85,23 +84,35 @@ export const exportToPDF = async ({
             img.onerror = reject;
         });
 
-        const logoWidth = 40;
-        const logoHeight = (img.height * logoWidth) / img.width;
-        doc.addImage(img, 'PNG', (pageWidth - logoWidth) / 2, 10, logoWidth, logoHeight);
+        // Make image take half the page height
+        const targetHeight = pageHeight / 2;
+        const targetWidth = pageWidth;
+        doc.addImage(img, 'PNG', 0, 0, targetWidth, targetHeight);
 
-        yPosition += logoHeight + 10;
+        // Position text after the existing line (around 55% of page width)
+        const lineX = pageWidth * 0.48; // Position after the line
+        const textY = targetHeight * 0.42; // Move text up slightly for better centering
+        const textX = lineX + 10; // Position text after the line
 
-        // Title section with new colors
-        doc.setTextColor(COLORS.TITLE);
-        doc.setFontSize(24);
+        doc.setTextColor(255, 255, 255); // White text
+
+        // Nursing home name - with text wrapping if needed
+        const maxWidth = pageWidth * 0.4; // Maximum width for text
+        doc.setFontSize(18); // Slightly smaller font
         doc.setFont('helvetica', 'bold');
-        doc.text(nursingHomeName, pageWidth / 2, yPosition, { align: 'center' });
 
-        yPosition += 10;
+        // Handle text wrapping for nursing home name
+        const nameLines = doc.splitTextToSize(nursingHomeName, maxWidth);
+        nameLines.forEach((line: string, index: number) => {
+            doc.text(line, textX, textY + (index * 15)); // Reduced line spacing to 15
+        });
+
+        // Month and year - minimal spacing after name
         doc.setFontSize(16);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Case Study Report - ${monthYear}`, pageWidth / 2, yPosition, { align: 'center' });
-        yPosition += 20;
+        doc.text(monthYear, textX, textY + (nameLines.length * 10)); // Only 1 unit gap
+
+        yPosition = targetHeight + 20;
 
         // Helper function for section headers
         const addSectionHeader = (text: string) => {
@@ -149,37 +160,30 @@ export const exportToPDF = async ({
         const addFooter = (doc: jsPDF) => {
             const pageWidth = doc.internal.pageSize.width;
             const pageHeight = doc.internal.pageSize.height;
-            const footerY = pageHeight - 15;
+            const footerY = pageHeight - 5;
 
             // Footer content
             const puzzleText = 'puzzle';
             const pageText = `${doc.getCurrentPageInfo().pageNumber}`;
 
-            // Styles
-            doc.setFontSize(14);
+            // Styles for puzzle text
+            doc.setFontSize(12);
             doc.setTextColor(COLORS.PUZZLE_BLUE);
 
-            // Position puzzle text and page number at the right end
-            const pageTextWidth = doc.getTextWidth(pageText);
-            const padding = 6;
-            const bgWidth = pageTextWidth + padding;
+            // Calculate positions
             const puzzleTextWidth = doc.getTextWidth(puzzleText);
-            const totalWidth = puzzleTextWidth + 5 + bgWidth;
+            const pageTextWidth = doc.getTextWidth(pageText);
+            const totalWidth = puzzleTextWidth + 2 + pageTextWidth;
+            // Position both elements from the right
+            const startX = pageWidth - 5 - totalWidth;
 
-            const puzzleX = pageWidth - 15 - totalWidth;
-            doc.text(puzzleText, puzzleX, footerY);
+            // Draw puzzle text
+            doc.text(puzzleText, startX, footerY);
 
-            doc.setFontSize(10);
-            const bgX = puzzleX + puzzleTextWidth + 5;
-
-            doc.setFillColor(COLORS.PAGE_NUMBER);
-            doc.roundedRect(bgX, footerY - 8, bgWidth, 12, 2, 2, 'F');
-
-            // Centered page number
-            const textX = bgX + (bgWidth - pageTextWidth) / 2;
-            const textY = footerY - 1;
-            doc.setTextColor(255, 255, 255);
-            doc.text(pageText, textX, textY);
+            // Draw page number
+            doc.setFontSize(12);
+            doc.setTextColor(COLORS.PAGE_NUMBER);
+            doc.text(pageText, startX + puzzleTextWidth + 2, footerY);
         };
 
         // Patient Snapshot Overview (when implemented)
@@ -372,38 +376,42 @@ const downloadFile = (blob: Blob, filename: string) => {
 };
 
 const DOCX_CONSTANTS = {
-    // Convert mm to DOCX units (EMUs)
-    // 1mm = 36000 EMUs
-    LOGO_WIDTH: 36000 * 80, // 80mm width
-    LOGO_HEIGHT: 36000 * 30, // 30mm height - maintains 8:3 aspect ratio
+    LOGO_WIDTH: 792,  // Full page width (8.25 inches * 96 dpi)
+    LOGO_HEIGHT: 528, // Half page height (5.5 inches * 96 dpi)
     PAGE_MARGIN: {
-        TOP: 36000 * 25,    // 25mm
-        BOTTOM: 36000 * 25, // 25mm
-        LEFT: 36000 * 40,   // 40mm
-        RIGHT: 36000 * 25,  // 25mm
+        TOP: 0,      // No top margin for image
+        BOTTOM: 25,
+        LEFT: 72,    // Standard margins
+        RIGHT: 72,   // Standard margins
     },
     CONTENT: {
         INDENT: {
-            LEFT: 36000 * 2,  // 2mm left indentation for content
-            RIGHT: 36000 * 2, // 2mm right indentation for content
+            LEFT: 60,
+            RIGHT: 60,
         },
         SPACING: {
-            BEFORE: 200,
-            AFTER: 200,
+            BEFORE: 500,
+            AFTER: 500,
         }
     },
     SECTIONS: {
         SPACING: {
-            BEFORE: 400,
-            AFTER: 200,
+            BEFORE: 800,
+            AFTER: 400,
         }
     },
     HEADER: {
-        SPACING: 400,
+        SPACING: 800,
     },
     CARD: {
-        INDENT: 36000 * 10,    // 10mm indentation for cards
-        SPACING: 200,          // Spacing between cards
+        INDENT: 500,    // Reduced indent to match PDF
+        SPACING: 400,   // Space between cards
+        PADDING: {
+            TOP: 240,    // Internal padding top
+            AFTER_NAME: 160, // Space after name
+            CONTENT: 240,    // Content padding
+            BOTTOM: 240      // Bottom padding
+        }
     },
 };
 
@@ -411,27 +419,29 @@ const hexToDocxColor = (hex: string): string => {
     return hex.replace('#', '');
 };
 
-const createDocxFooter = (currentPage: number) => [
+const createDocxFooter = () => [
     new Paragraph({
         children: [
             new TextRun({
                 text: "puzzle",
                 color: hexToDocxColor(COLORS.PUZZLE_BLUE),
-                size: 28, // 14pt
+                size: 24,
+                font: "Nimbus Sans",
             }),
             new TextRun({
-                text: " ",
-                size: 28,
+                children: [" "],
+                size: 24,
             }),
             new TextRun({
-                text: `${currentPage}`,
+                children: [PageNumber.CURRENT],
                 color: hexToDocxColor(COLORS.PAGE_NUMBER),
-                size: 20, // 10pt
-                highlight: "cyan", // Using predefined color that matches closest to our blue
+                size: 24,
+                font: "Nimbus Sans",
             }),
         ],
-        spacing: { before: 200 },
+        spacing: { before: 100, after: 0 },
         alignment: AlignmentType.RIGHT,
+        indent: { right: 180 },
     }),
 ];
 
@@ -453,7 +463,7 @@ export const exportToDOCX = async ({
                     const blob = await response.blob();
                     return await blob.arrayBuffer();
                 }
-                
+
                 // For local files, prepend the public directory path
                 const response = await fetch(url.startsWith('/') ? url : `/${url}`);
                 if (!response.ok) {
@@ -484,7 +494,7 @@ export const exportToDOCX = async ({
                         size: 48, // 24pt
                         bold: true,
                         color: COLORS.TITLE.replace('#', ''),
-                        font: "Arial",
+                        font: "Nimbus Sans",
                     },
                 },
                 {
@@ -496,7 +506,7 @@ export const exportToDOCX = async ({
                         size: 32, // 16pt
                         bold: true,
                         color: COLORS.TITLE.replace('#', ''),
-                        font: "Arial",
+                        font: "Nimbus Sans",
                     },
                 },
                 {
@@ -508,7 +518,7 @@ export const exportToDOCX = async ({
                         size: 24, // 12pt
                         bold: true,
                         color: COLORS.TITLE.replace('#', ''),
-                        font: "Arial",
+                        font: "Nimbus Sans",
                     },
                 },
                 {
@@ -519,7 +529,7 @@ export const exportToDOCX = async ({
                     run: {
                         size: 22, // 11pt
                         color: COLORS.BULLET_TEXT.replace('#', ''),
-                        font: "Arial",
+                        font: "Nimbus Sans",
                     },
                 }
             ],
@@ -542,11 +552,11 @@ export const exportToDOCX = async ({
                 },
                 footers: {
                     default: new Footer({
-                        children: createDocxFooter(1),
+                        children: createDocxFooter(),
                     }),
                 },
                 children: [
-                    // Logo
+                    // Logo and Header Section combined
                     new Paragraph({
                         children: [
                             new ImageRun({
@@ -555,51 +565,81 @@ export const exportToDOCX = async ({
                                     width: DOCX_CONSTANTS.LOGO_WIDTH,
                                     height: DOCX_CONSTANTS.LOGO_HEIGHT,
                                 },
-                                type: 'png',
                                 floating: {
-                                    zIndex: 1,
                                     horizontalPosition: {
-                                        relative: 'margin',
+                                        relative: 'page',
                                         align: 'center',
                                     },
                                     verticalPosition: {
-                                        relative: 'margin',
-                                        align: 'top',
+                                        relative: 'page',
+                                        offset: 0,
                                     },
+                                    allowOverlap: true,
+                                    behindDocument: true,
+                                    zIndex: -1,
                                 },
+                                type: 'png',
                             }),
                         ],
-                        spacing: { before: 400, after: 400 },
+                        spacing: { before: 0, after: 0 },
                     }),
 
+                    // Header text overlaying the image - nursing home name
                     new Paragraph({
                         children: [
-                            new TextRun({
-                                text: nursingHomeName,
-                                size: 48,
-                                bold: true,
-                                color: COLORS.TITLE.replace('#', ''),
-                            }),
+                            // Split nursing home name into words and add breaks for long words
+                            ...nursingHomeName.split(' ').map((word, i, arr) => [
+                                new TextRun({
+                                    text: word,
+                                    size: 40,
+                                    bold: true,
+                                    color: 'FFFFFF',
+                                }),
+                                // Add line break if word is too long
+                                word.length > 25 ?
+                                    new TextRun({ break: 1 }) :
+                                    new TextRun({ text: ' ', size: 40, color: 'FFFFFF' }),
+                            ]).flat(),
                         ],
-                        alignment: AlignmentType.CENTER,
+                        // alignment: AlignmentType.CENTER,
+                        indent: {
+                            left: 6000,
+                            right: 1000,
+                        },
+                        spacing: { before: 2900, after: 100 },
                     }),
+
+                    // Year text below the line
                     new Paragraph({
                         children: [
                             new TextRun({
-                                text: `Case Study Report - ${monthYear}`,
+                                text: monthYear,
                                 size: 32,
-                                color: COLORS.TITLE.replace('#', ''),
+                                color: 'FFFFFF',
                             }),
                         ],
-                        alignment: AlignmentType.CENTER,
-                        spacing: { after: 400 },
+                        indent: {
+                            left: 6000,
+                            right: 1000,
+                        },
+                        spacing: { before: 0, after: 0 },
+                    }),
+
+                    // Add a spacer paragraph
+                    new Paragraph({
+                        text: "",
+                        spacing: { before: DOCX_CONSTANTS.LOGO_HEIGHT + 1500 },
                     }),
 
                     // Patient Snapshot Overview
                     new Paragraph({
                         text: "Patient Snapshot Overview: 30-Day Readmissions",
                         heading: HeadingLevel.HEADING_1,
-                        spacing: { before: 400, after: 200 },
+                        indent: {
+                            left: 500,
+                            right: 500,
+                        },
+                        spacing: { before: 2500, after: 200 },
                         style: "Heading",
                     }),
 
@@ -607,6 +647,10 @@ export const exportToDOCX = async ({
                     new Paragraph({
                         text: "Interventions Delivered",
                         heading: HeadingLevel.HEADING_1,
+                        indent: {
+                            left: 500,
+                            right: 500,
+                        },
                         spacing: { before: 400, after: 200 },
                         style: "Heading",
                     }),
@@ -622,29 +666,53 @@ export const exportToDOCX = async ({
                                         color: COLORS.TITLE.replace('#', ''),
                                     }),
                                 ],
+                                indent: {
+                                    left: 500,
+                                    right: 500,
+                                },
                                 spacing: { before: 200, after: 100 },
                             }),
                             ...items.map(
                                 (item) =>
                                     new Paragraph({
                                         children: [
-                                            new TextRun({ text: "• ", size: 22 }),
+                                            new TextRun({ text: "•   ", size: 22 }),
                                             new TextRun({
                                                 text: item,
                                                 size: 22,
                                                 color: COLORS.BULLET_TEXT.replace('#', ''),
                                             }),
                                         ],
+                                        indent: {
+                                            left: 800,
+                                            right: 800,
+                                        },
                                         spacing: { before: 100 },
                                         style: "BulletText",
                                     })
                             ),
                         ]),
 
+                    new Paragraph({
+                        text: "Puzzle Touchpoints",
+                        heading: HeadingLevel.HEADING_1,
+                        indent: {
+                            left: 500,
+                            right: 500,
+                        },
+                        spacing: { before: 600, after: 200 },
+                        style: "Heading",
+                    }),
+
+
                     // Outcomes Section
                     new Paragraph({
                         text: "Key Interventions and Outcomes",
                         heading: HeadingLevel.HEADING_1,
+                        indent: {
+                            left: 500,
+                            right: 500,
+                        },
                         spacing: { before: 400, after: 200 },
                         style: "Heading",
                     }),
@@ -656,13 +724,17 @@ export const exportToDOCX = async ({
                             (outcome) =>
                                 new Paragraph({
                                     children: [
-                                        new TextRun({ text: "• ", size: 22 }),
+                                        new TextRun({ text: "•   ", size: 22 }),
                                         new TextRun({
                                             text: outcome,
                                             size: 22,
                                             color: COLORS.BULLET_TEXT.replace('#', ''),
                                         }),
                                     ],
+                                    indent: {
+                                        left: 800,
+                                        right: 800,
+                                    },
                                     spacing: { before: 100 },
                                     style: "BulletText",
                                 })
@@ -672,6 +744,10 @@ export const exportToDOCX = async ({
                     new Paragraph({
                         text: "Top Clinical Risks Identified at Discharge",
                         heading: HeadingLevel.HEADING_1,
+                        indent: {
+                            left: 500,
+                            right: 500,
+                        },
                         spacing: { before: 400, after: 200 },
                         style: "Heading",
                     }),
@@ -684,13 +760,17 @@ export const exportToDOCX = async ({
                             (risk) =>
                                 new Paragraph({
                                     children: [
-                                        new TextRun({ text: "• ", size: 22 }),
+                                        new TextRun({ text: "•   ", size: 22 }),
                                         new TextRun({
                                             text: risk,
                                             size: 22,
                                             color: COLORS.BULLET_TEXT.replace('#', ''),
                                         }),
                                     ],
+                                    indent: {
+                                        left: 800,
+                                        right: 800,
+                                    },
                                     spacing: { before: 100 },
                                     style: "BulletText",
                                 })
@@ -707,6 +787,10 @@ export const exportToDOCX = async ({
                                     italics: true,
                                 }),
                             ],
+                            indent: {
+                                left: 500,
+                                right: 500,
+                            },
                             spacing: { before: 200 },
                         }),
                     ] : []),
@@ -715,53 +799,13 @@ export const exportToDOCX = async ({
                     new Paragraph({
                         text: "Case Studies",
                         heading: HeadingLevel.HEADING_1,
-                        spacing: { before: DOCX_CONSTANTS.HEADER.SPACING, after: 200 },
+                        indent: { left: 500, right: 500 },
+                        spacing: { before: 400, after: 400 },
                         style: "Heading",
                     }),
-                    ...caseStudies.flatMap((study, index) => {
-                        const theme = index % 2 === 0 ? COLORS.CARD1 : COLORS.CARD2;
-                        return [
-                            // Patient name paragraph
-                            new Paragraph({
-                                children: [
-                                    new TextRun({
-                                        text: study.patient_name || "Unknown Patient",
-                                        size: 24,
-                                        bold: true,
-                                        color: hexToDocxColor(theme.TITLE),
-                                    }),
-                                ],
-                                spacing: { before: 120, after: 0 },
-                                indent: { left: DOCX_CONSTANTS.CARD.INDENT, right: DOCX_CONSTANTS.CARD.INDENT },
-                                shading: { fill: hexToDocxColor(theme.BACKGROUND), type: 'clear' },
-                                border: {
-                                    top: { style: BorderStyle.SINGLE, size: 1, color: hexToDocxColor(theme.BORDER) },
-                                    bottom: { style: BorderStyle.NONE },
-                                    left: { style: BorderStyle.SINGLE, size: 1, color: hexToDocxColor(theme.BORDER) },
-                                    right: { style: BorderStyle.SINGLE, size: 1, color: hexToDocxColor(theme.BORDER) },
-                                }
-                            }),
-                            // Card content paragraph
-                            new Paragraph({
-                                children: [
-                                    new TextRun({
-                                        text: study.highlight_text,
-                                        size: 22,
-                                        color: hexToDocxColor(theme.TEXT),
-                                    }),
-                                ],
-                                spacing: { before: 120, after: DOCX_CONSTANTS.CARD.SPACING },
-                                indent: { left: DOCX_CONSTANTS.CARD.INDENT, right: DOCX_CONSTANTS.CARD.INDENT },
-                                shading: { fill: hexToDocxColor(theme.BACKGROUND), type: 'clear' },
-                                border: {
-                                    top: { style: BorderStyle.NONE },
-                                    bottom: { style: BorderStyle.SINGLE, size: 1, color: hexToDocxColor(theme.BORDER) },
-                                    left: { style: BorderStyle.SINGLE, size: 1, color: hexToDocxColor(theme.BORDER) },
-                                    right: { style: BorderStyle.SINGLE, size: 1, color: hexToDocxColor(theme.BORDER) },
-                                }
-                            }),
-                        ];
-                    }),
+                   ...caseStudies.flatMap((study, index) => 
+                        createCaseStudyCard(study, index % 2 === 0 ? COLORS.CARD1 : COLORS.CARD2)
+                    ),
                 ],
             }],
         });
@@ -779,50 +823,79 @@ export const exportToDOCX = async ({
         throw error;
     }
 };
+const createCaseStudyCard = (study: any, theme: any) => {
+    return [
+        // Spacer paragraph for top margin between cards
+        new Paragraph({ spacing: { before: 400 } }),
 
-export const generatePatientCards = (doc: jsPDF, patients: any[], startY: number) => {
-    const pageWidth = doc.internal.pageSize.width;
-    const CARD_WIDTH = (pageWidth - 50) / 3;
-    const CARD_PADDING = 5;
-    const CARD_HEIGHT = 60;
-
-    patients.forEach((patient, index) => {
-        const col = index % 3;
-        const row = Math.floor(index / 3);
-        const x = 20 + (col * (CARD_WIDTH + 5));
-        const y = startY + (row * (CARD_HEIGHT + 10));
-
-        // Draw card background with rounded corners
-        doc.setFillColor(COLORS.LIGHT_GRAY);
-        doc.roundedRect(x, y, CARD_WIDTH, CARD_HEIGHT, 3, 3, 'F');
-
-        // Patient name
-        doc.setFontSize(12);
-        doc.setTextColor(COLORS.PATIENT_NAME);
-        doc.text(patient.name, x + CARD_PADDING, y + 15);
-
-        // Patient details
-        doc.setFontSize(10);
-        doc.setTextColor(COLORS.PATIENT_DETAILS);
-        doc.text(patient.details, x + CARD_PADDING, y + 30);
-    });
-
-    return startY + (Math.ceil(patients.length / 3) * (CARD_HEIGHT + 10));
+        new Table({
+            width: {
+                size: 10500, 
+                type: WidthType.DXA,
+            },
+            indent: {
+                size: 500,
+                type: WidthType.DXA,
+            },
+            rows: [
+                new TableRow({
+                    children: [
+                        new TableCell({
+                            borders: {
+                                top: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
+                                bottom: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
+                                left: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
+                                right: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
+                            },
+                            shading: {
+                                fill: hexToDocxColor(theme.BACKGROUND),
+                            },
+                            margins: {
+                                top: 300,
+                                bottom: 360,
+                                left: 360,
+                                right: 360,
+                            },
+                            children: [
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: study.patient_name || "Unknown Patient",
+                                            bold: true,
+                                            size: 24,
+                                            color: hexToDocxColor(theme.TITLE),
+                                            font: "Helvetica",
+                                        }),
+                                    ],
+                                    spacing: {
+                                        after: 280, // Increased spacing after patient name
+                                        line: 360,
+                                        lineRule: LineRuleType.AUTO,
+                                        before: 80, // Added top spacing
+                                    },
+                                }),
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: study.highlight_text,
+                                            size: 22,
+                                            color: hexToDocxColor(theme.TEXT),
+                                            font: "Helvetica",
+                                        }),
+                                    ],
+                                    spacing: {
+                                        after: 140, // Increased bottom spacing
+                                        line: 320, // Slightly increased line height
+                                        lineRule: LineRuleType.AUTO,
+                                        before: 140, // Added top spacing
+                                    },
+                                }),
+                            ],
+                        }),
+                    ],
+                }),
+            ],
+        }),
+    ];
 };
 
-export const addBulletPoint = (doc: jsPDF, text: string, x: number, y: number) => {
-    doc.setFillColor(COLORS.BULLET_TEXT);
-    doc.circle(x + BULLET_STYLE.INDENT, y + BULLET_STYLE.BULLET_Y_OFFSET, BULLET_STYLE.RADIUS, 'F');
-    doc.text(text, x + BULLET_STYLE.TEXT_INDENT, y + BULLET_STYLE.LINE_HEIGHT);
-    return y + BULLET_STYLE.LINE_HEIGHT + 5;
-};
-
-export const addSectionTitle = (doc: jsPDF, title: string, x: number, y: number) => {
-    doc.setFontSize(14);
-    doc.setTextColor(COLORS.TITLE);
-    doc.setFont('helvetica', 'bold');
-    doc.text(title, x, y);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    return y + 10;
-};
