@@ -1,20 +1,23 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
-import { Loader2 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { FileDownIcon, FileIcon, FileTextIcon, Loader2 } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { PrinterIcon } from "lucide-react"
+import { exportToPDF, exportToDOCX } from "@/lib/export-utils"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format as dateformat } from "date-fns"
 import { jsPDF } from "jspdf"
 import { useReactToPrint } from "react-to-print"
+import { useToast } from "@/hooks/use-toast"
 
 const months = [
     "January",
@@ -332,53 +335,116 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const handlePrint = useReactToPrint({
-        content: () => reportRef.current,
-        documentTitle: "Nursing Home Report",
-        onAfterPrint: () =>
-            toast({
-                title: "Report Printed",
-                description: "The report has been sent to the printer.",
-            }),
-    })
-
-    const handleExportPDF = () => {
-        setIsExporting(true)
+    const handlePrint = useCallback(async () => {
         try {
-            const doc = new jsPDF()
-            doc.text("Nursing Home Report", 10, 10)
+            const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
+            
+            if (!selectedNursingHome) {
+                throw new Error('Selected nursing home not found')
+            }
 
-            let currentY = 20
+            // Use the exportToPDF function to generate a PDF blob
+            const result = await exportToPDF({ 
+                nursingHomeName: selectedNursingHome.name,
+                monthYear: `${selectedMonth} ${selectedYear}`,
+                caseStudies,
+                logoPath: '/puzzle_background.png',
+                categorizedInterventions,
+                returnBlob: true
+            });
+            
+            if (!result || !(result instanceof Blob)) {
+                throw new Error('Failed to generate PDF blob');
+            }
 
-            caseStudies.forEach((study) => {
-                doc.text(`Patient: ${study.patient_name}`, 10, currentY)
-                currentY += 10
-                doc.text(`File: ${study.file_name}`, 10, currentY)
-                currentY += 10
-                const textLines = doc.splitTextToSize(study.highlight_text, 180)
-                textLines.forEach((line) => {
-                    doc.text(line, 10, currentY)
-                    currentY += 5
-                })
-                currentY += 10
-            })
-
-            doc.save("nursing_home_report.pdf")
-            toast({
-                title: "Report Exported",
-                description: "The report has been exported to PDF successfully.",
-            })
+            // Create a URL for the blob
+            const pdfUrl = URL.createObjectURL(result)
+            
+            // Open PDF in new window
+            const printWindow = window.open(pdfUrl, '_blank')
+            if (printWindow) {
+                printWindow.onload = () => {
+                    printWindow.print()
+                    // Clean up the blob URL after printing
+                    URL.revokeObjectURL(pdfUrl)
+                }
+            }
         } catch (error) {
-            console.error("Error exporting PDF:", error)
+            console.error('Error generating print PDF:', error)
             toast({
                 title: "Error",
-                description: "Failed to export report to PDF. Please try again.",
+                description: "Failed to prepare document for printing.",
+                variant: "destructive",
+            })
+        }
+    }, [nursingHomes, selectedNursingHomeId, selectedMonth, selectedYear, caseStudies, categorizedInterventions, toast])
+
+    const handleExportPDF = async () => {
+        try {
+            setIsExporting(true)
+            const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
+            
+            if (!selectedNursingHome) {
+                throw new Error('Selected nursing home not found')
+            }
+
+            // Use the exportToPDF function from export-utils
+            await exportToPDF({ 
+                nursingHomeName: selectedNursingHome.name,
+                monthYear: `${selectedMonth} ${selectedYear}`,
+                caseStudies,
+                logoPath: '/puzzle_background.png',
+                categorizedInterventions
+            })
+
+            toast({
+                title: "Success",
+                description: "Report exported as PDF successfully.",
+            })
+        } catch (error) {
+            console.error('Error exporting PDF:', error)
+            toast({
+                title: "Error",
+                description: "Failed to export report as PDF.",
                 variant: "destructive",
             })
         } finally {
             setIsExporting(false)
         }
     }
+
+    const handleExportDOCX = async () => {
+        try {
+            setIsExporting(true);
+            const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId);
+            
+            if (!selectedNursingHome) {
+                throw new Error('Selected nursing home not found');
+            }
+            await exportToDOCX({ 
+                nursingHomeName: selectedNursingHome.name,
+                monthYear: `${selectedMonth} ${selectedYear}`,
+                caseStudies,
+                logoPath: '/puzzle_background.png',
+                categorizedInterventions,
+                returnBlob: false 
+            });
+
+            toast({
+                title: "Success",
+                description: "Report exported as DOCX successfully.",
+            });
+        } catch (error) {
+            console.error('Error exporting DOCX:', error);
+            toast({
+                title: "Error",
+                description: "Failed to export report as DOCX.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const formatDate = (date: Date): string => {
         return dateformat(date, "PPP")
@@ -608,22 +674,51 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
             {/* Report Preview */}
             {reportGenerated && (
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Report Preview</CardTitle>
-                        <CardDescription>A preview of the generated report.</CardDescription>
-                        {selectedPatients.length > 0 && selectedPatients.length < availablePatients.length && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Report includes {selectedPatients.length} selected patients
-                            </p>
-                        )}
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                        <div>
+                            <CardTitle>Report Preview</CardTitle>
+                            <CardDescription>A preview of the generated report.</CardDescription>
+                            {selectedPatients.length > 0 && selectedPatients.length < availablePatients.length && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Report includes {selectedPatients.length} selected patients
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={handlePrint} disabled={isGenerating}>
+                                <PrinterIcon className="h-4 w-4 mr-2" />
+                                Print
+                            </Button>
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="sm" disabled={isExporting}>
+                                        <FileDownIcon className="h-4 w-4 mr-2" />
+                                        {isExporting ? (
+                                            <>
+                                                Exporting <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                                            </>
+                                        ) : (
+                                            "Export"
+                                        )}
+                                    </Button>
+                                </DropdownMenuTrigger>
+
+                                <DropdownMenuContent align="end" className="border border-border shadow-md p-1 rounded-md">
+                                    <DropdownMenuItem onClick={handleExportPDF}>
+                                        <FileTextIcon className="h-4 w-4 mr-2" />
+                                        Export as PDF
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={handleExportDOCX}>
+                                        <FileIcon className="h-4 w-4 mr-2" />
+                                        Export as DOCX
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
                     </CardHeader>
                     <CardContent className="space-y-2">
                         <Tabs defaultValue="preview" className="w-full space-y-4">
-                            <TabsList>
-                                <TabsTrigger value="preview">Preview</TabsTrigger>
-                                <TabsTrigger value="print">Print</TabsTrigger>
-                                <TabsTrigger value="export">Export</TabsTrigger>
-                            </TabsList>
                             <TabsContent value="preview" className="space-y-4">
                                 <div ref={reportRef} className="space-y-4">
 
@@ -703,26 +798,6 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                             No case studies found for the selected criteria.
                                         </div>
                                     )}
-                                </div>
-                            </TabsContent>
-                            <TabsContent value="print" className="space-y-4">
-                                <div className="flex justify-center">
-                                    <Button onClick={handlePrint} disabled={isGenerating}>
-                                        Print Report
-                                    </Button>
-                                </div>
-                            </TabsContent>
-                            <TabsContent value="export" className="space-y-4">
-                                <div className="flex justify-center">
-                                    <Button onClick={handleExportPDF} disabled={isExporting}>
-                                        {isExporting ? (
-                                            <>
-                                                Exporting <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                                            </>
-                                        ) : (
-                                            "Export to PDF"
-                                        )}
-                                    </Button>
                                 </div>
                             </TabsContent>
                         </Tabs>
