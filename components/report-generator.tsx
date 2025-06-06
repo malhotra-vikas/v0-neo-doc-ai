@@ -558,7 +558,7 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                 <div>
                                     <h4 className="text-sm font-medium">Patient Selection</h4>
                                     <p className="text-xs text-muted-foreground">
-                                        Choose specific patients for this report or use AI to auto-select relevant patients.
+                                        Choose Specific Patients for this report or use AI to auto-select relevant patients.
                                     </p>
                                 </div>
                                 <div className="flex items-center space-x-2">
