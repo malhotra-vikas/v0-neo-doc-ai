@@ -152,10 +152,14 @@ export const exportToPDF = async ({
                     doc.text(line, 20 + BULLET_STYLE.TEXT_INDENT, yPosition + 4 + (index * BULLET_STYLE.LINE_HEIGHT));
                 });
 
-                yPosition += (lines.length * BULLET_STYLE.LINE_HEIGHT) + 3;
+                // Adjusted spacing between bullet points — removed +3
+                yPosition += (lines.length * BULLET_STYLE.LINE_HEIGHT) + 1; // minimal padding between bullets
             });
+
+            // Optional spacing after the whole list
             yPosition += 5;
         };
+
 
         const addFooter = (doc: jsPDF) => {
             const pageWidth = doc.internal.pageSize.width;
@@ -206,7 +210,7 @@ export const exportToPDF = async ({
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(12);
                 doc.text(subcategory, 20, yPosition);
-                yPosition += 8;
+                yPosition += 5;
 
                 addListItems(items);
             });
@@ -379,7 +383,7 @@ const DOCX_CONSTANTS = {
     LOGO_WIDTH: 792,  // Full page width (8.25 inches * 96 dpi)
     LOGO_HEIGHT: 528, // Half page height (5.5 inches * 96 dpi)
     PAGE_MARGIN: {
-        TOP: 0,      // No top margin for image
+        TOP: 1200,      // No top margin for image
         BOTTOM: 25,
         LEFT: 72,    // Standard margins
         RIGHT: 72,   // Standard margins
@@ -639,7 +643,7 @@ export const exportToDOCX = async ({
                             left: 500,
                             right: 500,
                         },
-                        spacing: { before: 2500, after: 200 },
+                        spacing: { before: 2000, after: 200 },
                         style: "Heading",
                     }),
 
