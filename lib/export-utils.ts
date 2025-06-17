@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { Document, Paragraph, TextRun, HeadingLevel, ImageRun, Tab, AlignmentType, BorderStyle, Packer, IStylesOptions, Footer, PageNumber, TableRow, TableCell, Table, WidthType, LineRuleType } from 'docx';
+import { Document, Paragraph, TextRun, HeadingLevel, ImageRun, Tab, AlignmentType, BorderStyle, Packer, IStylesOptions, Footer, PageNumber, TableRow, TableCell, Table, WidthType, LineRuleType, VerticalAlign, TableLayoutType } from 'docx';
 import html2canvas from 'html2canvas';
 
 
@@ -185,7 +185,6 @@ export const exportToPDF = async ({
             yPosition += 5;
         };
 
-
         const addFooter = (doc: jsPDF) => {
             const pageWidth = doc.internal.pageSize.width;
             const pageHeight = doc.internal.pageSize.height;
@@ -215,6 +214,7 @@ export const exportToPDF = async ({
             doc.text(pageText, startX + puzzleTextWidth + 2, footerY);
         };
 
+        yPosition += 10;
         addSectionHeader('Patient Snapshot Overview: 30-Day Readmissions');
 
         // Add chart if available
@@ -223,6 +223,11 @@ export const exportToPDF = async ({
             yPosition = result.newYPosition;
         }
 
+        // Force this section to a new page
+        addFooter(doc);
+        doc.addPage();
+        currentPage++;
+        yPosition = 30;
         // Interventions Section
         addSectionHeader('Types of Interventions Delivered');
         Object.entries(categorizedInterventions)
@@ -251,7 +256,7 @@ export const exportToPDF = async ({
             currentPage++;
             yPosition = 30;
         }
-        yPosition += 10;
+        yPosition += 15;
         addSectionHeader('Puzzle Touchpoints');
 
         // Add Puzzle Touchpoints chart if available
@@ -259,7 +264,7 @@ export const exportToPDF = async ({
             const result = await renderChart(doc, touchpointsChartRef, yPosition, 'Touchpoints chart rendering error:');
             yPosition = result.newYPosition;
         }
-        yPosition += 5;
+        yPosition += 2;
 
         // Clinical Risks Section with Chart
         if (yPosition > pageHeight - 50) {
@@ -268,7 +273,6 @@ export const exportToPDF = async ({
             currentPage++;
             yPosition = 30;
         }
-        yPosition += 10;
         addSectionHeader('Top Clinical Risks Identified at Discharge');
 
         // Add Clinical Risks chart if available
@@ -279,23 +283,19 @@ export const exportToPDF = async ({
         yPosition += 5;
 
         // Outcomes Section
-        if (yPosition > pageHeight - 50) {
-            addFooter(doc);
-            doc.addPage();
-            currentPage++;
-            yPosition = 30;
-        }
+        addFooter(doc);
+        doc.addPage();
+        currentPage++;
+        yPosition = 30;
         addSectionHeader('Key Interventions and Outcomes');
         const uniqueOutcomes = [...new Set(caseStudies.flatMap(study => study.outcomes || []).filter(Boolean))];
         addListItems(uniqueOutcomes);
 
         // Clinical Risks Section
-        if (yPosition > pageHeight - 50) {
-            addFooter(doc);
-            doc.addPage();
-            currentPage++;
-            yPosition = 30;
-        }
+        addFooter(doc);
+        doc.addPage();
+        currentPage++;
+        yPosition = 30;
         yPosition += 10; // Add extra space before section
         addSectionHeader('Top Clinical Risks Identified at Discharge');
         const uniqueRisks = [...new Set(caseStudies.flatMap(study => study.clinical_risks || []).filter(Boolean))];
@@ -306,13 +306,15 @@ export const exportToPDF = async ({
             doc.setFont('helvetica', 'italic');
             doc.setTextColor(128, 128, 128); // Gray color for note
             doc.text('Showing top 30 risks. Refine in filters for more detail.', 27, yPosition);
-            yPosition += 10;
         }
 
         // Case Studies Section with box layout
-        yPosition += 10;
+        addFooter(doc);
+        doc.addPage();
+        currentPage++;
+        yPosition = 30;
         yPosition = addCaseStudiesSection(doc, caseStudies, yPosition, pageWidth, pageHeight, addFooter);
-     
+
         // Add footer to the last page
         addFooter(doc);
 
@@ -512,155 +514,232 @@ export const exportToDOCX = async ({
             title: `${nursingHomeName} - Case Studies Report`,
             description: `Case Studies Report for ${nursingHomeName} - ${monthYear}`,
             styles,
-            sections: [{
-                properties: {
-                    page: {
-                        margin: {
-                            top: DOCX_CONSTANTS.PAGE_MARGIN.TOP,
-                            bottom: DOCX_CONSTANTS.PAGE_MARGIN.BOTTOM,
-                            right: DOCX_CONSTANTS.PAGE_MARGIN.RIGHT,
-                            left: DOCX_CONSTANTS.PAGE_MARGIN.LEFT,
+            sections: [
+                {
+                    properties: {
+                        page: {
+                            margin: {
+                                top: DOCX_CONSTANTS.PAGE_MARGIN.TOP,
+                                bottom: DOCX_CONSTANTS.PAGE_MARGIN.BOTTOM,
+                                right: DOCX_CONSTANTS.PAGE_MARGIN.RIGHT,
+                                left: DOCX_CONSTANTS.PAGE_MARGIN.LEFT,
+                            },
                         },
                     },
-                },
-                footers: {
-                    default: new Footer({
-                        children: createDocxFooter(),
-                    }),
-                },
-                children: [
-                    // Logo and Header Section combined
-                    new Paragraph({
-                        children: [
-                            new ImageRun({
-                                data: imageData,
-                                transformation: {
-                                    width: DOCX_CONSTANTS.LOGO_WIDTH,
-                                    height: DOCX_CONSTANTS.LOGO_HEIGHT,
-                                },
-                                floating: {
-                                    horizontalPosition: {
-                                        relative: 'page',
-                                        align: 'center',
-                                    },
-                                    verticalPosition: {
-                                        relative: 'page',
-                                        offset: 0,
-                                    },
-                                    allowOverlap: true,
-                                    behindDocument: true,
-                                    zIndex: -1,
-                                },
-                                type: 'png',
-                            }),
-                        ],
-                        spacing: { before: 0, after: 0 },
-                    }),
-
-                    // Header text overlaying the image - nursing home name
-                    new Paragraph({
-                        children: [
-                            // Split nursing home name into words and add breaks for long words
-                            ...nursingHomeName.split(' ').map((word, i, arr) => [
-                                new TextRun({
-                                    text: word,
-                                    size: 40,
-                                    bold: true,
-                                    color: 'FFFFFF',
-                                }),
-                                // Add line break if word is too long
-                                word.length > 25 ?
-                                    new TextRun({ break: 1 }) :
-                                    new TextRun({ text: ' ', size: 40, color: 'FFFFFF' }),
-                            ]).flat(),
-                        ],
-                        // alignment: AlignmentType.CENTER,
-                        indent: {
-                            left: 6000,
-                            right: 1000,
-                        },
-                        spacing: { before: 2900, after: 100 },
-                    }),
-
-                    // Year text below the line
-                    new Paragraph({
-                        children: [
-                            new TextRun({
-                                text: monthYear,
-                                size: 32,
-                                color: 'FFFFFF',
-                            }),
-                        ],
-                        indent: {
-                            left: 6000,
-                            right: 1000,
-                        },
-                        spacing: { before: 0, after: 0 },
-                    }),
-
-                    // Add a spacer paragraph
-                    new Paragraph({
-                        text: "",
-                        spacing: { before: DOCX_CONSTANTS.LOGO_HEIGHT + 1500 },
-                    }),
-
-                    // Patient Snapshot Overview
-                    new Paragraph({
-                        text: "Patient Snapshot Overview: 30-Day Readmissions",
-                        heading: HeadingLevel.HEADING_1,
-                        indent: {
-                            left: 500,
-                            right: 500,
-                        },
-                        spacing: { before: 2000, after: 200 },
-                        style: "Heading",
-                    }),
-                    ...(readmissionsChartData ? [
-                        new Paragraph({
-                            children: [createChartImage(readmissionsChartData)],
-                            spacing: { before: 200, after: 400 },
-                            alignment: AlignmentType.CENTER,
+                    footers: {
+                        default: new Footer({
+                            children: createDocxFooter(),
                         }),
-                    ] : []),
+                    },
+                    children: [
+                        // Logo and Header Section combined
+                        new Paragraph({
+                            children: [
+                                new ImageRun({
+                                    data: imageData,
+                                    transformation: {
+                                        width: DOCX_CONSTANTS.LOGO_WIDTH,
+                                        height: DOCX_CONSTANTS.LOGO_HEIGHT,
+                                    },
+                                    floating: {
+                                        horizontalPosition: {
+                                            relative: "page",
+                                            align: "center",
+                                        },
+                                        verticalPosition: {
+                                            relative: "page",
+                                            offset: 0,
+                                        },
+                                        allowOverlap: true,
+                                        behindDocument: true,
+                                        zIndex: -1,
+                                    },
+                                    type: "png",
+                                }),
+                            ],
+                            spacing: { before: 0, after: 0 },
+                        }),
 
-                    // Interventions Section
-                    new Paragraph({
-                        text: "Interventions Delivered",
-                        heading: HeadingLevel.HEADING_1,
-                        indent: {
-                            left: 500,
-                            right: 500,
-                        },
-                        spacing: { before: 400, after: 200 },
-                        style: "Heading",
-                    }),
-                    ...Object.entries(categorizedInterventions)
-                        .filter(([_, items]) => items.length > 0)
-                        .flatMap(([subcategory, items]) => [
-                            new Paragraph({
-                                children: [
-                                    new TextRun({
-                                        text: subcategory,
-                                        size: 24,
-                                        bold: true,
-                                        color: COLORS.TITLE.replace('#', ''),
-                                    }),
-                                ],
-                                indent: {
-                                    left: 500,
-                                    right: 500,
-                                },
-                                spacing: { before: 200, after: 100 },
-                            }),
-                            ...items.map(
-                                (item) =>
+                        // Header text overlaying the image - nursing home name
+                        new Paragraph({
+                            children: [
+                                // Split nursing home name into words and add breaks for long words
+                                ...nursingHomeName
+                                    .split(" ")
+                                    .map((word, i, arr) => [
+                                        new TextRun({
+                                            text: word,
+                                            size: 40,
+                                            bold: true,
+                                            color: "FFFFFF",
+                                        }),
+                                        // Add line break if word is too long
+                                        word.length > 25
+                                            ? new TextRun({ break: 1 })
+                                            : new TextRun({
+                                                text: " ",
+                                                size: 40,
+                                                color: "FFFFFF",
+                                            }),
+                                    ])
+                                    .flat(),
+                            ],
+                            // alignment: AlignmentType.CENTER,
+                            indent: {
+                                left: 6000,
+                                right: 1000,
+                            },
+                            spacing: { before: 1800, after: 100 },
+                        }),
+
+                        // Year text below the line
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: monthYear,
+                                    size: 32,
+                                    color: "FFFFFF",
+                                }),
+                            ],
+                            indent: {
+                                left: 6000,
+                                right: 1000,
+                            },
+                            spacing: { before: 0, after: 0 },
+                        }),
+
+                        // Add a spacer paragraph
+                        new Paragraph({
+                            text: "",
+                            spacing: { before: DOCX_CONSTANTS.LOGO_HEIGHT + 1500 },
+                        }),
+
+                        // Patient Snapshot Overview
+                        new Paragraph({
+                            heading: HeadingLevel.HEADING_1,
+                            indent: {
+                                left: 500,
+                                right: 500,
+                            },
+                            spacing: { before: 2500, after: 200 },
+                            children: [
+                                new TextRun({
+                                    text: "Patient Snapshot Overview: 30-Day Readmissions",
+                                    color: hexToDocxColor(COLORS.TITLE), // hex code without '#'
+                                    bold: true, // optional
+                                }),
+                            ],
+                        }),
+                        ...(readmissionsChartData
+                            ? createChartContainer(readmissionsChartData)
+                            : []),
+
+                        // Interventions Section
+                        new Paragraph({
+                            text: "Types of Interventions Delivered",
+                            heading: HeadingLevel.HEADING_1,
+                            indent: {
+                                left: 500,
+                                right: 500,
+                            },
+                            spacing: { before: 400, after: 400 },
+                            style: "Heading",
+                        }),
+                        ...Object.entries(categorizedInterventions)
+                            .filter(([_, items]) => items.length > 0)
+                            .flatMap(([subcategory, items]) => [
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: subcategory,
+                                            size: 24,
+                                            bold: true,
+                                            color: COLORS.SUB_TITLE.replace("#", ""),
+                                        }),
+                                    ],
+                                    indent: {
+                                        left: 500,
+                                        right: 500,
+                                    },
+                                    spacing: { before: 200, after: 250 },
+                                }),
+                                ...items.map(
+                                    (item) =>
+                                        new Paragraph({
+                                            children: [
+                                                new TextRun({ text: "•   ", size: 22 }),
+                                                new TextRun({
+                                                    text: item,
+                                                    size: 22,
+                                                    color: COLORS.BULLET_TEXT.replace("#", ""),
+                                                }),
+                                            ],
+                                            indent: {
+                                                left: 800,
+                                                right: 800,
+                                            },
+                                            spacing: { before: 100 },
+                                            style: "BulletText",
+                                        })
+                                ),
+                            ]),
+
+                        // Puzzle Touchpoints Section
+                        new Paragraph({
+                            text: "Puzzle Touchpoints",
+                            heading: HeadingLevel.HEADING_1,
+                            indent: {
+                                left: 500,
+                                right: 500,
+                            },
+                            spacing: { before: 600, after: 200 },
+                            style: "Heading",
+                        }),
+                        ...(touchpointsChartData
+                            ? createChartContainer(touchpointsChartData)
+                            : []),
+
+                        // Clinical Risks Section
+                        new Paragraph({
+                            text: "Top Clinical Risks Identified at Discharge",
+                            heading: HeadingLevel.HEADING_1,
+                            indent: {
+                                left: 500,
+                                right: 500,
+                            },
+                            spacing: { before: 400, after: 200 },
+                            style: "Heading",
+                        }),
+                        ...(clinicalRisksChartData
+                            ? createChartContainer(clinicalRisksChartData)
+                            : []),
+
+                        // Outcomes Section
+                        new Paragraph({
+                            text: "Key Interventions and Outcomes",
+                            heading: HeadingLevel.HEADING_1,
+                            indent: {
+                                left: 500,
+                                right: 500,
+                            },
+                            spacing: { before: 400, after: 200 },
+                            style: "Heading",
+                        }),
+                        ...caseStudies
+                            .flatMap((study) => study.outcomes || [])
+                            .filter((outcome): outcome is string => Boolean(outcome))
+                            .filter(
+                                (outcome, index, self) => self.indexOf(outcome) === index
+                            )
+                            .map(
+                                (outcome) =>
                                     new Paragraph({
                                         children: [
                                             new TextRun({ text: "•   ", size: 22 }),
                                             new TextRun({
-                                                text: item,
+                                                text: outcome,
                                                 size: 22,
-                                                color: COLORS.BULLET_TEXT.replace('#', ''),
+                                                color: COLORS.BULLET_TEXT.replace("#", ""),
                                             }),
                                         ],
                                         indent: {
@@ -671,149 +750,88 @@ export const exportToDOCX = async ({
                                         style: "BulletText",
                                     })
                             ),
-                        ]),
 
-                    // Puzzle Touchpoints Section
-                    new Paragraph({
-                        text: "Puzzle Touchpoints",
-                        heading: HeadingLevel.HEADING_1,
-                        indent: {
-                            left: 500,
-                            right: 500,
-                        },
-                        spacing: { before: 600, after: 200 },
-                        style: "Heading",
-                    }),
-                    ...(touchpointsChartData ? [
+                        // Clinical Risks Section
                         new Paragraph({
-                            children: [createChartImage(touchpointsChartData)],
-                            spacing: { before: 200, after: 400 },
-                            alignment: AlignmentType.CENTER,
-                        }),
-                    ] : []),
-
-                    // Clinical Risks Section
-                    new Paragraph({
-                        text: "Top Clinical Risks Identified at Discharge",
-                        heading: HeadingLevel.HEADING_1,
-                        indent: {
-                            left: 500,
-                            right: 500,
-                        },
-                        spacing: { before: 400, after: 200 },
-                        style: "Heading",
-                    }),
-                    ...(clinicalRisksChartData ? [
-                        new Paragraph({
-                            children: [createChartImage(clinicalRisksChartData)],
-                            spacing: { before: 200, after: 400 },
-                            alignment: AlignmentType.CENTER,
-                        }),
-                    ] : []),
-
-                    // Outcomes Section
-                    new Paragraph({
-                        text: "Key Interventions and Outcomes",
-                        heading: HeadingLevel.HEADING_1,
-                        indent: {
-                            left: 500,
-                            right: 500,
-                        },
-                        spacing: { before: 400, after: 200 },
-                        style: "Heading",
-                    }),
-                    ...caseStudies
-                        .flatMap((study) => study.outcomes || [])
-                        .filter((outcome): outcome is string => Boolean(outcome))
-                        .filter((outcome, index, self) => self.indexOf(outcome) === index)
-                        .map(
-                            (outcome) =>
-                                new Paragraph({
-                                    children: [
-                                        new TextRun({ text: "•   ", size: 22 }),
-                                        new TextRun({
-                                            text: outcome,
-                                            size: 22,
-                                            color: COLORS.BULLET_TEXT.replace('#', ''),
-                                        }),
-                                    ],
-                                    indent: {
-                                        left: 800,
-                                        right: 800,
-                                    },
-                                    spacing: { before: 100 },
-                                    style: "BulletText",
-                                })
-                        ),
-
-                    // Clinical Risks Section
-                    new Paragraph({
-                        text: "Top Clinical Risks Identified at Discharge",
-                        heading: HeadingLevel.HEADING_1,
-                        indent: {
-                            left: 500,
-                            right: 500,
-                        },
-                        spacing: { before: 400, after: 200 },
-                        style: "Heading",
-                    }),
-                    ...caseStudies
-                        .flatMap((study) => study.clinical_risks || [])
-                        .filter((risk): risk is string => Boolean(risk))
-                        .filter((risk, index, self) => self.indexOf(risk) === index)
-                        .slice(0, 30)
-                        .map(
-                            (risk) =>
-                                new Paragraph({
-                                    children: [
-                                        new TextRun({ text: "•   ", size: 22 }),
-                                        new TextRun({
-                                            text: risk,
-                                            size: 22,
-                                            color: COLORS.BULLET_TEXT.replace('#', ''),
-                                        }),
-                                    ],
-                                    indent: {
-                                        left: 800,
-                                        right: 800,
-                                    },
-                                    spacing: { before: 100 },
-                                    style: "BulletText",
-                                })
-                        ),
-
-                    // Note for truncated risks
-                    ...(caseStudies.flatMap(s => s.clinical_risks || []).length > 30 ? [
-                        new Paragraph({
-                            children: [
-                                new TextRun({
-                                    text: "Showing top 30 risks. Refine in filters for more detail.",
-                                    size: 18,
-                                    color: "808080",
-                                    italics: true,
-                                }),
-                            ],
+                            text: "Top Clinical Risks Identified at Discharge",
+                            heading: HeadingLevel.HEADING_1,
                             indent: {
                                 left: 500,
                                 right: 500,
                             },
-                            spacing: { before: 200 },
+                            spacing: { before: 400, after: 200 },
+                            style: "Heading",
                         }),
-                    ] : []),
+                        ...caseStudies
+                            .flatMap((study) => study.clinical_risks || [])
+                            .filter((risk): risk is string => Boolean(risk))
+                            .filter((risk, index, self) => self.indexOf(risk) === index)
+                            .slice(0, 30)
+                            .map(
+                                (risk) =>
+                                    new Paragraph({
+                                        children: [
+                                            new TextRun({ text: "•   ", size: 22 }),
+                                            new TextRun({
+                                                text: risk,
+                                                size: 22,
+                                                color: COLORS.BULLET_TEXT.replace("#", ""),
+                                            }),
+                                        ],
+                                        indent: {
+                                            left: 800,
+                                            right: 800,
+                                        },
+                                        spacing: { before: 100 },
+                                        style: "BulletText",
+                                    })
+                            ),
 
-                    // Case Studies Section
-                    new Paragraph({
-                        text: "Case Studies",
-                        heading: HeadingLevel.HEADING_1,
-                        indent: { left: 500, right: 500 },
-                        spacing: { before: 400, after: 400 },
-                        style: "Heading",
-                    }),
-                    ...caseStudies.flatMap((study, index) =>
-                        createCaseStudyCard(study, index % 2 === 0 ? COLORS.CARD1 : COLORS.CARD2)
-                    ),
-                ],
-            }],
+                        // Note for truncated risks
+                        ...(caseStudies.flatMap((s) => s.clinical_risks || []).length >
+                            30
+                            ? [
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: "Showing top 30 risks. Refine in filters for more detail.",
+                                            size: 18,
+                                            color: "808080",
+                                            italics: true,
+                                        }),
+                                    ],
+                                    indent: {
+                                        left: 500,
+                                        right: 500,
+                                    },
+                                    spacing: { before: 200 },
+                                }),
+                            ]
+                            : []),
+
+                        // Case Studies Section
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: "Case Study Highlights",
+                                    size: 32,
+                                    bold: true,
+                                    color: hexToDocxColor(COLORS.TITLE),
+                                }),
+                            ],
+                            heading: HeadingLevel.HEADING_1,
+                            indent: { left: 500, right: 500 },
+                            spacing: { before: 400, after: 400 },
+                        }),
+                        ...caseStudies.map((study, index) =>
+                            createCaseStudyCard(
+                                study,
+                                index % 2 === 0 ? COLORS.CARD1 : COLORS.CARD2
+                            )
+                        ).flat(),
+                    ],
+                },
+            ],
         });
 
         const blob = await Packer.toBlob(doc);
@@ -836,9 +854,11 @@ const createCaseStudyCard = (study: any, theme: any) => {
 
         new Table({
             width: {
-                size: 10500,
+                size: 10000,
                 type: WidthType.DXA,
             },
+            layout: TableLayoutType.AUTOFIT,
+            columnWidths: [9500],
             indent: {
                 size: 500,
                 type: WidthType.DXA,
@@ -848,20 +868,19 @@ const createCaseStudyCard = (study: any, theme: any) => {
                     children: [
                         new TableCell({
                             borders: {
-                                top: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
-                                bottom: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
-                                left: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
-                                right: { style: BorderStyle.SINGLE, size: 6, color: hexToDocxColor(theme.BORDER) },
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+                                left: { style: BorderStyle.SINGLE, size: 16, color: hexToDocxColor(COLORS.SUB_TITLE) },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
                             },
-                            shading: {
-                                fill: hexToDocxColor(theme.BACKGROUND),
-                            },
+                            shading: { fill: "FFFFFF" },
                             margins: {
-                                top: 300,
-                                bottom: 360,
-                                left: 360,
-                                right: 360,
+                                top: 20,
+                                bottom: 50,
+                                left: 500,
+                                right: 0,
                             },
+                            verticalAlign: VerticalAlign.TOP,
                             children: [
                                 new Paragraph({
                                     children: [
@@ -873,12 +892,8 @@ const createCaseStudyCard = (study: any, theme: any) => {
                                             font: "Helvetica",
                                         }),
                                     ],
-                                    spacing: {
-                                        after: 280, // Increased spacing after patient name
-                                        line: 360,
-                                        lineRule: LineRuleType.AUTO,
-                                        before: 80, // Added top spacing
-                                    },
+                                    spacing: { before: 120, after: 240 },
+                                    alignment: AlignmentType.LEFT,
                                 }),
                                 new Paragraph({
                                     children: [
@@ -889,12 +904,8 @@ const createCaseStudyCard = (study: any, theme: any) => {
                                             font: "Helvetica",
                                         }),
                                     ],
-                                    spacing: {
-                                        after: 140, // Increased bottom spacing
-                                        line: 320, // Slightly increased line height
-                                        lineRule: LineRuleType.AUTO,
-                                        before: 140, // Added top spacing
-                                    },
+                                    spacing: { before: 120, after: 120, line: 360 },
+                                    alignment: AlignmentType.LEFT,
                                 }),
                             ],
                         }),
@@ -923,78 +934,116 @@ const addCaseStudiesSection = (
     const boxLeftMargin = 20;
     const boxWidth = pageWidth - 40;
     const boxPadding = 5;
-    const borderWidth = 2;
+    const borderWidth = 0.7;
     const separatorWidth = 0.2;
     const textStartX = boxLeftMargin + boxPadding + borderWidth + 5;
 
-    let currentPage = doc.getCurrentPageInfo().pageNumber;
-
     caseStudies.forEach((study, index) => {
-        // Calculate dimensions first
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(11);
-        const textLines = doc.splitTextToSize(
+
+        const allLines = doc.splitTextToSize(
             study.highlight_text,
             boxWidth - (boxPadding * 2 + borderWidth + 10)
         );
-        const textHeight = textLines.length * 5.5 + 12;
-        const boxHeight = Math.max(35, textHeight + boxPadding);
+        const lineHeight = 4.3;
+        const headingHeight = 12;
+        // const boxHeaderHeight = headingHeight + boxPadding + 10;
+        const boxHeaderHeight = headingHeight + boxPadding;
+        const textHeight = allLines.length * lineHeight;
+        const fullBoxHeight = Math.max(35, textHeight + boxPadding);
 
-        // Check if we need a new page
-        if (yPosition + boxHeight + 10 > pageHeight - 30) {
+        const maxBoxBottom = pageHeight - 30;
+        const spaceNeededForHeader = boxHeaderHeight + lineHeight * 2;
+
+        if (yPosition + spaceNeededForHeader > maxBoxBottom) {
             addFooter(doc);
             doc.addPage();
-            currentPage++;
-            yPosition = 30;
+            yPosition = 10;
             doc.setTextColor(COLORS.TITLE);
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
             yPosition += 12;
         }
 
-        // Draw the box
-        doc.setFillColor(255, 255, 255);
-        doc.rect(boxLeftMargin, yPosition, boxWidth, boxHeight, 'F');
-        const bgColor = hexToRgb("#1A85FF");
-        doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
-        doc.rect(boxLeftMargin, yPosition, borderWidth, boxHeight, 'F');
+        let splitIndex = allLines.length;
+        let textOnFirstPage = allLines;
+        let textOnNextPage = [];
 
-        // Add patient name
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
-        doc.setTextColor(COLORS.PATIENT_NAME);
-        doc.text(study.patient_name || 'Unknown Patient', textStartX, yPosition + boxPadding + 4);
+        if (yPosition + fullBoxHeight > maxBoxBottom) {
+            const maxLinesFirstPage = Math.floor((maxBoxBottom - yPosition - boxHeaderHeight) / lineHeight);
+            splitIndex = Math.max(0, maxLinesFirstPage);
+            textOnFirstPage = allLines.slice(0, splitIndex);
+            textOnNextPage = allLines.slice(splitIndex);
+        }
 
-        // Add case study text
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(11);
-        doc.setTextColor(85, 85, 85);
-        doc.text(textLines, textStartX, yPosition + boxPadding + 14);
+        const drawCaseBox = (lines:any, topY:any, isContinued = false) => {
+            const boxHeight = Math.max(35, lines.length * lineHeight + boxHeaderHeight);
+            doc.setFillColor(255, 255, 255);
+            doc.rect(boxLeftMargin, topY, boxWidth, boxHeight, 'F');
+            const bgColor = hexToRgb("#1A85FF");
+            doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+            doc.rect(boxLeftMargin, topY, borderWidth, boxHeight, 'F');
 
-        // Add separator line
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(COLORS.PATIENT_NAME);
+            if (!isContinued) {
+                doc.text(study.patient_name || 'Unknown Patient', textStartX, topY + boxPadding + 0.1);
+            }
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(11);
+            doc.setTextColor(85, 85, 85);
+            doc.text(lines, textStartX, topY + boxPadding + 10);
+
+            return boxHeight;
+        };
+
+        const firstBoxHeight = drawCaseBox(textOnFirstPage, yPosition, false);
+        yPosition += firstBoxHeight + 6;
+
+        if (textOnNextPage.length > 0) {
+            addFooter(doc);
+            doc.addPage();
+            yPosition = 10;
+            doc.setTextColor(COLORS.TITLE);
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            yPosition += 12;
+
+            const continuedHeight = drawCaseBox(textOnNextPage, yPosition, true);
+            yPosition += continuedHeight + 6;
+        }
+
         if (index < caseStudies.length - 1) {
             doc.setDrawColor(229, 231, 235);
             doc.setLineWidth(separatorWidth);
             doc.line(
                 boxLeftMargin,
-                yPosition + boxHeight,
+                yPosition + (fullBoxHeight ?? firstBoxHeight),
                 boxLeftMargin + boxWidth,
-                yPosition + boxHeight
+                yPosition + (fullBoxHeight ?? firstBoxHeight)
             );
         }
 
-        yPosition += boxHeight + 8;
-
-        // Add footer if this is the last item on the page
-        if (index < caseStudies.length - 1 && yPosition + boxHeight + 10 > pageHeight - 30) {
-            addFooter(doc);
+        const nextStudy = caseStudies[index + 1];
+        if (nextStudy) {
+            const nextLines = doc.splitTextToSize(
+                nextStudy.highlight_text,
+                boxWidth - (boxPadding * 2 + borderWidth + 10)
+            );
+            const nextTextHeight = nextLines.length * lineHeight;
+            const nextBoxHeight = Math.max(35, nextTextHeight + boxPadding + boxHeaderHeight);
+            if (yPosition + nextBoxHeight > pageHeight - 30) {
+                addFooter(doc);
+            }
         }
     });
 
     return yPosition + 15;
 };
 
-// Add after BULLET_STYLE const
 
 const renderChart = async (doc: jsPDF, chartRef: HTMLDivElement | null, yPosition: number, errorMessage: string): Promise<{ newYPosition: number, error?: Error }> => {
     if (!chartRef) {
@@ -1064,17 +1113,38 @@ const renderChart = async (doc: jsPDF, chartRef: HTMLDivElement | null, yPositio
     }
 };
 
-const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<ArrayBuffer | undefined> => {
+const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<{ data: ArrayBuffer; aspectRatio: number } | undefined> => {
     if (!chartRef) return undefined;
 
     try {
-        const width = Math.max(chartRef.clientWidth || 600, 600);
-        const height = Math.max(chartRef.clientHeight || 400, 400) *2;
+        // Get the computed styles to include padding and margins
+        const computedStyle = window.getComputedStyle(chartRef);
+        const rect = chartRef.getBoundingClientRect();
 
+        // Add padding and margins to dimensions
+        const fullWidth = rect.width +
+            parseFloat(computedStyle.paddingLeft) +
+            parseFloat(computedStyle.paddingRight) +
+            parseFloat(computedStyle.marginLeft) +
+            parseFloat(computedStyle.marginRight);
+
+        const fullHeight = rect.height +
+            parseFloat(computedStyle.paddingTop) +
+            parseFloat(computedStyle.paddingBottom) +
+            parseFloat(computedStyle.marginTop) +
+            parseFloat(computedStyle.marginBottom);
+
+        // Ensure minimum dimensions
+        const width = Math.max(fullWidth, 600);
+        const height = Math.max(fullHeight, 400);
+        const aspectRatio = width / height;
+
+        // Create a wrapper with padding to ensure no content is cut
         const wrapper = document.createElement('div');
         Object.assign(wrapper.style, {
             width: `${width}px`,
             height: `${height}px`,
+            padding: '20px',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -1082,21 +1152,35 @@ const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<Arr
             position: 'fixed',
             top: '-9999px',
             left: '-9999px',
-            zIndex: '-1'
+            zIndex: '-1',
+            overflow: 'visible'
         });
 
+        // Clone and ensure the chart takes full size
         const clone = chartRef.cloneNode(true) as HTMLElement;
-        clone.style.width = '100%';
-        clone.style.height = '100%';
+        Object.assign(clone.style, {
+            width: '100%',
+            height: '100%',
+            margin: '0',
+            padding: '0'
+        });
+
         wrapper.appendChild(clone);
         document.body.appendChild(wrapper);
+
+        // Wait a bit for chart to render fully
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         const canvas = await html2canvas(wrapper, {
             scale: 2,
             useCORS: true,
             backgroundColor: '#ffffff',
             logging: false,
-            imageTimeout: 10000
+            imageTimeout: 10000,
+            width: width + 40, // Add padding to capture
+            height: height + 40,
+            windowWidth: width + 40,
+            windowHeight: height + 40
         });
 
         document.body.removeChild(wrapper);
@@ -1105,21 +1189,53 @@ const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<Arr
             canvas.toBlob((blob) => resolve(blob!), 'image/png', 1.0);
         });
 
-        return await blob.arrayBuffer();
+        return {
+            data: await blob.arrayBuffer(),
+            aspectRatio
+        };
     } catch (error) {
         console.error('Error converting chart to image:', error);
         return undefined;
     }
 };
 
-const createChartImage = (imageData: ArrayBuffer): ImageRun => {
-    return new ImageRun({
-        data: imageData,
-        transformation: {
-            width: 600,
-            height: 600,
-        },
-        type: 'png',
-    });
-};
+const createChartContainer = (chartData: { data: ArrayBuffer; aspectRatio: number }) => {
+    // Use a wider base width for better visibility
+    const baseWidth = 700;  // Increased from 600 to 700
+    // Calculate height maintaining aspect ratio with additional padding
+    const calculatedHeight = (baseWidth / chartData.aspectRatio) + 40; // Add padding
 
+    // Add maximum and minimum heights to prevent extremes
+    const height = Math.min(Math.max(calculatedHeight, 350), 600); // Adjusted min/max heights
+
+    return [
+        new Paragraph({
+            text: "",
+            spacing: { before: 400, after: 0 },  // Increased from 300 to 400
+        }),
+        new Paragraph({
+            children: [
+                new ImageRun({
+                    data: chartData.data,
+                    transformation: {
+                        width: baseWidth,
+                        height: height,
+                    },
+                    type: 'png',
+                }),
+            ],
+            spacing: { before: 0, after: 0 },
+            alignment: AlignmentType.CENTER,
+        }),
+        new Paragraph({
+            text: "",
+            spacing: { before: 0, after: 400 },
+            border: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+                left: { style: BorderStyle.SINGLE, size: 8, color: "FFFFFF" },
+                right: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+            },
+        }),
+    ];
+};

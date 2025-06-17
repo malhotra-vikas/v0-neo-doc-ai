@@ -80,6 +80,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [isGenerating, setIsGenerating] = useState(false)
     const [reportGenerated, setReportGenerated] = useState(false)
     const [isExporting, setIsExporting] = useState(false)
+    const [isPrinting, setIsPrinting] = useState(false)
     const [caseStudies, setCaseStudies] = useState<CaseStudyHighlight[]>([])
     const [isLoadingCaseStudies, setIsLoadingCaseStudies] = useState(false)
     const reportRef = useRef<HTMLDivElement>(null)
@@ -422,6 +423,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 throw new Error('Selected nursing home not found')
             }
 
+            setIsPrinting(true)
+
             // Use the exportToPDF function to generate a PDF blob
             const result = await exportToPDF({
                 nursingHomeName: selectedNursingHome.name,
@@ -458,6 +461,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 description: "Failed to prepare document for printing.",
                 variant: "destructive",
             })
+        } finally {
+            setIsPrinting(false)
         }
     }, [
         nursingHomes,
@@ -797,9 +802,9 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                             )}
                         </div>
                         <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={handlePrint} disabled={isGenerating}>
-                                <PrinterIcon className="h-4 w-4 mr-2" />
-                                Print
+                            <Button variant="outline" size="sm" onClick={handlePrint} disabled={isGenerating || isPrinting}>
+                                <PrinterIcon className={`h-4 w-4 mr-2`} />
+                                {isPrinting ? "Preparing..." : "Print"}
                             </Button>
 
                             <DropdownMenu>
