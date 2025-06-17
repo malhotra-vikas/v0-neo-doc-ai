@@ -83,6 +83,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [caseStudies, setCaseStudies] = useState<CaseStudyHighlight[]>([])
     const [isLoadingCaseStudies, setIsLoadingCaseStudies] = useState(false)
     const reportRef = useRef<HTMLDivElement>(null)
+    const readmissionsChartRef = useRef<HTMLDivElement>(null)
+    const touchpointsChartRef = useRef<HTMLDivElement>(null)
+    const clinicalRisksChartRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
     const [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
 
@@ -412,6 +415,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     const handlePrint = useCallback(async () => {
         try {
+
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
             
             if (!selectedNursingHome) {
@@ -425,9 +429,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 caseStudies,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
-                interventionCounts,
-                clinicalRisks,
-                patientMetrics,
+                readmissionsChartRef: readmissionsChartRef.current,
+                touchpointsChartRef: touchpointsChartRef.current,
+                clinicalRisksChartRef: clinicalRisksChartRef.current,
                 returnBlob: true,
             })
 
@@ -484,9 +488,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 caseStudies,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
-                interventionCounts,
-                clinicalRisks,
-                patientMetrics,
+                readmissionsChartRef: readmissionsChartRef.current,
+                touchpointsChartRef: touchpointsChartRef.current,
+                clinicalRisksChartRef: clinicalRisksChartRef.current,
             })
 
             toast({
@@ -519,10 +523,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 caseStudies,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
-                interventionCounts,
-                clinicalRisks,
-                patientMetrics,
                 returnBlob: false,
+                readmissionsChartRef: readmissionsChartRef.current,
+                touchpointsChartRef: touchpointsChartRef.current,
+                clinicalRisksChartRef: clinicalRisksChartRef.current
             })
 
             toast({
@@ -827,22 +831,17 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                     </CardHeader>
                     <CardContent className="space-y-2">
                         <Tabs defaultValue="preview" className="w-full space-y-4">
-                            <TabsList>
-                                <TabsTrigger value="preview">Preview</TabsTrigger>
-                                <TabsTrigger value="print">Print</TabsTrigger>
-                                <TabsTrigger value="export">Export</TabsTrigger>
-                            </TabsList>
                             <TabsContent value="preview" className="space-y-4">
-                                <div ref={reportRef} className="space-y-6">
+                                <div className="space-y-6" >
                                     {/* Patient Snapshot Overview with Pie Chart */}
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h2 className="text-xl font-semibold text-blue-800 mb-4">
                                             Patient Snapshot Overview: 30-Day Readmissions
                                         </h2>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6"ref={readmissionsChartRef}>
                                             {/* Pie Chart */}
-                                            <div className="h-[300px]">
+                                            <div className="h-[300px]" >
                                                 <ChartContainer
                                                     config={{
                                                         successful: {
@@ -944,9 +943,9 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h2 className="text-xl font-semibold text-blue-800 mb-4">Puzzle's Touchpoints</h2>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6" ref={touchpointsChartRef}>
                                             {/* Bar Chart */}
-                                            <div className="h-[300px]">
+                                            <div className="h-[300px]" >
                                                 <ChartContainer
                                                     config={{
                                                         interventions: {
@@ -1007,9 +1006,9 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                             Top Clinical Risks Identified at Discharge
                                         </h2>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6" ref={clinicalRisksChartRef}>
                                             {/* Horizontal Bar Chart */}
-                                            <div className="h-[300px]">
+                                            <div className="h-[300px]" >
                                                 <ChartContainer
                                                     config={{
                                                         patients: {
@@ -1099,35 +1098,6 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                             </div>
                                         )}
                                     </div>
-                                </div>
-                            </TabsContent>
-                            <TabsContent value="print" className="space-y-4">
-                                <div className="flex justify-center">
-                                    <Button onClick={handlePrint} disabled={isGenerating}>
-                                        Print Report
-                                    </Button>
-                                </div>
-                            </TabsContent>
-                            <TabsContent value="export" className="space-y-4">
-                                <div className="flex justify-center space-x-4">
-                                    <Button onClick={handleExportPDF} disabled={isExporting}>
-                                        {isExporting ? (
-                                            <>
-                                                Exporting <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                                            </>
-                                        ) : (
-                                            "Export to PDF"
-                                        )}
-                                    </Button>
-                                    <Button onClick={handleExportDOCX} disabled={isExporting}>
-                                        {isExporting ? (
-                                            <>
-                                                Exporting <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                                            </>
-                                        ) : (
-                                            "Export to DOCX"
-                                        )}
-                                    </Button>
                                 </div>
                             </TabsContent>
                         </Tabs>

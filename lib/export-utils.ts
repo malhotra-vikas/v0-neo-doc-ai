@@ -1,10 +1,13 @@
 import { jsPDF } from "jspdf";
 import { Document, Paragraph, TextRun, HeadingLevel, ImageRun, Tab, AlignmentType, BorderStyle, Packer, IStylesOptions, Footer, PageNumber, TableRow, TableCell, Table, WidthType, LineRuleType } from 'docx';
+import html2canvas from 'html2canvas';
+
 
 const COLORS = {
     PUZZLE_BLUE: '#28317c',
     PAGE_NUMBER: '#11b3dc',
-    TITLE: '#2e3771',
+    TITLE: '#1e40af',
+    SUB_TITLE: '#3b82f6',
     BULLET_TEXT: '#6b789a',
     PATIENT_NAME: '#858387',
     PATIENT_DETAILS: '#bab4bf',
@@ -49,7 +52,10 @@ interface ExportPDFOptions {
     logoPath?: string;
     categorizedInterventions: Record<string, string[]>;
     returnBlob?: boolean;
-
+    chartRef?: HTMLDivElement | null; // Deprecated - kept for backward compatibility
+    readmissionsChartRef?: HTMLDivElement | null;
+    touchpointsChartRef?: HTMLDivElement | null;
+    clinicalRisksChartRef?: HTMLDivElement | null;
 }
 
 interface ExportDOCXOptions {
@@ -59,7 +65,22 @@ interface ExportDOCXOptions {
     logoPath?: string;
     categorizedInterventions: Record<string, string[]>;
     returnBlob?: boolean;
+    readmissionsChartRef?: HTMLDivElement | null;
+    touchpointsChartRef?: HTMLDivElement | null;
+    clinicalRisksChartRef?: HTMLDivElement | null;
 }
+
+const hexToRgb = (hex: string): number[] => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+        ? [
+            parseInt(result[1], 16),
+            parseInt(result[2], 16),
+            parseInt(result[3], 16)
+        ]
+        : [255, 255, 255];
+};
+
 
 export const exportToPDF = async ({
     nursingHomeName,
@@ -67,7 +88,11 @@ export const exportToPDF = async ({
     caseStudies,
     logoPath = "/puzzle_background.png",
     categorizedInterventions,
-    returnBlob = false
+    returnBlob = false,
+    chartRef = null, // Deprecated
+    readmissionsChartRef = null,
+    touchpointsChartRef = null,
+    clinicalRisksChartRef = null
 }: ExportPDFOptions): Promise<void | Blob> => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -190,12 +215,16 @@ export const exportToPDF = async ({
             doc.text(pageText, startX + puzzleTextWidth + 2, footerY);
         };
 
-        // Patient Snapshot Overview (when implemented)
         addSectionHeader('Patient Snapshot Overview: 30-Day Readmissions');
-        yPosition += 5;
+
+        // Add chart if available
+        if (readmissionsChartRef) {
+            const result = await renderChart(doc, readmissionsChartRef, yPosition, 'Readmissions chart rendering error:');
+            yPosition = result.newYPosition;
+        }
 
         // Interventions Section
-        addSectionHeader('Interventions Delivered');
+        addSectionHeader('Types of Interventions Delivered');
         Object.entries(categorizedInterventions)
             .filter(([_, items]) => items.length > 0)
             .forEach(([subcategory, items]) => {
@@ -206,7 +235,7 @@ export const exportToPDF = async ({
                     yPosition = 30;
                 }
 
-                doc.setTextColor(COLORS.TITLE);
+                doc.setTextColor(COLORS.SUB_TITLE);
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(12);
                 doc.text(subcategory, 20, yPosition);
@@ -215,15 +244,38 @@ export const exportToPDF = async ({
                 addListItems(items);
             });
 
-        // Puzzle Touchpoints Section
+        // Puzzle Touchpoints Section with Chart
         if (yPosition > pageHeight - 50) {
             addFooter(doc);
             doc.addPage();
             currentPage++;
             yPosition = 30;
         }
-        yPosition += 10; // Add extra space before section
+        yPosition += 10;
         addSectionHeader('Puzzle Touchpoints');
+
+        // Add Puzzle Touchpoints chart if available
+        if (touchpointsChartRef) {
+            const result = await renderChart(doc, touchpointsChartRef, yPosition, 'Touchpoints chart rendering error:');
+            yPosition = result.newYPosition;
+        }
+        yPosition += 5;
+
+        // Clinical Risks Section with Chart
+        if (yPosition > pageHeight - 50) {
+            addFooter(doc);
+            doc.addPage();
+            currentPage++;
+            yPosition = 30;
+        }
+        yPosition += 10;
+        addSectionHeader('Top Clinical Risks Identified at Discharge');
+
+        // Add Clinical Risks chart if available
+        if (clinicalRisksChartRef) {
+            const result = await renderChart(doc, clinicalRisksChartRef, yPosition, 'Clinical risks chart rendering error:');
+            yPosition = result.newYPosition;
+        }
         yPosition += 5;
 
         // Outcomes Section
@@ -257,100 +309,10 @@ export const exportToPDF = async ({
             yPosition += 10;
         }
 
-        // Case Studies Section - one card per row
+        // Case Studies Section with box layout
         yPosition += 10;
-        addSectionHeader('Case Studies');
-        const CARD_WIDTH = pageWidth - 30; // Reduced side margins
-        const CARD_PADDING = 8; // Reduced padding inside card
-        const CARD_MARGIN = 8; // Increased margin between cards
-
-        // Helper function to convert hex to RGB
-        const hexToRgb = (hex: string): number[] => {
-            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result
-                ? [
-                    parseInt(result[1], 16),
-                    parseInt(result[2], 16),
-                    parseInt(result[3], 16)
-                ]
-                : [255, 255, 255];
-        };
-
-        let cardIndex = 0;
-        const handleCardContent = (study: CaseStudy, yPos: number) => {
-            const theme = cardIndex % 2 === 0 ? COLORS.CARD1 : COLORS.CARD2;
-
-            doc.setFontSize(11); // Reduced font size
-            const textLines = doc.splitTextToSize(study.highlight_text, CARD_WIDTH - (CARD_PADDING * 2 + 2));
-            const lineSpacing = 6;
-            const textHeight = textLines.length * lineSpacing;
-            let cardHeight = Math.max(35, textHeight + 20);
-
-            // If card would go beyond page and we're not at page top
-            if (yPos > 30 && yPos + cardHeight > pageHeight - 30) {
-                const remainingSpace = pageHeight - 30 - yPos;
-                const linesPerPage = Math.floor((remainingSpace - 20) / lineSpacing);
-
-                if (linesPerPage >= 2) {
-                    // First part - use same theme
-                    const firstPart = textLines.slice(0, linesPerPage);
-                    const firstHeight = Math.max(40, 20 + firstPart.length * lineSpacing);
-
-                    renderCard(study.patient_name || 'Unknown Patient', firstPart, yPos, firstHeight, theme);
-
-                    addFooter(doc);
-                    doc.addPage();
-                    currentPage++;
-
-                    // Second part - use same theme
-                    const secondPart = textLines.slice(linesPerPage);
-                    cardHeight = Math.max(40, 20 + secondPart.length * lineSpacing);
-                    renderCard(study.patient_name || 'Unknown Patient', secondPart, 30, cardHeight, theme);
-                    cardIndex++; // Only increment once for split cards
-                    return 30 + cardHeight + CARD_MARGIN;
-                }
-            }
-
-            renderCard(study.patient_name || 'Unknown Patient', textLines, yPos, cardHeight, theme);
-            cardIndex++;
-            return yPos + cardHeight + CARD_MARGIN;
-        };
-
-        const renderCard = (patientName: string, textLines: string[], yPos: number, height: number, theme: typeof COLORS.CARD1) => {
-            // Convert hex colors to RGB for background
-            const bgColor = hexToRgb(theme.BACKGROUND);
-
-            // Draw card background and border
-            doc.setDrawColor(theme.BORDER);
-            doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
-            doc.setLineWidth(0.5);
-            doc.roundedRect(20, yPos, CARD_WIDTH, height, 3, 3, 'FD');
-
-            // Patient name
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(12);
-            doc.setTextColor(theme.TITLE);
-            doc.text(patientName, 20 + CARD_PADDING, yPos + 10);
-
-            // Text content
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(theme.TEXT);
-            doc.setFontSize(11);
-            doc.text(textLines, 20 + CARD_PADDING, yPos + 20);
-        };
-
-        // Process case studies
-        caseStudies.forEach((study, index) => {
-            if (yPosition + 60 > pageHeight - 30) {
-                addFooter(doc);
-                doc.addPage();
-                currentPage++;
-                yPosition = 30;
-            }
-
-            yPosition = handleCardContent(study, yPosition);
-        });
-
+        yPosition = addCaseStudiesSection(doc, caseStudies, yPosition, pageWidth, pageHeight, addFooter);
+     
         // Add footer to the last page
         addFooter(doc);
 
@@ -455,7 +417,10 @@ export const exportToDOCX = async ({
     caseStudies,
     logoPath = "/placeholder-logo.png",
     categorizedInterventions,
-    returnBlob = false
+    returnBlob = false,
+    readmissionsChartRef = null,
+    touchpointsChartRef = null,
+    clinicalRisksChartRef = null
 }: ExportDOCXOptions): Promise<Blob | void> => {
     try {
         // Load logo image as ArrayBuffer
@@ -538,6 +503,10 @@ export const exportToDOCX = async ({
                 }
             ],
         };
+
+        const readmissionsChartData = await convertChartToImage(readmissionsChartRef);
+        const touchpointsChartData = await convertChartToImage(touchpointsChartRef);
+        const clinicalRisksChartData = await convertChartToImage(clinicalRisksChartRef);
 
         const doc = new Document({
             title: `${nursingHomeName} - Case Studies Report`,
@@ -646,6 +615,13 @@ export const exportToDOCX = async ({
                         spacing: { before: 2000, after: 200 },
                         style: "Heading",
                     }),
+                    ...(readmissionsChartData ? [
+                        new Paragraph({
+                            children: [createChartImage(readmissionsChartData)],
+                            spacing: { before: 200, after: 400 },
+                            alignment: AlignmentType.CENTER,
+                        }),
+                    ] : []),
 
                     // Interventions Section
                     new Paragraph({
@@ -697,6 +673,7 @@ export const exportToDOCX = async ({
                             ),
                         ]),
 
+                    // Puzzle Touchpoints Section
                     new Paragraph({
                         text: "Puzzle Touchpoints",
                         heading: HeadingLevel.HEADING_1,
@@ -707,7 +684,32 @@ export const exportToDOCX = async ({
                         spacing: { before: 600, after: 200 },
                         style: "Heading",
                     }),
+                    ...(touchpointsChartData ? [
+                        new Paragraph({
+                            children: [createChartImage(touchpointsChartData)],
+                            spacing: { before: 200, after: 400 },
+                            alignment: AlignmentType.CENTER,
+                        }),
+                    ] : []),
 
+                    // Clinical Risks Section
+                    new Paragraph({
+                        text: "Top Clinical Risks Identified at Discharge",
+                        heading: HeadingLevel.HEADING_1,
+                        indent: {
+                            left: 500,
+                            right: 500,
+                        },
+                        spacing: { before: 400, after: 200 },
+                        style: "Heading",
+                    }),
+                    ...(clinicalRisksChartData ? [
+                        new Paragraph({
+                            children: [createChartImage(clinicalRisksChartData)],
+                            spacing: { before: 200, after: 400 },
+                            alignment: AlignmentType.CENTER,
+                        }),
+                    ] : []),
 
                     // Outcomes Section
                     new Paragraph({
@@ -807,7 +809,7 @@ export const exportToDOCX = async ({
                         spacing: { before: 400, after: 400 },
                         style: "Heading",
                     }),
-                   ...caseStudies.flatMap((study, index) => 
+                    ...caseStudies.flatMap((study, index) =>
                         createCaseStudyCard(study, index % 2 === 0 ? COLORS.CARD1 : COLORS.CARD2)
                     ),
                 ],
@@ -834,7 +836,7 @@ const createCaseStudyCard = (study: any, theme: any) => {
 
         new Table({
             width: {
-                size: 10500, 
+                size: 10500,
                 type: WidthType.DXA,
             },
             indent: {
@@ -901,5 +903,223 @@ const createCaseStudyCard = (study: any, theme: any) => {
             ],
         }),
     ];
+};
+
+const addCaseStudiesSection = (
+    doc: jsPDF,
+    caseStudies: CaseStudy[],
+    yPosition: number,
+    pageWidth: number,
+    pageHeight: number,
+    addFooter: (doc: jsPDF) => void
+) => {
+    // Add section header
+    doc.setTextColor(COLORS.TITLE);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Case Study Highlights', 20, yPosition);
+    yPosition += 12;
+
+    const boxLeftMargin = 20;
+    const boxWidth = pageWidth - 40;
+    const boxPadding = 5;
+    const borderWidth = 2;
+    const separatorWidth = 0.2;
+    const textStartX = boxLeftMargin + boxPadding + borderWidth + 5;
+
+    let currentPage = doc.getCurrentPageInfo().pageNumber;
+
+    caseStudies.forEach((study, index) => {
+        // Calculate dimensions first
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(11);
+        const textLines = doc.splitTextToSize(
+            study.highlight_text,
+            boxWidth - (boxPadding * 2 + borderWidth + 10)
+        );
+        const textHeight = textLines.length * 5.5 + 12;
+        const boxHeight = Math.max(35, textHeight + boxPadding);
+
+        // Check if we need a new page
+        if (yPosition + boxHeight + 10 > pageHeight - 30) {
+            addFooter(doc);
+            doc.addPage();
+            currentPage++;
+            yPosition = 30;
+            doc.setTextColor(COLORS.TITLE);
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            yPosition += 12;
+        }
+
+        // Draw the box
+        doc.setFillColor(255, 255, 255);
+        doc.rect(boxLeftMargin, yPosition, boxWidth, boxHeight, 'F');
+        const bgColor = hexToRgb("#1A85FF");
+        doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+        doc.rect(boxLeftMargin, yPosition, borderWidth, boxHeight, 'F');
+
+        // Add patient name
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(COLORS.PATIENT_NAME);
+        doc.text(study.patient_name || 'Unknown Patient', textStartX, yPosition + boxPadding + 4);
+
+        // Add case study text
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(11);
+        doc.setTextColor(85, 85, 85);
+        doc.text(textLines, textStartX, yPosition + boxPadding + 14);
+
+        // Add separator line
+        if (index < caseStudies.length - 1) {
+            doc.setDrawColor(229, 231, 235);
+            doc.setLineWidth(separatorWidth);
+            doc.line(
+                boxLeftMargin,
+                yPosition + boxHeight,
+                boxLeftMargin + boxWidth,
+                yPosition + boxHeight
+            );
+        }
+
+        yPosition += boxHeight + 8;
+
+        // Add footer if this is the last item on the page
+        if (index < caseStudies.length - 1 && yPosition + boxHeight + 10 > pageHeight - 30) {
+            addFooter(doc);
+        }
+    });
+
+    return yPosition + 15;
+};
+
+// Add after BULLET_STYLE const
+
+const renderChart = async (doc: jsPDF, chartRef: HTMLDivElement | null, yPosition: number, errorMessage: string): Promise<{ newYPosition: number, error?: Error }> => {
+    if (!chartRef) {
+        return { newYPosition: yPosition };
+    }
+
+    try {
+        const width = Math.max(chartRef.clientWidth || 600, 600);
+        const height = Math.max(chartRef.clientHeight || 400, 400);
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        const wrapper = document.createElement('div');
+        Object.assign(wrapper.style, {
+            width: `${width}px`,
+            height: `${height}px`,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: '#ffffff',
+            position: 'fixed',
+            top: '-9999px',
+            left: '-9999px',
+            zIndex: '-1'
+        });
+
+        const clone = chartRef.cloneNode(true) as HTMLElement;
+        clone.style.width = '100%';
+        clone.style.height = '100%';
+        wrapper.appendChild(clone);
+        document.body.appendChild(wrapper);
+
+        const canvas = await html2canvas(wrapper, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            imageTimeout: 10000
+        });
+
+        document.body.removeChild(wrapper);
+
+        const chartImage = canvas.toDataURL('image/png', 1.0);
+        if (chartImage.length < 100) throw new Error('Invalid chart image generated.');
+
+        const maxWidth = pageWidth * 0.85;
+        const maxHeight = pageHeight * 0.4;
+
+        let imgWidth = maxWidth;
+        let imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        if (imgHeight > maxHeight) {
+            imgHeight = maxHeight;
+            imgWidth = (canvas.width * imgHeight) / canvas.height;
+        }
+
+        const x = (pageWidth - imgWidth) / 2;
+        doc.addImage(chartImage, 'PNG', x, yPosition, imgWidth, imgHeight, undefined, 'FAST');
+        return { newYPosition: yPosition + imgHeight + 20 };
+
+    } catch (err) {
+        console.error(errorMessage, err);
+        doc.setTextColor('#ff0000');
+        doc.setFontSize(10);
+        doc.text('Error: Unable to render chart section.', 20, yPosition);
+        return { newYPosition: yPosition + 10, error: err as Error };
+    }
+};
+
+const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<ArrayBuffer | undefined> => {
+    if (!chartRef) return undefined;
+
+    try {
+        const width = Math.max(chartRef.clientWidth || 600, 600);
+        const height = Math.max(chartRef.clientHeight || 400, 400) *2;
+
+        const wrapper = document.createElement('div');
+        Object.assign(wrapper.style, {
+            width: `${width}px`,
+            height: `${height}px`,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: '#ffffff',
+            position: 'fixed',
+            top: '-9999px',
+            left: '-9999px',
+            zIndex: '-1'
+        });
+
+        const clone = chartRef.cloneNode(true) as HTMLElement;
+        clone.style.width = '100%';
+        clone.style.height = '100%';
+        wrapper.appendChild(clone);
+        document.body.appendChild(wrapper);
+
+        const canvas = await html2canvas(wrapper, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            imageTimeout: 10000
+        });
+
+        document.body.removeChild(wrapper);
+
+        const blob = await new Promise<Blob>((resolve) => {
+            canvas.toBlob((blob) => resolve(blob!), 'image/png', 1.0);
+        });
+
+        return await blob.arrayBuffer();
+    } catch (error) {
+        console.error('Error converting chart to image:', error);
+        return undefined;
+    }
+};
+
+const createChartImage = (imageData: ArrayBuffer): ImageRun => {
+    return new ImageRun({
+        data: imageData,
+        transformation: {
+            width: 600,
+            height: 600,
+        },
+        type: 'png',
+    });
 };
 
