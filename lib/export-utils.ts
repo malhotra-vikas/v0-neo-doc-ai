@@ -1052,7 +1052,7 @@ const renderChart = async (doc: jsPDF, chartRef: HTMLDivElement | null, yPositio
 
     try {
         const width = Math.max(chartRef.clientWidth || 600, 600);
-        const height = Math.max(chartRef.clientHeight || 400, 400);
+        const height = Math.max(chartRef.clientHeight || 500, 0);
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
 
@@ -1073,6 +1073,7 @@ const renderChart = async (doc: jsPDF, chartRef: HTMLDivElement | null, yPositio
         const clone = chartRef.cloneNode(true) as HTMLElement;
         clone.style.width = '100%';
         clone.style.height = '100%';
+        clone.style.objectFit = 'contain'
         wrapper.appendChild(clone);
         document.body.appendChild(wrapper);
 
@@ -1136,7 +1137,7 @@ const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<{ d
 
         // Ensure minimum dimensions
         const width = Math.max(fullWidth, 600);
-        const height = Math.max(fullHeight, 400);
+        const height = Math.max(fullHeight, 500);
         const aspectRatio = width / height;
 
         // Create a wrapper with padding to ensure no content is cut
@@ -1144,25 +1145,25 @@ const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<{ d
         Object.assign(wrapper.style, {
             width: `${width}px`,
             height: `${height}px`,
-            padding: '20px',
+            padding: '0',
             display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: '#ffffff',
+            justifyContent: 'start',
+            alignItems: 'start',
+            backgroundColor: '#fff',
             position: 'fixed',
             top: '-9999px',
             left: '-9999px',
             zIndex: '-1',
-            overflow: 'visible'
+            overflow: 'hidden',
         });
 
         // Clone and ensure the chart takes full size
         const clone = chartRef.cloneNode(true) as HTMLElement;
         Object.assign(clone.style, {
             width: '100%',
-            height: '100%',
+            height: '50%',
             margin: '0',
-            padding: '0'
+            padding: '0',
         });
 
         wrapper.appendChild(clone);
