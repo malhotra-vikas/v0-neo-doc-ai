@@ -59,19 +59,60 @@ interface NursingHome {
 interface CaseStudyHighlight {
     id: string
     patient_id: string
-    file_id?: string
     highlight_text: string
     hospital_discharge_summary_text: string
+    highlight_quotes?: { quote: string; source_file_id: string }[]
+    hospital_discharge_summary_quotes?: { quote: string; source_file_id: string }[]
     interventions?: string[]
     outcomes?: string[]
     clinical_risks?: string[]
+    detailed_interventions?: { intervention: string; source_quote: string; source_file_id: string }[]
+    detailed_outcomes?: { outcome: string; source_quote: string; source_file_id: string }[]
+    detailed_clinical_risks?: { risk: string; source_quote: string; source_file_id: string }[]
     created_at: string
     patient_name?: string
-    file_name?: string
 }
 
 interface ReportGeneratorProps {
     nursingHomes: NursingHome[]
+}
+
+export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
+    if (!quotes || quotes.length === 0) return null
+
+    console.log("quotes are ", quotes)
+
+    return (
+        <div className="mt-2 ml-2">
+            {quotes.map((q, index) => {
+                let fileLink = null
+
+                if (q.source_file_id) {
+                    fileLink = `/api/download-file?id=${q.source_file_id}`
+                }
+
+                return (
+                    <div key={index} className="mb-1 text-xs text-gray-600">
+                        <span className="italic">"{q.quote}"</span>
+                        {fileLink && (
+                            <span>
+                                &nbsp;(
+                                <a
+                                    href={fileLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline text-blue-600 hover:text-blue-800"
+                                >
+                                    {label}
+                                </a>
+                                )
+                            </span>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
 }
 
 export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
@@ -299,13 +340,18 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const { data, error } = await supabase
                 .from("patient_case_study_highlights")
                 .select(`
-                    id, 
-                    patient_id, 
+                    id,
+                    patient_id,
                     hospital_discharge_summary_text,
-                    highlight_text, 
+                    highlight_text,
                     interventions,
                     outcomes,
                     clinical_risks,
+                    highlight_quotes,
+                    hospital_discharge_summary_quotes,
+                    detailed_interventions,
+                    detailed_outcomes,
+                    detailed_clinical_risks,
                     created_at
                 `)
                 .in("patient_id", patientIds)
@@ -328,6 +374,11 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     interventions: cs.interventions,
                     outcomes: cs.outcomes,
                     clinical_risks: cs.clinical_risks,
+                    highlight_quotes: cs.highlight_quotes,
+                    hospital_discharge_summary_quotes: cs.hospital_discharge_summary_quotes,
+                    detailed_interventions: cs.detailed_interventions,
+                    detailed_outcomes: cs.detailed_outcomes,
+                    detailed_clinical_risks: cs.detailed_clinical_risks,
                     created_at: cs.created_at,
                     patient_name: patient?.name || "Unknown Patient",
                 }
@@ -425,7 +476,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         try {
 
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
-            
+
             if (!selectedNursingHome) {
                 throw new Error('Selected nursing home not found')
             }
@@ -451,7 +502,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Create a URL for the blob
             const pdfUrl = URL.createObjectURL(result)
-            
+
             // Open PDF in new window
             const printWindow = window.open(pdfUrl, '_blank')
             if (printWindow) {
@@ -488,7 +539,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         try {
             setIsExporting(true)
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
-            
+
             if (!selectedNursingHome) {
                 throw new Error('Selected nursing home not found')
             }
@@ -525,7 +576,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         try {
             setIsExporting(true);
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId);
-            
+
             if (!selectedNursingHome) {
                 throw new Error('Selected nursing home not found');
             }
@@ -944,7 +995,12 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                                     <h4 className="text-md font-semibold text-blue-700 mb-2">{subcategory}</h4>
                                                     <ul className="list-disc list-inside ml-4 text-sm text-gray-700 space-y-1">
                                                         {items.map((item, index) => (
-                                                            <li key={index}>{item}</li>
+                                                            <li key={index}>
+                                                                {item.intervention}
+                                                                <p className="text-xs text-gray-500 italic mt-1 pl-2">
+                                                                    "{item.source_quote}" — {item.source_file}
+                                                                </p>
+                                                            </li>
                                                         ))}
                                                     </ul>
                                                 </div>
@@ -1085,13 +1141,19 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                     {/* Outcomes Section */}
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Key Interventions and Outcomes</h3>
-                                        <ul className="text-sm text-gray-700 space-y-2">
-                                            {[...new Set(caseStudies.flatMap((study) => study.outcomes || []).filter(Boolean))].map(
-                                                (item, i) => (
-                                                    <li key={i}>• {item}</li>
-                                                ),
-                                            )}
-                                        </ul>
+                                        {caseStudies.map((study) => (
+                                            <div key={study.id} className="mb-4">
+                                                <p className="text-sm font-medium text-gray-700">{study.patient_name}</p>
+                                                <ul className="list-disc list-inside pl-4 text-sm text-gray-700 space-y-1 mt-1">
+                                                    {(study.detailed_interventions || []).map((item, idx) => (
+                                                        <li key={idx}>
+                                                            {item.intervention}
+                                                            <p className="text-xs text-gray-500 italic mt-1 pl-2">"{item.source_quote}" — {item.source_file}</p>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ))}
                                     </div>
 
                                     {/* Case Studies */}
@@ -1099,10 +1161,14 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Case Study Highlights</h3>
                                         {caseStudies.length > 0 ? (
                                             caseStudies.map((study) => (
+
                                                 <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
                                                     <p className="text-sm font-medium">{study.patient_name}</p>
                                                     <p className="text-sm font-medium">{study.hospital_discharge_summary_text}</p>
-                                                    <p className="text-sm mt-2">{study.highlight_text}</p>
+                                                    <Citations label="Cited from" quotes={study.hospital_discharge_summary_quotes || []} />
+
+                                                    <p className="text-sm mt-4">{study.highlight_text}</p>
+                                                    <Citations label="Cited from" quotes={study.highlight_quotes || []} />
                                                 </div>
                                             ))
                                         ) : (

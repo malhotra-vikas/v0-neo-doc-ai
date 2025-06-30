@@ -81,7 +81,7 @@ export async function generateCaseStudyHighlightForPatient(patientId: string) {
         let allFilesParsedText = ""
         if (fileData && fileData.length > 0) {
             for (const file of fileData) {
-                allFilesParsedText += `${file.parsed_text}\n\n`
+                allFilesParsedText += `---\nFile ID: ${file.id}\nFile Type: ${file.file_type}\n\n${file.parsed_text}\n\n`;
             }
         } else {
             console.log("No files found for patient")
@@ -117,40 +117,63 @@ export async function generateCaseStudyHighlightForPatient(patientId: string) {
         const prompt = `
 You are a medical case study generator for Puzzle Healthcare.
 
-Given a patient discharge document, your task is to extract 
-(1) concise professional case study highlight, 
-(2) interventions provided by Puzzle, 
-(3) key interventions and its outcome and 
-(4) top clinical risks 
+Given a patient discharge document, extract:
+1. A concise professional case study highlight
+2. Interventions provided by Puzzle Health Care
+3. Key interventions and outcomes
+4. Top clinical risks
 
-in structured JSON format:
+For each section, also include 1-2 source quotes from the discharge text that support the content. Do not fabricate — only use actual phrases or sentences from the text.
+For each quote, include the associated File ID from the document chunks. You will find these clearly marked like:
+---
+File ID: 123
+File Type: Discharge Summary
+
+<parsed text>
 
 Patient Identifier: ${abbreviatedName}
 
-IMPORTANT PRIVACY INSTRUCTIONS:
-1. DO NOT include names of family members or other individuals.
-2. DO NOT include personally identifiable information (PII).
-3. Focus only on medical and clinical information relevant to Puzzle Healthcare's role.
-4. Focus on how Puzzle Healthcare intervened and the specific ways Puzzle Healthcare helped the patient
-5. DO NOT add any superlatives.
+PRIVACY INSTRUCTIONS:
+- Do NOT include names of family or individuals
+- Do NOT include any PII
+- Focus only on medical and clinical information relevant to Puzzle Healthcare's role
+- Highlight and Focus on how Puzzle Healthcare intervened and the specific ways Puzzle Healthcare helped the patient
+- Use professional tone, no superlatives
 
-Please extract and return data in the following JSON format:
+Return valid JSON in this format:
 
 {
-  "hospital_discharge_summary": "A 200 word paragraph that summarizes the patient's hospital discharge. Use professional medical terminology. No superlatives.",           
-  "highlight": "A 150-200 word paragraph that highlights Puzzle Healthcare's intervention during SNF and during the Patient Engagements, and the positive impact on the patient. Use professional medical terminology.  No superlatives.", 
-  "interventions": ["Intervention A", "Intervention B", "Intervention C"],
-  "outcomes": ["Key Intervention and its Outcome A", "Key Intervention and its Outcome B"],
-  "clinical_risks": ["Clinical Risk A", "Clinical Risk B"]
+  "hospital_discharge_summary": {
+    "summary": "200 word paragraph that summarizes the patient's hospital discharge. Use professional medical terminology. No superlatives.",
+    "source_quotes": [
+         { "quote": "quote 1", "source_file_id": "123" },
+         { "quote": "quote 2", "source_file_id": "456" }
+    ] 
+  },
+  "highlight": {
+    "summary": "150-200 word paragraph that highlights Puzzle Healthcare's intervention during SNF and during the Patient Engagements, and the positive impact on the patient. Use professional medical terminology.  No superlatives.",
+    "source_quotes": [
+         { "quote": "quote 1", "source_file_id": "123" },
+         { "quote": "quote 2", "source_file_id": "456" }
+    ] 
+  },
+  "interventions": [
+    { "intervention": "Intervention A", "source_quote": "quote A", "source_file_id": "789"  },
+    { "intervention": "Intervention B", "source_quote": "quote A", "source_file_id": "789"  }
+  ],
+  "outcomes": [
+    { "outcome": "Outcome A", "source_quote": "quote A", "source_file_id": "789"  }
+  ],
+  "clinical_risks": [
+    { "risk": "Risk A", "source_quote": "quote A", "source_file_id": "789"  }
+  ]
 }
 
 Only return valid JSON — no commentary or explanation. Here is the discharge document text:
 
+Discharge text:
 ${allFilesParsedText}
-`;
-
-
-        // Generate the case study highlight using OpenAI
+        `;
 
         const completion = await openai.chat.completions.create({
             model: "gpt-4o",
@@ -159,83 +182,62 @@ ${allFilesParsedText}
                 { role: "user", content: prompt },
             ],
             temperature: 0.5,
-            max_tokens: 1000,
-        })
-        let outputJson
-        let hospital_discharge_summary
-        let highlight
-        let interventions
-        let outcomes
-        let clinical_risks
+            max_tokens: 1500,
+        });
 
+        let outputJson, hospital_discharge_summary, highlight, interventions, outcomes, clinical_risks;
         try {
-            let cleanedJsonString = completion.choices[0].message.content.trim();
-            if (cleanedJsonString.startsWith("```json")) {
-                cleanedJsonString = cleanedJsonString.replace(/```json|```/g, "").trim();
+            let cleanedJson = completion.choices[0].message.content.trim();
+            if (cleanedJson.startsWith("```json")) {
+                cleanedJson = cleanedJson.replace(/```json|```/g, "").trim();
             }
 
-            outputJson = JSON.parse(cleanedJsonString);
+            outputJson = JSON.parse(cleanedJson);
 
             ({ hospital_discharge_summary, highlight, interventions, outcomes, clinical_risks } = outputJson);
 
-            console.log("📝 Hospital Discharge Summary:");
-            console.log(hospital_discharge_summary);
-            console.log("📝 Highlight:");
-            console.log(highlight);
-            console.log("\n🧰 Interventions:");
-            interventions?.forEach((i, idx) => console.log(`${idx + 1}. ${i}`));
-            console.log("\n📈 Outcomes:");
-            outcomes?.forEach((o, idx) => console.log(`${idx + 1}. ${o}`));
-            console.log("\n⚠️ Clinical Risks:");
-            clinical_risks?.forEach((r, idx) => console.log(`${idx + 1}. ${r}`));
+            console.log("📝 Summary:", hospital_discharge_summary?.summary);
+            console.log("📌 Highlight:", highlight?.summary);
 
         } catch (err) {
-            console.error("Failed to parse OpenAI response:", err)
-            outputJson = { error: "Invalid JSON", raw: completion.choices[0].message.content }
+            console.error("Failed to parse OpenAI response:", err);
+            outputJson = { error: "Invalid JSON", raw: completion.choices[0].message.content };
         }
 
-        // PII sanitization
-        const rawHighlightText = highlight || "";
-        const sanitizedHighlightText = sanitizePII(rawHighlightText, patientData.name);
-
-                // PII sanitization
-        const rawHospitalDischargeSummary = hospital_discharge_summary || "";
-        const sanitizedHospitalDischargeSummary = sanitizePII(hospital_discharge_summary, patientData.name);
+        const sanitizedSummary = sanitizePII(hospital_discharge_summary?.summary || "", patientData.name);
+        const sanitizedHighlight = sanitizePII(highlight?.summary || "", patientData.name);
 
         const highlightPayload = {
-            hospital_discharge_summary_text: sanitizedHospitalDischargeSummary,
-            highlight_text: sanitizedHighlightText,
+            hospital_discharge_summary_text: sanitizedSummary,
+            hospital_discharge_summary_quotes: hospital_discharge_summary?.source_quotes || [],
+            highlight_text: sanitizedHighlight,
+            highlight_quotes: highlight?.source_quotes || [],
             interventions,
             outcomes,
             clinical_risks,
             updated_at: new Date().toISOString()
         };
 
-        console.log("\n PAYLOAD: ", highlightPayload);
+        console.log("✅ Payload to save:", highlightPayload);
 
-        // Store the generated highlight in the database
         if (existingHighlight) {
-            // Update existing highlight
             await supabase
                 .from("patient_case_study_highlights")
                 .update(highlightPayload)
-                .eq("id", existingHighlight.id)
+                .eq("id", existingHighlight.id);
         } else {
-            // Create new highlight
-            await supabase.from("patient_case_study_highlights").insert({
-                patient_id: patientId,
-                ...highlightPayload
-            })
+            await supabase
+                .from("patient_case_study_highlights")
+                .insert({ patient_id: patientId, ...highlightPayload });
         }
 
-        return { success: true, highlight: highlightPayload }
+        return { success: true, highlight: highlightPayload };
+
     } catch (error: any) {
-
-
         return {
             success: false,
-            error: error.message || "Failed to generate case study highlight",
-        }
+            error: error.message || "Failed to generate case study highlight"
+        };
     }
 }
 
