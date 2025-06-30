@@ -61,6 +61,7 @@ interface CaseStudyHighlight {
     patient_id: string
     file_id?: string
     highlight_text: string
+    hospital_discharge_summary_text: string
     interventions?: string[]
     outcomes?: string[]
     clinical_risks?: string[]
@@ -143,7 +144,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Create date range for the selected month
             const startDate = `${selectedYear}-${monthNumber.toString().padStart(2, "0")}-01`
-            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0] // Last day of month
+            const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1
+            const nextYear = monthNumber === 12 ? Number(selectedYear) + 1 : Number(selectedYear)
+            const endDate = `${nextYear}-${nextMonth.toString().padStart(2, "0")}-01`
 
             const { data: patients, error } = await supabase
                 .from("patients")
@@ -279,7 +282,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Create date range for the selected month
             const startDate = `${selectedYear}-${monthNumber.toString().padStart(2, "0")}-01`
-            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0]
+            const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1
+            const nextYear = monthNumber === 12 ? Number(selectedYear) + 1 : Number(selectedYear)
+            const endDate = `${nextYear}-${nextMonth.toString().padStart(2, "0")}-01`
 
             // Use selected patients or all patients if none selected
             const patientIds = selectedPatients.length > 0 ? selectedPatients : availablePatients.map((p) => p.id)
@@ -296,6 +301,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 .select(`
                     id, 
                     patient_id, 
+                    hospital_discharge_summary_text,
                     highlight_text, 
                     interventions,
                     outcomes,
@@ -317,6 +323,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 return {
                     id: cs.id,
                     patient_id: cs.patient_id,
+                    hospital_discharge_summary_text: cs.hospital_discharge_summary_text,
                     highlight_text: cs.highlight_text,
                     interventions: cs.interventions,
                     outcomes: cs.outcomes,
@@ -844,7 +851,7 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                             Patient Snapshot Overview: 30-Day Readmissions
                                         </h2>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6"ref={readmissionsChartRef}>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6" ref={readmissionsChartRef}>
                                             {/* Pie Chart */}
                                             <div className="h-[300px]" >
                                                 <ChartContainer
@@ -1094,6 +1101,7 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                             caseStudies.map((study) => (
                                                 <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
                                                     <p className="text-sm font-medium">{study.patient_name}</p>
+                                                    <p className="text-sm font-medium">{study.hospital_discharge_summary_text}</p>
                                                     <p className="text-sm mt-2">{study.highlight_text}</p>
                                                 </div>
                                             ))

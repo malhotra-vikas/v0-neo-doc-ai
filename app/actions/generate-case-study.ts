@@ -75,7 +75,7 @@ export async function generateCaseStudyHighlightForPatient(patientId: string) {
         // Get the file data
         const { data: fileData, error: fileError } = await supabase
             .from("patient_files")
-            .select("id, patient_id, parsed_text")
+            .select("id, file_type, patient_id, parsed_text")
             .eq("patient_id", patientId)
 
         let allFilesParsedText = ""
@@ -132,11 +132,13 @@ IMPORTANT PRIVACY INSTRUCTIONS:
 2. DO NOT include personally identifiable information (PII).
 3. Focus only on medical and clinical information relevant to Puzzle Healthcare's role.
 4. Focus on how Puzzle Healthcare intervened and the specific ways Puzzle Healthcare helped the patient
+5. DO NOT add any superlatives.
 
 Please extract and return data in the following JSON format:
 
 {
-  "highlight": "A 150-200 word paragraph that highlights patient's medical issues, Puzzle Healthcare's intervention, and the positive impact on the patient. Use professional medical terminology where appropriate.",           
+  "hospital_discharge_summary": "A 200 word paragraph that summarizes the patient's hospital discharge. Use professional medical terminology. No superlatives.",           
+  "highlight": "A 150-200 word paragraph that highlights Puzzle Healthcare's intervention during SNF and during the Patient Engagements, and the positive impact on the patient. Use professional medical terminology.  No superlatives.", 
   "interventions": ["Intervention A", "Intervention B", "Intervention C"],
   "outcomes": ["Key Intervention and its Outcome A", "Key Intervention and its Outcome B"],
   "clinical_risks": ["Clinical Risk A", "Clinical Risk B"]
@@ -151,7 +153,7 @@ ${allFilesParsedText}
         // Generate the case study highlight using OpenAI
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4o",
             messages: [
                 { role: "system", content: "You are a medical case study writer for Puzzle Healthcare." },
                 { role: "user", content: prompt },
@@ -160,6 +162,7 @@ ${allFilesParsedText}
             max_tokens: 1000,
         })
         let outputJson
+        let hospital_discharge_summary
         let highlight
         let interventions
         let outcomes
@@ -173,8 +176,10 @@ ${allFilesParsedText}
 
             outputJson = JSON.parse(cleanedJsonString);
 
-            ({ highlight, interventions, outcomes, clinical_risks } = outputJson);
+            ({ hospital_discharge_summary, highlight, interventions, outcomes, clinical_risks } = outputJson);
 
+            console.log("📝 Hospital Discharge Summary:");
+            console.log(hospital_discharge_summary);
             console.log("📝 Highlight:");
             console.log(highlight);
             console.log("\n🧰 Interventions:");
@@ -193,7 +198,12 @@ ${allFilesParsedText}
         const rawHighlightText = highlight || "";
         const sanitizedHighlightText = sanitizePII(rawHighlightText, patientData.name);
 
+                // PII sanitization
+        const rawHospitalDischargeSummary = hospital_discharge_summary || "";
+        const sanitizedHospitalDischargeSummary = sanitizePII(hospital_discharge_summary, patientData.name);
+
         const highlightPayload = {
+            hospital_discharge_summary_text: sanitizedHospitalDischargeSummary,
             highlight_text: sanitizedHighlightText,
             interventions,
             outcomes,
@@ -259,7 +269,7 @@ export async function generateCaseStudyHighlight(fileId: string) {
         // Get the file data
         const { data: fileData, error: fileError } = await supabase
             .from("patient_files")
-            .select("id, patient_id, parsed_text")
+            .select("id, patient_id, parsed_text, file_type")
             .eq("id", fileId)
             .single()
 
@@ -293,8 +303,28 @@ export async function generateCaseStudyHighlight(fileId: string) {
             throw new Error("No parsed text available for this file. Please process the PDF first.")
         }
 
+        const promptPatientEngagement = `
+You are a medical case study writer for Puzzle Healthcare. Your task is to create a concise, professional case study highlight based on the following patient discharge document.
+
+Patient Identifier: ${abbreviatedName}
+
+IMPORTANT PRIVACY INSTRUCTIONS:
+1. DO NOT include names of family members or other individuals
+2. Focus only on medical information and Puzzle Healthcare's intervention
+
+Focus on:
+1. How Puzzle Healthcare intervened
+2. The specific ways Puzzle Healthcare helped the patient
+3. Any notable outcomes or improvements
+4. Do Not add any superlatives 
+
+Format your response as a single paragraph (150-200 words) that highlights the Puzzle Healthcare's intervention, and the positive impact on the patient. Use professional medical terminology where appropriate.
+
+Here is the discharge document text:
+${fileData.parsed_text} // Limit to 4000 chars to avoid token limits
+`
         // Prepare the prompt for OpenAI with PII protection instructions
-        const prompt = `
+        const promptGeneral = `
 You are a medical case study writer for Puzzle Healthcare. Your task is to create a concise, professional case study highlight based on the following patient discharge document.
 
 Patient Identifier: ${abbreviatedName}
@@ -308,17 +338,26 @@ Focus on:
 2. How Puzzle Healthcare intervened
 3. The specific ways Puzzle Healthcare helped the patient
 4. Any notable outcomes or improvements
+5. Do Not add any superlatives 
 
 Format your response as a single paragraph (150-200 words) that highlights the medical issues, Puzzle Healthcare's intervention, and the positive impact on the patient. Use professional medical terminology where appropriate.
 
 Here is the discharge document text:
-${fileData.parsed_text.substring(0, 4000)} // Limit to 4000 chars to avoid token limits
+${fileData.parsed_text} // Limit to 4000 chars to avoid token limits
 `
+
+        let prompt = promptGeneral
+        let fileType = fileData.file_type
+
+        if (fileType === 'Patient Engagement') {
+            prompt = promptPatientEngagement
+        }
+
 
         // Generate the case study highlight using OpenAI
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4o",
             messages: [
                 { role: "system", content: "You are a medical case study writer for Puzzle Healthcare." },
                 { role: "user", content: prompt },
