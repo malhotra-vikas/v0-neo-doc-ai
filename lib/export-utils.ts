@@ -37,6 +37,7 @@ const BULLET_STYLE = {
 interface CaseStudy {
     id: string;
     patient_id: string;
+    hospital_discharge_summary_text: string;
     highlight_text: string;
     created_at: string;
     patient_name?: string;
@@ -230,9 +231,20 @@ export const exportToPDF = async ({
         yPosition = 30;
         // Interventions Section
         addSectionHeader('Types of Interventions Delivered');
+
+        // Log the full structure once
+        console.log('🧩 categorizedInterventions:', JSON.stringify(categorizedInterventions, null, 2));
+
         Object.entries(categorizedInterventions)
             .filter(([_, items]) => items.length > 0)
             .forEach(([subcategory, items]) => {
+                console.log(`📂 Subcategory: ${subcategory}`);
+
+                const interventionTexts = items.map((item, idx) => {
+                    console.log(`   - [${idx + 1}] ${item.intervention}`);
+                    return item.intervention;
+                });
+
                 if (yPosition > pageHeight - 50) {
                     addFooter(doc);
                     doc.addPage();
@@ -246,7 +258,7 @@ export const exportToPDF = async ({
                 doc.text(subcategory, 20, yPosition);
                 yPosition += 5;
 
-                addListItems(items);
+                addListItems(interventionTexts);
             });
 
         // Puzzle Touchpoints Section with Chart
@@ -288,8 +300,25 @@ export const exportToPDF = async ({
         currentPage++;
         yPosition = 30;
         addSectionHeader('Key Interventions and Outcomes');
-        const uniqueOutcomes = [...new Set(caseStudies.flatMap(study => study.outcomes || []).filter(Boolean))];
-        addListItems(uniqueOutcomes);
+        const outcomeTexts = [
+            ...new Set(
+                caseStudies
+                    .flatMap(study => study.outcomes || [])
+                    .map((item) => {
+                        try {
+                            const parsed = typeof item === "string" ? JSON.parse(item) : item
+                            return parsed.outcome?.trim()
+                        } catch {
+                            return null
+                        }
+                    })
+                    .filter(Boolean)
+            )
+        ];
+
+        console.log("Outcome text is ", outcomeTexts)
+
+        addListItems(outcomeTexts);
 
         // Clinical Risks Section
         addFooter(doc);
@@ -298,7 +327,23 @@ export const exportToPDF = async ({
         yPosition = 30;
         yPosition += 10; // Add extra space before section
         addSectionHeader('Top Clinical Risks Identified at Discharge');
-        const uniqueRisks = [...new Set(caseStudies.flatMap(study => study.clinical_risks || []).filter(Boolean))];
+
+        const uniqueRisks = [
+            ...new Set(
+                caseStudies
+                    .flatMap(study => study.clinical_risks || [])
+                    .map((item) => {
+                        try {
+                            const parsed = typeof item === "string" ? JSON.parse(item) : item
+                            return parsed.risk?.trim()
+                        } catch {
+                            return null
+                        }
+                    })
+                    .filter(Boolean)
+            )
+        ];
+
         addListItems(uniqueRisks.slice(0, 30));
 
         if (uniqueRisks.length > 30) {
@@ -939,11 +984,12 @@ const addCaseStudiesSection = (
     const textStartX = boxLeftMargin + boxPadding + borderWidth + 5;
 
     caseStudies.forEach((study, index) => {
+        console.log("Case Study ", study)
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(11);
 
         const allLines = doc.splitTextToSize(
-            study.highlight_text,
+            `${study.hospital_discharge_summary_text}\n\n${study.highlight_text}`,
             boxWidth - (boxPadding * 2 + borderWidth + 10)
         );
         const lineHeight = 4.3;
@@ -977,7 +1023,7 @@ const addCaseStudiesSection = (
             textOnNextPage = allLines.slice(splitIndex);
         }
 
-        const drawCaseBox = (lines:any, topY:any, isContinued = false) => {
+        const drawCaseBox = (lines: any, topY: any, isContinued = false) => {
             const boxHeight = Math.max(35, lines.length * lineHeight + boxHeaderHeight);
             doc.setFillColor(255, 255, 255);
             doc.rect(boxLeftMargin, topY, boxWidth, boxHeight, 'F');
