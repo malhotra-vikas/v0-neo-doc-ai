@@ -233,7 +233,13 @@ export const exportToPDF = async ({
         addSectionHeader('Types of Interventions Delivered');
 
         // Log the full structure once
-        console.log('🧩 categorizedInterventions:', JSON.stringify(categorizedInterventions, null, 2));
+        console.log("👉 categorizedInterventions:", categorizedInterventions);
+        console.log(
+            "👉 entries with items:",
+            Object.entries(categorizedInterventions || {}).filter(
+                ([_, items]) => Array.isArray(items) && items.length > 0
+            )
+        );
 
         Object.entries(categorizedInterventions)
             .filter(([_, items]) => items.length > 0)

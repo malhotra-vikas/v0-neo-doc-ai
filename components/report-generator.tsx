@@ -80,8 +80,6 @@ interface ReportGeneratorProps {
 export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
     if (!quotes || quotes.length === 0) return null
 
-    console.log("quotes are ", quotes)
-
     return (
         <div className="mt-2 ml-2">
             {quotes.map((q, index) => {
@@ -1213,9 +1211,6 @@ ${JSON.stringify(parsed, null, 2)}
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Key Interventions and Outcomes</h3>
                                         {caseStudies.map((study) => {
-                                            console.log("📋 Processing outcomes for patient:", study.patient_name);
-                                            console.log("🧾 Raw detailed_outcomes:", study.detailed_outcomes);
-
                                             return (
                                                 <div key={study.id} className="mb-4">
                                                     <p className="text-sm font-medium text-gray-700">{study.patient_name}</p>
