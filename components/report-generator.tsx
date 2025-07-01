@@ -623,7 +623,11 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         console.log("parsed interventions are ", parsed)
 
         const prompt = `
-Given the following list of healthcare interventions, categorize them into subcategories:
+
+Given the following list of healthcare interventions, first normalize the interventions by grouping similar or redundant entries together (e.g., "Care Coordination", "Coordination of Care by dedicated manager", "Care Team coordination" should all be grouped under "Care Coordination"). 
+Preserve the source quotes and source_file_ids under each grouped entry.
+
+Then, categorize each **normalized intervention** into one of these subcategories:
 - Transitional Support
 - Engagement & Education
 - Care Navigation
