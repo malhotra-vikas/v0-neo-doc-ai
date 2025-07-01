@@ -128,7 +128,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const touchpointsChartRef = useRef<HTMLDivElement>(null)
     const clinicalRisksChartRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
-    const [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
+    let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
 
     // Add intervention counts state for the Touchpoints chart
     const [interventionCounts, setInterventionCounts] = useState<Array<{ name: string; count: number }>>([
@@ -419,6 +419,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 )
 
                 const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
+                categorizedInterventions = categorized
                 setCategorizedInterventions(categorized)
 
                 // Set the intervention counts for the Touchpoints chart
