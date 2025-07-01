@@ -264,7 +264,7 @@ ${extractedText}
                     })
                 }
 
-                const geenratedHighlight = await generateCaseStudyHighlight(queueItem.file_id)
+                //const geenratedHighlight = await generateCaseStudyHighlight(queueItem.file_id)
 
                 const geenratedPatientHighlight = await generateCaseStudyHighlightForPatient(patientData.patient_id)
 
