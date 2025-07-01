@@ -994,14 +994,37 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                                 <div key={subcategory} className="mb-4">
                                                     <h4 className="text-md font-semibold text-blue-700 mb-2">{subcategory}</h4>
                                                     <ul className="list-disc list-inside ml-4 text-sm text-gray-700 space-y-1">
-                                                        {items.map((item, index) => (
-                                                            <li key={index}>
-                                                                {item.intervention}
-                                                                <p className="text-xs text-gray-500 italic mt-1 pl-2">
-                                                                    "{item.source_quote}" — {item.source_file}
-                                                                </p>
-                                                            </li>
-                                                        ))}
+                                                        {items.map((item, index) => {
+                                                            let parsed = item
+                                                            if (typeof item === "string") {
+                                                                try {
+                                                                    parsed = JSON.parse(item)
+                                                                } catch (e) {
+                                                                    console.error("❌ Failed to parse intervention:", item)
+                                                                }
+                                                            }
+
+                                                            return (
+                                                                <li key={index}>
+                                                                    {parsed.intervention}
+                                                                    <p className="text-xs text-gray-500 italic mt-1 pl-2">
+                                                                        "{parsed.source_quote}" —
+                                                                        {parsed.source_file_id ? (
+                                                                            <a
+                                                                                href={`/api/download-file?id=${parsed.source_file_id}`}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="text-blue-600 underline ml-1"
+                                                                            >
+                                                                                Download Source
+                                                                            </a>
+                                                                        ) : (
+                                                                            " Source file not available"
+                                                                        )}
+                                                                    </p>
+                                                                </li>
+                                                            )
+                                                        })}
                                                     </ul>
                                                 </div>
                                             ))}
@@ -1141,19 +1164,54 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                     {/* Outcomes Section */}
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Key Interventions and Outcomes</h3>
-                                        {caseStudies.map((study) => (
-                                            <div key={study.id} className="mb-4">
-                                                <p className="text-sm font-medium text-gray-700">{study.patient_name}</p>
-                                                <ul className="list-disc list-inside pl-4 text-sm text-gray-700 space-y-1 mt-1">
-                                                    {(study.detailed_interventions || []).map((item, idx) => (
-                                                        <li key={idx}>
-                                                            {item.intervention}
-                                                            <p className="text-xs text-gray-500 italic mt-1 pl-2">"{item.source_quote}" — {item.source_file}</p>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ))}
+                                        {caseStudies.map((study) => {
+                                            console.log("📋 Processing outcomes for patient:", study.patient_name);
+                                            console.log("🧾 Raw detailed_outcomes:", study.detailed_outcomes);
+
+                                            return (
+                                                <div key={study.id} className="mb-4">
+                                                    <p className="text-sm font-medium text-gray-700">{study.patient_name}</p>
+                                                    <ul className="list-disc list-inside pl-4 text-sm text-gray-700 space-y-1 mt-1">
+                                                        {(study.detailed_outcomes || []).map((item, idx) => {
+                                                            let parsed = item;
+                                                            if (typeof item === "string") {
+                                                                try {
+                                                                    parsed = JSON.parse(item);
+                                                                    console.log("✅ Parsed outcome item:", parsed);
+                                                                } catch (err) {
+                                                                    console.error("❌ Failed to parse detailed_outcome item:", item, err);
+                                                                    return null;
+                                                                }
+                                                            }
+
+                                                            return (
+                                                                <li key={idx}>
+                                                                    {parsed.outcome}
+                                                                    {parsed.source_quote && (
+                                                                        <p className="text-xs text-gray-500 italic mt-1 pl-2">
+                                                                            “{parsed.source_quote}”
+                                                                            {parsed.source_file_id && (
+                                                                                <>
+                                                                                    {" — "}
+                                                                                    <a
+                                                                                        href={`/api/download-file?id=${parsed.source_file_id}`}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        className="text-blue-600 underline"
+                                                                                    >
+                                                                                        Download Source
+                                                                                    </a>
+                                                                                </>
+                                                                            )}
+                                                                        </p>
+                                                                    )}
+                                                                </li>
+                                                            );
+                                                        })}
+                                                    </ul>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
 
                                     {/* Case Studies */}

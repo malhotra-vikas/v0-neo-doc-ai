@@ -215,6 +215,9 @@ ${allFilesParsedText}
             interventions,
             outcomes,
             clinical_risks,
+            detailed_interventions: interventions, 
+            detailed_outcomes: outcomes,           
+            detailed_clinical_risks: clinical_risks,
             updated_at: new Date().toISOString()
         };
 
