@@ -102,7 +102,7 @@ export function AutoRefreshWrapper({ children, userId, pageName }: AutoRefreshWr
     useEffect(() => {
         setMounted(true);
     }, []);
-    
+
     // Reset timer when interval changes
     useEffect(() => {
         setTimeRemaining(refreshInterval)
@@ -209,10 +209,13 @@ export function AutoRefreshWrapper({ children, userId, pageName }: AutoRefreshWr
                     </div>
 
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <div className="flex items-center">
-                            <Clock className="h-3.5 w-3.5 mr-1" />
-                            <span>Last updated: {lastRefreshed.toLocaleTimeString()}</span>
-                        </div>
+                        {mounted && (
+                            <div className="flex items-center">
+                                <Clock className="h-3.5 w-3.5 mr-1" />
+                                <span>Last updated: {lastRefreshed.toLocaleTimeString()}</span>
+                            </div>
+                        )}
+
 
                         {!isPaused && (
                             <div className="flex items-center gap-2">

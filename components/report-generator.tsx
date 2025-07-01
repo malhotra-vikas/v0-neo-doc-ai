@@ -416,7 +416,11 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             if (allInterventions.length > 0) {
                 console.log("BEfore categorization - allInterventions - ", allInterventions)
-                const categorized = await categorizeInterventionsWithOpenAI(allInterventions)
+                const parsedInterventions = allInterventions.map((item) =>
+                    typeof item === 'string' ? JSON.parse(item) : item
+                )
+
+                const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
                 setCategorizedInterventions(categorized)
 
                 // Set the intervention counts for the Touchpoints chart
@@ -613,6 +617,13 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     }
 
     async function categorizeInterventionsWithOpenAI(interventions: string[]) {
+        // Parse stringified JSON items into objects
+        const parsed = interventions.map((item) =>
+            typeof item === "string" ? JSON.parse(item) : item
+        )
+
+        console.log("parsed interventions are ", parsed)
+
         const prompt = `
 Given the following list of healthcare interventions, categorize them into subcategories:
 - Transitional Support
@@ -634,19 +645,26 @@ Respond with structured JSON:
   "Nutrition & Functional Recovery": [...]
 }
 
+Each intervention object looks like:
+{
+  "intervention": "Intervention text",
+  "source_quote": "Supporting quote",
+  "source_file_id": "uuid"
+}
+
 Interventions:
-${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
-`
+${JSON.stringify(parsed, null, 2)}
+`;
 
         const response = await fetch("/api/openai-categorize", {
             method: "POST",
             body: JSON.stringify({ prompt }),
             headers: { "Content-Type": "application/json" },
-        })
+        });
 
-        const json = await response.json()
-        console.log("Sub Categorization respons eis ", json)
-        return json.categories
+        const json = await response.json();
+        console.log("🧠 Sub-categorization response:", json);
+        return json.categories;
     }
 
     const getPatientInitials = (name: string): string => {
@@ -985,50 +1003,80 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                         </div>
                                     </div>
 
-                                    {/* Interventions Section */}
-                                    <div className="border rounded-lg p-6 bg-white">
-                                        <h3 className="text-xl font-semibold text-blue-800 mb-4">Types of Interventions Delivered</h3>
-                                        {Object.entries(categorizedInterventions)
-                                            .filter(([_, items]) => items.length > 0)
+                                    {categorizedInterventions && typeof categorizedInterventions === "object" ? (
+                                        Object.entries(categorizedInterventions)
+                                            .filter(([_, items]) => Array.isArray(items) && items.length > 0)
                                             .map(([subcategory, items]) => (
                                                 <div key={subcategory} className="mb-4">
                                                     <h4 className="text-md font-semibold text-blue-700 mb-2">{subcategory}</h4>
                                                     <ul className="list-disc list-inside ml-4 text-sm text-gray-700 space-y-1">
                                                         {items.map((item, index) => {
-                                                            let parsed = item
+                                                            let parsed: any = item;
+
+                                                            // Try to parse if it's a string that looks like JSON
                                                             if (typeof item === "string") {
+                                                                const trimmed = item.trim();
                                                                 try {
-                                                                    parsed = JSON.parse(item)
+                                                                    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                                                                        parsed = JSON.parse(trimmed);
+                                                                    } else {
+                                                                        // It's just a string like "Follow-up call"
+                                                                        parsed = { intervention: trimmed };
+                                                                    }
                                                                 } catch (e) {
-                                                                    console.error("❌ Failed to parse intervention:", item)
+                                                                    console.warn("❌ Failed to parse intervention:", item);
+                                                                    parsed = { intervention: item };
                                                                 }
                                                             }
 
+                                                            if (!parsed || typeof parsed !== "object") {
+                                                                return (
+                                                                    <li key={index}>
+                                                                        {String(parsed ?? "—")}
+                                                                    </li>
+                                                                );
+                                                            }
+
+                                                            console.log("👉 categorizedInterventions:", categorizedInterventions);
+                                                            console.log(
+                                                                "👉 entries with items:",
+                                                                Object.entries(categorizedInterventions || {}).filter(
+                                                                    ([_, items]) => Array.isArray(items) && items.length > 0
+                                                                )
+                                                            );
                                                             return (
                                                                 <li key={index}>
-                                                                    {parsed.intervention}
-                                                                    <p className="text-xs text-gray-500 italic mt-1 pl-2">
-                                                                        "{parsed.source_quote}" —
-                                                                        {parsed.source_file_id ? (
-                                                                            <a
-                                                                                href={`/api/download-file?id=${parsed.source_file_id}`}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                                className="text-blue-600 underline ml-1"
-                                                                            >
-                                                                                Download Source
-                                                                            </a>
-                                                                        ) : (
-                                                                            " Source file not available"
-                                                                        )}
-                                                                    </p>
+                                                                    {parsed.intervention || "—"}
+                                                                    {(parsed.source_quote || parsed.source_file_id) && (
+                                                                        <p className="text-xs text-gray-500 italic mt-1 pl-2">
+                                                                            {parsed.source_quote ? `"${parsed.source_quote}"` : ""}
+                                                                            {parsed.source_file_id ? (
+                                                                                <>
+                                                                                    {" — "}
+                                                                                    <a
+                                                                                        href={`/api/download-file?id=${parsed.source_file_id}`}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        className="text-blue-600 underline ml-1"
+                                                                                    >
+                                                                                        Download Source
+                                                                                    </a>
+                                                                                </>
+                                                                            ) : (
+                                                                                parsed.source_quote ? " — Source file not available" : null
+                                                                            )}
+                                                                        </p>
+                                                                    )}
                                                                 </li>
-                                                            )
+                                                            );
                                                         })}
                                                     </ul>
                                                 </div>
-                                            ))}
-                                    </div>
+                                            ))
+                                    ) : (
+                                        <div className="text-sm text-gray-500 italic">No interventions found.</div>
+                                    )}
+
 
                                     {/* Puzzle's Touchpoints with Bar Chart */}
                                     <div className="border rounded-lg p-6 bg-white">
