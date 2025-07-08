@@ -51,7 +51,7 @@ interface ExportPDFOptions {
     monthYear: string;
     caseStudies: CaseStudy[];
     logoPath?: string;
-    categorizedInterventions: Record<string, string[]>;
+    //categorizedInterventions: Record<string, string[]>;
     returnBlob?: boolean;
     chartRef?: HTMLDivElement | null; // Deprecated - kept for backward compatibility
     readmissionsChartRef?: HTMLDivElement | null;
@@ -88,7 +88,7 @@ export const exportToPDF = async ({
     monthYear,
     caseStudies,
     logoPath = "/puzzle_background.png",
-    categorizedInterventions,
+    //categorizedInterventions,
     returnBlob = false,
     chartRef = null, // Deprecated
     readmissionsChartRef = null,
