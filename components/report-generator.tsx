@@ -128,7 +128,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const touchpointsChartRef = useRef<HTMLDivElement>(null)
     const clinicalRisksChartRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
-    let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
+    //let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
 
     // Add intervention counts state for the Touchpoints chart
     const [interventionCounts, setInterventionCounts] = useState<Array<{ name: string; count: number }>>([
@@ -418,9 +418,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     typeof item === 'string' ? JSON.parse(item) : item
                 )
 
-                const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
-                categorizedInterventions = categorized
-                setCategorizedInterventions(categorized)
+                //const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
+                //categorizedInterventions = categorized
+                //setCategorizedInterventions(categorized)
 
                 // Set the intervention counts for the Touchpoints chart
                 // In a real app, you would calculate these from the actual data
@@ -492,7 +492,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
                 logoPath: "/puzzle_background.png",
-                categorizedInterventions,
+                //categorizedInterventions,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
@@ -531,7 +531,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         selectedMonth,
         selectedYear,
         caseStudies,
-        categorizedInterventions,
+        //categorizedInterventions,
         interventionCounts,
         clinicalRisks,
         patientMetrics,
@@ -553,7 +553,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
                 logoPath: "/puzzle_background.png",
-                categorizedInterventions,
+                //categorizedInterventions,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
