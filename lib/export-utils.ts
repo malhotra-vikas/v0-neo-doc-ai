@@ -229,43 +229,6 @@ export const exportToPDF = async ({
         doc.addPage();
         currentPage++;
         yPosition = 30;
-        // Interventions Section
-        addSectionHeader('Types of Interventions Delivered');
-
-        // Log the full structure once
-        console.log("👉 categorizedInterventions:", categorizedInterventions);
-        console.log(
-            "👉 entries with items:",
-            Object.entries(categorizedInterventions || {}).filter(
-                ([_, items]) => Array.isArray(items) && items.length > 0
-            )
-        );
-
-        Object.entries(categorizedInterventions)
-            .filter(([_, items]) => items.length > 0)
-            .forEach(([subcategory, items]) => {
-                console.log(`📂 Subcategory: ${subcategory}`);
-
-                const interventionTexts = items.map((item, idx) => {
-                    console.log(`   - [${idx + 1}] ${item.intervention}`);
-                    return item.intervention;
-                });
-
-                if (yPosition > pageHeight - 50) {
-                    addFooter(doc);
-                    doc.addPage();
-                    currentPage++;
-                    yPosition = 30;
-                }
-
-                doc.setTextColor(COLORS.SUB_TITLE);
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(12);
-                doc.text(subcategory, 20, yPosition);
-                yPosition += 5;
-
-                addListItems(interventionTexts);
-            });
 
         // Puzzle Touchpoints Section with Chart
         if (yPosition > pageHeight - 50) {
@@ -300,38 +263,13 @@ export const exportToPDF = async ({
         }
         yPosition += 5;
 
-        // Outcomes Section
-        addFooter(doc);
-        doc.addPage();
-        currentPage++;
-        yPosition = 30;
-        addSectionHeader('Key Interventions and Outcomes');
-        const outcomeTexts = [
-            ...new Set(
-                caseStudies
-                    .flatMap(study => study.outcomes || [])
-                    .map((item) => {
-                        try {
-                            const parsed = typeof item === "string" ? JSON.parse(item) : item
-                            return parsed.outcome?.trim()
-                        } catch {
-                            return null
-                        }
-                    })
-                    .filter(Boolean)
-            )
-        ];
-
-        console.log("Outcome text is ", outcomeTexts)
-
-        addListItems(outcomeTexts);
-
         // Clinical Risks Section
         addFooter(doc);
         doc.addPage();
         currentPage++;
         yPosition = 30;
         yPosition += 10; // Add extra space before section
+
         addSectionHeader('Top Clinical Risks Identified at Discharge');
 
         const uniqueRisks = [
@@ -352,12 +290,90 @@ export const exportToPDF = async ({
 
         addListItems(uniqueRisks.slice(0, 30));
 
-        if (uniqueRisks.length > 30) {
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'italic');
-            doc.setTextColor(128, 128, 128); // Gray color for note
-            doc.text('Showing top 30 risks. Refine in filters for more detail.', 27, yPosition);
-        }
+        // Outcomes Section
+        addFooter(doc);
+        doc.addPage();
+        currentPage++;
+        yPosition = 30;
+        addSectionHeader('Puzzle\'s Key Interventions and Outcomes for Patients');
+
+        console.log("caseStudies are is ", caseStudies)
+
+        const interventionOutcomeItems: string[] = [];
+
+        caseStudies.forEach((study) => {
+            const [first, last] = (study.patient_name || '').split(" ");
+            const shortName = first && last ? `${first[0]}.${last}` : (study.patient_name || 'Unknown');
+
+            const interventions = study.detailed_interventions || [];
+            const outcomes = study.detailed_outcomes || [];
+
+            if (interventions.length > 0 || outcomes.length > 0) {
+                interventionOutcomeItems.push(`${shortName}:`);
+
+                if (interventions.length > 0) {
+                    interventionOutcomeItems.push("  Interventions:");
+                    interventions.forEach((intv) => {
+                        const text = typeof intv === "string" ? (JSON.parse(intv).intervention || '').trim() : intv.intervention?.trim();
+                        if (text) interventionOutcomeItems.push(`  • ${text}`);
+                    });
+                }
+
+                if (outcomes.length > 0) {
+                    interventionOutcomeItems.push("  Outcomes:");
+                    outcomes.forEach((outc) => {
+                        const text = typeof outc === "string" ? (JSON.parse(outc).outcome || '').trim() : outc.outcome?.trim();
+                        if (text) interventionOutcomeItems.push(`  • ${text}`);
+                    });
+                }
+
+                interventionOutcomeItems.push(""); // spacing between patients
+            }
+        });
+
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(COLORS.BULLET_TEXT);
+
+        interventionOutcomeItems.forEach(line => {
+            if (yPosition > pageHeight - 40) {
+                addFooter(doc);
+                doc.addPage();
+                currentPage++;
+                yPosition = 30;
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(COLORS.BULLET_TEXT);
+            }
+
+            const isBullet = line.trim().startsWith('•');
+            const isSectionHeading = !isBullet && (line.includes('Interventions:') || line.includes('Outcomes:'));
+            const isPatientHeader = !isBullet && !isSectionHeading && line.trim().endsWith(':');
+
+            if (isPatientHeader) {
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(COLORS.TITLE);
+                doc.text(line.trim(), 20, yPosition);
+                yPosition += 6;
+            } else if (isSectionHeading) {
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(COLORS.SUB_TITLE);
+                doc.text(line.trim(), 25, yPosition);
+                yPosition += 5;
+            } else if (isBullet) {
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(COLORS.BULLET_TEXT);
+                doc.circle(20 + BULLET_STYLE.INDENT, yPosition + 2, BULLET_STYLE.RADIUS, 'F');
+                const text = line.replace('•', '').trim();
+                const lines = doc.splitTextToSize(text, pageWidth - BULLET_STYLE.TEXT_INDENT - 20);
+                lines.forEach((wrappedLine, idx) => {
+                    doc.text(wrappedLine, 20 + BULLET_STYLE.TEXT_INDENT, yPosition + 4 + (idx * BULLET_STYLE.LINE_HEIGHT));
+                });
+                yPosition += (lines.length * BULLET_STYLE.LINE_HEIGHT) + 2;
+            } else {
+                yPosition += 4; // small spacing for empty lines
+            }
+        });
 
         // Case Studies Section with box layout
         addFooter(doc);
@@ -767,7 +783,7 @@ export const exportToDOCX = async ({
 
                         // Outcomes Section
                         new Paragraph({
-                            text: "Key Interventions and Outcomes",
+                            text: "Key Interventions and Outcomess",
                             heading: HeadingLevel.HEADING_1,
                             indent: {
                                 left: 500,
@@ -837,29 +853,29 @@ export const exportToDOCX = async ({
                                         style: "BulletText",
                                     })
                             ),
-
-                        // Note for truncated risks
-                        ...(caseStudies.flatMap((s) => s.clinical_risks || []).length >
-                            30
-                            ? [
-                                new Paragraph({
-                                    children: [
-                                        new TextRun({
-                                            text: "Showing top 30 risks. Refine in filters for more detail.",
-                                            size: 18,
-                                            color: "808080",
-                                            italics: true,
-                                        }),
-                                    ],
-                                    indent: {
-                                        left: 500,
-                                        right: 500,
-                                    },
-                                    spacing: { before: 200 },
-                                }),
-                            ]
-                            : []),
-
+                        /*
+                                                // Note for truncated risks
+                                                ...(caseStudies.flatMap((s) => s.clinical_risks || []).length >
+                                                    30
+                                                    ? [
+                                                        new Paragraph({
+                                                            children: [
+                                                                new TextRun({
+                                                                    text: "Showing top 30 risks. Refine in filters for more detail.",
+                                                                    size: 18,
+                                                                    color: "808080",
+                                                                    italics: true,
+                                                                }),
+                                                            ],
+                                                            indent: {
+                                                                left: 500,
+                                                                right: 500,
+                                                            },
+                                                            spacing: { before: 200 },
+                                                        }),
+                                                    ]
+                                                    : []),
+                        */
                         // Case Studies Section
                         new Paragraph({
                             children: [
