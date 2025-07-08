@@ -1218,7 +1218,13 @@ ${JSON.stringify(parsed, null, 2)}
                                         {caseStudies.map((study) => {
                                             return (
                                                 <div key={study.id} className="mb-4">
-                                                    <p className="text-sm font-medium text-gray-700">{study.patient_name}</p>
+                                                    <p className="text-sm font-medium text-gray-700">
+                                                        {(() => {
+                                                            const [first, last] = study.patient_name.split(" ");
+                                                            return `${first[0]}.${last}`;
+                                                        })()}
+
+                                                    </p>
                                                     <ul className="list-disc list-inside pl-4 text-sm text-gray-700 space-y-1 mt-1">
                                                         {(study.detailed_outcomes || []).map((item, idx) => {
                                                             let parsed = item;
@@ -1269,11 +1275,25 @@ ${JSON.stringify(parsed, null, 2)}
                                             caseStudies.map((study) => (
 
                                                 <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
-                                                    <p className="text-sm font-medium">{study.patient_name}</p>
-                                                    <p className="text-sm font-medium">{study.hospital_discharge_summary_text}</p>
+                                                    <p className="text-sm font-medium">                                                        
+                                                        {(() => {
+                                                            const [first, last] = study.patient_name.split(" ");
+                                                            return `${first[0]}.${last}`;
+                                                        })()}
+                                                    </p>
+                                                    <p className="text-sm font-medium">
+                                                    {study.hospital_discharge_summary_text
+                                                        ? study.hospital_discharge_summary_text.charAt(0).toUpperCase() + study.hospital_discharge_summary_text.slice(1)
+                                                        : ''}
+                                                    </p>
+
                                                     <Citations label="Cited from" quotes={study.hospital_discharge_summary_quotes || []} />
 
-                                                    <p className="text-sm mt-4">{study.highlight_text}</p>
+                                                    <p className="text-sm mt-4">
+                                                    {study.highlight_text
+                                                        ? study.highlight_text.charAt(0).toUpperCase() + study.highlight_text.slice(1)
+                                                        : ''}
+                                                    </p>
                                                     <Citations label="Cited from" quotes={study.highlight_quotes || []} />
                                                 </div>
                                             ))
