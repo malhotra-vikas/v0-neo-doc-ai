@@ -230,45 +230,6 @@ export const exportToPDF = async ({
         currentPage++;
         yPosition = 30;
 
-        /*        
-                // Interventions Section
-                addSectionHeader('Types of Interventions Delivered');
-        
-                // Log the full structure once
-                console.log("👉 categorizedInterventions:", categorizedInterventions);
-                console.log(
-                    "👉 entries with items:",
-                    Object.entries(categorizedInterventions || {}).filter(
-                        ([_, items]) => Array.isArray(items) && items.length > 0
-                    )
-                );
-        
-                Object.entries(categorizedInterventions)
-                    .filter(([_, items]) => items.length > 0)
-                    .forEach(([subcategory, items]) => {
-                        console.log(`📂 Subcategory: ${subcategory}`);
-        
-                        const interventionTexts = items.map((item, idx) => {
-                            console.log(`   - [${idx + 1}] ${item.intervention}`);
-                            return item.intervention;
-                        });
-        
-                        if (yPosition > pageHeight - 50) {
-                            addFooter(doc);
-                            doc.addPage();
-                            currentPage++;
-                            yPosition = 30;
-                        }
-        
-                        doc.setTextColor(COLORS.SUB_TITLE);
-                        doc.setFont('helvetica', 'bold');
-                        doc.setFontSize(12);
-                        doc.text(subcategory, 20, yPosition);
-                        yPosition += 5;
-        
-                        addListItems(interventionTexts);
-                    });
-        */
         // Puzzle Touchpoints Section with Chart
         if (yPosition > pageHeight - 50) {
             addFooter(doc);
@@ -334,7 +295,8 @@ export const exportToPDF = async ({
         doc.addPage();
         currentPage++;
         yPosition = 30;
-        addSectionHeader('Key Interventions and Outcomes');
+        addSectionHeader('Puzzle\'s Key Interventions and Outcomes for Patients');
+
         console.log("caseStudies are is ", caseStudies)
 
         const interventionOutcomeItems: string[] = [];
@@ -369,16 +331,50 @@ export const exportToPDF = async ({
             }
         });
 
-        addListItems(interventionOutcomeItems);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(COLORS.BULLET_TEXT);
 
-        /*
-                if (uniqueRisks.length > 30) {
-                    doc.setFontSize(9);
-                    doc.setFont('helvetica', 'italic');
-                    doc.setTextColor(128, 128, 128); // Gray color for note
-                    doc.text('Showing top 30 risks. Refine in filters for more detail.', 27, yPosition);
-                }
-        */
+        interventionOutcomeItems.forEach(line => {
+            if (yPosition > pageHeight - 40) {
+                addFooter(doc);
+                doc.addPage();
+                currentPage++;
+                yPosition = 30;
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(COLORS.BULLET_TEXT);
+            }
+
+            const isBullet = line.trim().startsWith('•');
+            const isSectionHeading = !isBullet && (line.includes('Interventions:') || line.includes('Outcomes:'));
+            const isPatientHeader = !isBullet && !isSectionHeading && line.trim().endsWith(':');
+
+            if (isPatientHeader) {
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(COLORS.TITLE);
+                doc.text(line.trim(), 20, yPosition);
+                yPosition += 6;
+            } else if (isSectionHeading) {
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(COLORS.SUB_TITLE);
+                doc.text(line.trim(), 25, yPosition);
+                yPosition += 5;
+            } else if (isBullet) {
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(COLORS.BULLET_TEXT);
+                doc.circle(20 + BULLET_STYLE.INDENT, yPosition + 2, BULLET_STYLE.RADIUS, 'F');
+                const text = line.replace('•', '').trim();
+                const lines = doc.splitTextToSize(text, pageWidth - BULLET_STYLE.TEXT_INDENT - 20);
+                lines.forEach((wrappedLine, idx) => {
+                    doc.text(wrappedLine, 20 + BULLET_STYLE.TEXT_INDENT, yPosition + 4 + (idx * BULLET_STYLE.LINE_HEIGHT));
+                });
+                yPosition += (lines.length * BULLET_STYLE.LINE_HEIGHT) + 2;
+            } else {
+                yPosition += 4; // small spacing for empty lines
+            }
+        });
+
         // Case Studies Section with box layout
         addFooter(doc);
         doc.addPage();
