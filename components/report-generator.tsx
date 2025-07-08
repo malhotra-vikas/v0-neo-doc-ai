@@ -757,6 +757,7 @@ ${JSON.stringify(parsed, null, 2)}
                                         Choose specific patients for this report or use AI to auto-select relevant patients.
                                     </p>
                                 </div>
+{/* 
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="checkbox"
@@ -774,6 +775,7 @@ ${JSON.stringify(parsed, null, 2)}
                                         Use AI Selection
                                     </Label>
                                 </div>
+*/}                                
                             </div>
 
                             {isLoadingPatients ? (
@@ -1005,7 +1007,7 @@ ${JSON.stringify(parsed, null, 2)}
                                             </div>
                                         </div>
                                     </div>
-
+{/* 
                                     {categorizedInterventions && typeof categorizedInterventions === "object" ? (
                                         Object.entries(categorizedInterventions)
                                             .filter(([_, items]) => Array.isArray(items) && items.length > 0)
@@ -1079,7 +1081,7 @@ ${JSON.stringify(parsed, null, 2)}
                                     ) : (
                                         <div className="text-sm text-gray-500 italic">No interventions found.</div>
                                     )}
-
+*/}
 
                                     {/* Puzzle's Touchpoints with Bar Chart */}
                                     <div className="border rounded-lg p-6 bg-white">
