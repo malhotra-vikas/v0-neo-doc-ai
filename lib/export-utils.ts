@@ -936,7 +936,11 @@ const createCaseStudyCard = (study: any, theme: any) => {
                                 new Paragraph({
                                     children: [
                                         new TextRun({
-                                            text: study.patient_name || "Unknown Patient",
+                                            //                                            text: study.patient_name || "Unknown Patient",
+                                            text: (() => {
+                                                const [first, last] = (study.patient_name || "Unknown Patient").split(" ");
+                                                return first && last ? `${first[0]}.${last}` : (study.patient_name || "Unknown Patient");
+                                            })(),
                                             bold: true,
                                             size: 24,
                                             color: hexToDocxColor(theme.TITLE),
@@ -967,6 +971,9 @@ const createCaseStudyCard = (study: any, theme: any) => {
     ];
 };
 
+const capitalizeFirst = (text) =>
+    text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+
 const addCaseStudiesSection = (
     doc: jsPDF,
     caseStudies: CaseStudy[],
@@ -994,10 +1001,14 @@ const addCaseStudiesSection = (
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(11);
 
+        const summaryText = capitalizeFirst(study.hospital_discharge_summary_text || '');
+        const highlightText = capitalizeFirst(study.highlight_text || '');
+
         const allLines = doc.splitTextToSize(
-            `${study.hospital_discharge_summary_text}\n\n${study.highlight_text}`,
+            `${summaryText}\n\n${highlightText}`,
             boxWidth - (boxPadding * 2 + borderWidth + 10)
         );
+
         const lineHeight = 4.3;
         const headingHeight = 12;
         // const boxHeaderHeight = headingHeight + boxPadding + 10;
@@ -1041,7 +1052,10 @@ const addCaseStudiesSection = (
             doc.setFontSize(12);
             doc.setTextColor(COLORS.PATIENT_NAME);
             if (!isContinued) {
-                doc.text(study.patient_name || 'Unknown Patient', textStartX, topY + boxPadding + 0.1);
+                //doc.text(study.patient_name || 'Unknown Patient', textStartX, topY + boxPadding + 0.1);
+                const [first, last] = (study.patient_name || 'Unknown Patient').split(" ");
+                const formattedName = first && last ? `${first[0]}.${last}` : (study.patient_name || 'Unknown Patient');
+                doc.text(formattedName, textStartX, topY + boxPadding + 0.1);
             }
 
             doc.setFont('helvetica', 'normal');
