@@ -26,45 +26,33 @@ function tryFixTruncatedJson(raw: string): string {
 export async function POST(req: NextRequest) {
     try {
         const { prompt } = await req.json();
+        console.log("in API Call,. POST Prompt is ", prompt)
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
+            model: "gpt-4o-mini",
             messages: [
                 {
                     role: "system",
                     content:
-                        "You are a helpful assistant that classifies healthcare interventions into clear subcategories like 'Transitional Support', 'Clinical Risk Management', 'Care Navigation', and 'Engagement & Education'. Respond with ONLY valid JSON. No explanation. No markdown.",
+                        "You are a helpful assistant that classifies healthcare interventions into clear subcategories.",
                 },
                 { role: "user", content: prompt },
             ],
             temperature: 0.3,
-            max_tokens: 4096,
+            max_tokens: 500,
         });
 
         let raw = completion.choices[0].message.content?.trim();
+        console.log("in API Call,. POST REsponse is ", raw)
+
         if (!raw) throw new Error("OpenAI returned empty content");
 
         const cleaned = tryFixTruncatedJson(raw);
+        console.log("in API Call,. POST Cleaned REsponse is ", cleaned)
 
-        let categories;
-        try {
-            categories = JSON.parse(cleaned);
-        } catch (err) {
-            console.error("🛑 Failed to parse OpenAI JSON response:");
-            console.log("------ RAW START ------");
-            console.log(raw?.slice(0, 1000)); // Log only 1k chars for safety
-            console.log("------ RAW END --------");
-
-            return new Response(
-                JSON.stringify({
-                    error: "Failed to parse OpenAI response",
-                    raw: raw?.slice(0, 1000),
-                }),
-                { status: 500 }
-            );
-        }
-
-        return Response.json({ categories });
+        return new Response(cleaned, {
+            headers: { "Content-Type": "application/json" },
+        });
     } catch (err: any) {
         console.error("❌ Categorization API error:", err);
         return new Response(
