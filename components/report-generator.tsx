@@ -18,6 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format as dateformat } from "date-fns"
 import { jsPDF } from "jspdf"
 import { useReactToPrint } from "react-to-print"
+import * as XLSX from 'xlsx'
+
 import {
     PieChart,
     Pie,
@@ -33,6 +35,14 @@ import {
     LabelList,
 } from "recharts"
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
+
+const facilityNameMap: Record<string, { patientsName: string; readmitName: string }> = {
+    "Harborview Briarwood": {
+        patientsName: "Briarwood Health Center by Harborview, LLC.",
+        readmitName: "Harborview Briarwood"
+    },
+    // Add more mappings here as needed
+}
 
 const months = [
     "January",
@@ -113,8 +123,48 @@ export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
     )
 }
 
+async function getFilePaths(nursingHomeId: string, month: string, year: string) {
+    const supabase = createClientComponentClient()
+
+    const { data, error } = await supabase
+        .from('nursing_home_files')
+        .select('file_type, file_path')
+        .eq('nursing_home_id', nursingHomeId)
+        .eq('month', month)
+        .eq('year', year)
+
+    if (error || !data) {
+        console.error("Error fetching file paths", error)
+        return { patientsPath: null, nonCcmPath: null }
+    }
+
+    const patientsPath = data.find(d => d.file_type === 'Patients')?.file_path || null
+    const nonCcmPath = data.find(d => d.file_type === 'Non CCM')?.file_path || null
+
+    return { patientsPath, nonCcmPath }
+}
+
+async function fetchAndParseExcel(path: string | null): Promise<XLSX.WorkSheet | null> {
+    if (!path) return null
+    const supabase = createClientComponentClient()
+
+    const { data, error } = await supabase.storage.from('nursing-home-files').download(path)
+    if (error || !data) {
+        console.error("Error downloading file", error)
+        return null
+    }
+
+    const arrayBuffer = await data.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: "array" })
+    return workbook.Sheets[workbook.SheetNames[0]]
+}
+
+
+
 export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [selectedNursingHomeId, setSelectedNursingHomeId] = useState<string>("")
+    const [selectedNursingHomeName, setSelectedNursingHomeName] = useState<string | null>(null)
+
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toLocaleString("default", { month: "long" }))
     const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
     const [isGenerating, setIsGenerating] = useState(false)
@@ -163,13 +213,13 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     // Add effect to fetch patients when nursing home changes
     useEffect(() => {
-        if (selectedNursingHomeId && selectedMonth && selectedYear) {
+        if (selectedNursingHomeId && selectedNursingHomeName && selectedMonth && selectedYear) {
             fetchAvailablePatients()
         } else {
             setAvailablePatients([])
             setSelectedPatients([])
         }
-    }, [selectedNursingHomeId, selectedMonth, selectedYear])
+    }, [selectedNursingHomeId, selectedNursingHomeName, selectedMonth, selectedYear])
 
     const fetchAvailablePatients = async () => {
         if (!selectedNursingHomeId) return
@@ -383,22 +433,71 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             })
 
             setCaseStudies(formattedCaseStudies)
-            /* CURRENT DUMMY DATA 
-            NEEDS TO COME FROM FILES UPLOADED
-            TODO
-            */
-            // Calculate patient metrics for the pie chart
-            const totalPatients = patientIds.length
 
-            // For this example, we'll simulate readmission data
-            // In a real app, you would fetch this from your database
-            const readmissions = Math.floor(totalPatients * 0.113) // ~11.3% readmission rate
-            const readmissionRate = (readmissions / totalPatients) * 100
-            const successfulTransitions = totalPatients - readmissions
+            console.log(`selectedNursingHomeId is `, selectedNursingHomeId)
+
+            const facilityMappedName = facilityNameMap[selectedNursingHomeName] || {
+                originalName: selectedNursingHomeName,
+                mappedName: selectedNursingHomeName
+            }
+
+            console.log("facilityMappedName ios ", facilityMappedName)
+            const { patientsPath, nonCcmPath } = await getFilePaths(selectedNursingHomeId, selectedMonth, selectedYear)
+            const patientsSheet = await fetchAndParseExcel(patientsPath)
+            const nonCcmSheet = await fetchAndParseExcel(nonCcmPath)
+
+            if (!patientsSheet || !nonCcmSheet) {
+                console.error("One or both Excel files not found or unreadable")
+                return
+            }
+            const patients = XLSX.utils.sheet_to_json(patientsSheet)
+            const nonCcm = XLSX.utils.sheet_to_json(nonCcmSheet)
+
+            // ⚠ Facility name might have extra spaces, so normalize it for safety
+            const clean = (s: any) => (typeof s === 'string' ? s.trim().toLowerCase() : '')
+
+
+            console.log("Cleaned selectedNursingHomeName:", clean(selectedNursingHomeName));
+
+            const uniquePatientFacilities = [
+                ...new Set(patients.map(p => p.Facility).filter(Boolean)),
+            ]
+
+            const uniqueReadmitFacilities = [
+                ...new Set(nonCcm.map(p => p["SNF Facility Name"]).filter(Boolean)),
+            ]
+
+            console.log("🏥 Unique Facilities in Patients File:")
+            console.table(uniquePatientFacilities)
+
+            console.log("🏥 Unique Facilities in Non CCM File:")
+            console.table(uniqueReadmitFacilities)
+
+            const readmissionsData = nonCcm.filter(row => {
+                return clean(row["SNF Facility Name"]) === clean(selectedNursingHomeName)
+            })
+
+            console.log("🔍 Matching Patients Facility Name:", facilityMappedName.patientsName)
+
+            const allPatientsData = patients.filter(row => {
+                return clean(row["Facility"]) === clean(facilityMappedName.patientsName)
+            })
+
+            console.log(`Facility patients Data `, allPatientsData)
+            console.log(`Facility Readdimision Data  `, readmissionsData)
+
+            const readmissionCount = readmissionsData.length
+            const totalPatients = allPatientsData.length
+
+            console.log(`patients count `, totalPatients)
+            console.log(`Readdimision count  `, readmissionCount)
+
+            const readmissionRate = totalPatients > 0 ? (readmissionCount / totalPatients) * 100 : 0
+            const successfulTransitions = totalPatients - readmissionCount
 
             setPatientMetrics({
                 totalPatients,
-                readmissions,
+                readmissions: readmissionCount,
                 readmissionRate,
                 successfulTransitions,
             })
@@ -700,13 +799,22 @@ ${JSON.stringify(parsed, null, 2)}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <Label htmlFor="nursing-home">Nursing Home</Label>
-                            <Select onValueChange={setSelectedNursingHomeId}>
+
+                            <Select
+                                onValueChange={(value) => {
+                                    setSelectedNursingHomeId(value);
+                                    const selected = nursingHomes.find((home) => home.id === value);
+                                    setSelectedNursingHomeName(selected?.name ?? null);
+                                }}
+                            >
                                 <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Select a nursing home" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {nursingHomes.length === 0 ? (
-                                        <div className="p-2 text-center text-sm text-muted-foreground">No nursing homes found</div>
+                                        <div className="p-2 text-center text-sm text-muted-foreground">
+                                            No nursing homes found
+                                        </div>
                                     ) : (
                                         nursingHomes.map((home) => (
                                             <SelectItem key={home.id} value={home.id}>
@@ -757,7 +865,7 @@ ${JSON.stringify(parsed, null, 2)}
                                         Choose specific patients for this report or use AI to auto-select relevant patients.
                                     </p>
                                 </div>
-{/* 
+                                {/* 
                                 <div className="flex items-center space-x-2">
                                     <input
                                         type="checkbox"
@@ -775,7 +883,7 @@ ${JSON.stringify(parsed, null, 2)}
                                         Use AI Selection
                                     </Label>
                                 </div>
-*/}                                
+*/}
                             </div>
 
                             {isLoadingPatients ? (
@@ -1007,7 +1115,7 @@ ${JSON.stringify(parsed, null, 2)}
                                             </div>
                                         </div>
                                     </div>
-{/* 
+                                    {/* 
                                     {categorizedInterventions && typeof categorizedInterventions === "object" ? (
                                         Object.entries(categorizedInterventions)
                                             .filter(([_, items]) => Array.isArray(items) && items.length > 0)
