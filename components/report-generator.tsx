@@ -512,33 +512,66 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             ]
 
             if (allInterventions.length > 0) {
-                console.log("BEfore categorization - allInterventions - ", allInterventions)
                 const parsedInterventions = allInterventions.map((item) =>
                     typeof item === 'string' ? JSON.parse(item) : item
                 )
+                console.log("BEfore categorization - Parsed Interventions - ", parsedInterventions)
 
-                //const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
+                const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
+                console.log("After categorization - Catogorized Interventions - ", categorized)
+
+                if (categorized && typeof categorized === "object") {
+                    const counts = Object.entries(categorized)
+                        .map(([name, count]) => ({
+                            name,
+                            count: Number(count) || 0,
+                        }))
+                        .filter(item => item.count > 0) // ⬅️ filter out 0s
+                        .sort((a, b) => b.count - a.count); // optional sorting
+
+                    setInterventionCounts(counts);
+                } else {
+                    console.warn("❗ Unexpected categorization response:", categorized);
+                }
+
                 //categorizedInterventions = categorized
                 //setCategorizedInterventions(categorized)
-
-                // Set the intervention counts for the Touchpoints chart
-                // In a real app, you would calculate these from the actual data
-                setInterventionCounts([
-                    { name: "Medication reconciliations", count: 16 },
-                    { name: "Hospital discharge reviews", count: 5 },
-                    { name: "Specialist coordination", count: 29 },
-                    { name: "Caregiver education", count: 17 },
-                ])
             }
 
-            // Set the clinical risks data for the Top Clinical Risks chart
-            // In a real app, you would calculate these from the actual data
-            setClinicalRisks([
-                { risk: "Congestive Heart Failure", count: 36 },
-                { risk: "Chronic Kidney Disease", count: 23 },
-                { risk: "Fall Risk (e.g., fractures)", count: 24 },
-                { risk: "Cognitive Impairment", count: 7 },
-            ])
+            const uniqueRisks = [
+                ...new Set(
+                    formattedCaseStudies
+                        .flatMap(study => study.clinical_risks || [])
+                        .map((item) => {
+                            try {
+                                const parsed = typeof item === "string" ? JSON.parse(item) : item
+                                return parsed.risk?.trim()
+                            } catch {
+                                return null
+                            }
+                        })
+                        .filter(Boolean)
+                )
+            ];
+            console.log("BEfore categorization - uniqueRisks - ", uniqueRisks)
+
+            const categorizedRisks = await categorizeClinicalRisksWithOpenAI(uniqueRisks)
+            console.log("After categorization - Catogorized Risks - ", categorizedRisks)
+
+            if (categorizedRisks && typeof categorizedRisks === "object") {
+                const counts = Object.entries(categorizedRisks)
+                    .map(([risk, count]) => ({
+                        risk,
+                        count: Number(count) || 0,
+                    }))
+                    .filter(item => item.count > 0) // ⬅️ filter out 0s
+                    .sort((a, b) => b.count - a.count); // optional sorting
+
+                setClinicalRisks(counts);
+            } else {
+                console.warn("❗ Unexpected categorization response:", categorizedRisks);
+            }
+
         } catch (error: any) {
             console.error("Error fetching case studies:", error?.message || error || "Unknown error")
 
@@ -714,48 +747,21 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         return dateformat(date, "PPP")
     }
 
-    async function categorizeInterventionsWithOpenAI(interventions: string[]) {
-        // Parse stringified JSON items into objects
-        const parsed = interventions.map((item) =>
-            typeof item === "string" ? JSON.parse(item) : item
-        )
-
-        console.log("parsed interventions are ", parsed)
-
+    async function categorizeClinicalRisksWithOpenAI(risks: string[]) {
         const prompt = `
+Below is a list of clinical risks observed in nursing home patients. Your task is to classify them into a small number (5–7) of clear, medically meaningful categories (e.g. Fall Risk, Chronic Condition Complications, Readmission Risk, etc.). Each risk should map into **one** of these categories. Return the count of items per category as a JSON object like:
 
-Given the following list of healthcare interventions, first normalize the interventions by grouping similar or redundant entries together (e.g., "Care Coordination", "Coordination of Care by dedicated manager", "Care Team coordination" should all be grouped under "Care Coordination"). 
-Preserve the source quotes and source_file_ids under each grouped entry.
-
-Then, categorize each **normalized intervention** into one of these subcategories:
-- Transitional Support
-- Engagement & Education
-- Care Navigation
-- Rehabilitation & Mobility Support
-- Behavioral & Psychosocial Support
-- Nutrition & Functional Recovery
-- Clinical Risk Management
-
-Respond with structured JSON:
 {
-  "Transitional Support": [...],
-  "Clinical Risk Management": [...],
-  "Engagement & Education": [...],
-  "Care Navigation": [...],
-  "Rehabilitation & Mobility Support": [...],
-  "Behavioral & Psychosocial Support": [...],
-  "Nutrition & Functional Recovery": [...]
+  "Fall Risk (e.g., fractures)": 10,
+  "Chronic Condition Complications": 7,
+  "Readmission Risk": 5,
+  "Congestive Heart Failure: 8,
+  "Chronic Kidney Disease": 67,
+  "Cognitive Impairment": 13
 }
 
-Each intervention object looks like:
-{
-  "intervention": "Intervention text",
-  "source_quote": "Supporting quote",
-  "source_file_id": "uuid"
-}
-
-Interventions:
-${JSON.stringify(parsed, null, 2)}
+Clinical Risks:
+${JSON.stringify(risks, null, 2)}
 `;
 
         const response = await fetch("/api/openai-categorize", {
@@ -765,8 +771,60 @@ ${JSON.stringify(parsed, null, 2)}
         });
 
         const json = await response.json();
-        console.log("🧠 Sub-categorization response:", json);
-        return json.categories;
+        return json;
+    }
+
+
+    async function categorizeInterventionsWithOpenAI(interventions: string[]) {
+        // Parse stringified JSON items into objects
+        const parsed = interventions.map((item) =>
+            typeof item === "string" ? JSON.parse(item) : item
+        )
+
+        console.log("parsed interventions are ", parsed)
+
+        const prompt = `
+You are a healthcare analyst. Your job is to classify a list of healthcare intervention descriptions into a small number of standardized categories.
+Use only the following categories unless absolutely necessary:
+- Care Coordination
+- Medication Management
+- Therapy & Rehabilitation
+- Transitional Support
+- Patient Engagement & Education
+- Clinical Risk Management
+- Behavioral & Psychosocial Support
+- Nutrition & Functional Recovery
+
+Group similar interventions under the most relevant high-level category. Avoid creating new categories unless none of the above fit.
+Return the result as a JSON object with category names as keys and counts as values."
+{
+  "Medication reconciliations": 16,
+  "Transitional Support": 10,
+  "Clinical Risk Management": 2,
+  "Engagement & Education": 5,
+  "Care Navigation": 6,
+  "Rehabilitation & Mobility Support": 20,
+  "Behavioral & Psychosocial Support": 23,
+  "Nutrition & Functional Recovery": 12
+  ...
+  ...
+}
+Do NOT include quotes or file IDs.
+
+Here is the list:
+${JSON.stringify(parsed, null, 2)}
+`;
+
+        const response = await fetch("/api/openai-categorize", {
+            method: "POST",
+            body: JSON.stringify({ prompt }),
+            headers: { "Content-Type": "application/json" },
+        });
+        const json = await response.json();
+
+
+        console.log("🧠 Sub-categorization response JSON:", json);
+        return json;
     }
 
     const getPatientInitials = (name: string): string => {
@@ -1447,4 +1505,39 @@ ${JSON.stringify(parsed, null, 2)}
             )}
         </div>
     )
+}
+
+async function categorizeIntervention(interventionText: string): Promise<string> {
+    const prompt = `
+You are a medical classification assistant. Categorize the following intervention into one of the following categories:
+
+- Care Coordination
+- Therapy & Rehab
+- Medication Management
+- Post-Discharge Support
+- Patient Education
+- Other
+
+Intervention: "${interventionText}"
+
+Category:
+  `;
+
+    const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+            {
+                role: "system",
+                content:
+                    prompt,
+            },
+            { role: "user", content: prompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 10,
+    });
+
+    return completion.choices[0].message.content?.trim();
+
+
 }

@@ -254,7 +254,7 @@ export const exportToPDF = async ({
             currentPage++;
             yPosition = 30;
         }
-        addSectionHeader('Top Clinical Risks Identified at Discharge');
+        addSectionHeader('Top Clinical Risks');
 
         // Add Clinical Risks chart if available
         if (clinicalRisksChartRef) {
