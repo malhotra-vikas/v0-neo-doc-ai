@@ -749,7 +749,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     async function categorizeClinicalRisksWithOpenAI(risks: string[]) {
         const prompt = `
-Below is a list of clinical risks observed in nursing home patients. Your task is to classify them into a small number (5–7) of clear, medically meaningful categories (e.g. Fall Risk, Chronic Condition Complications, Readmission Risk, etc.). Each risk should map into **one** of these categories. Return the count of items per category as a JSON object like:
+Below is a list of clinical risks observed in nursing home patients. 
+Your task is to classify them into a small number (5 to 7) of clear, medically meaningful categories (e.g. Fall Risk, Chronic Condition Complications, Readmission Risk, etc.). 
+Each risk should map into **one** of these categories. 
+Return the result as a JSON object with category names as keys and counts as values."
 
 {
   "Fall Risk (e.g., fractures)": 10,
@@ -759,6 +762,8 @@ Below is a list of clinical risks observed in nursing home patients. Your task i
   "Chronic Kidney Disease": 67,
   "Cognitive Impairment": 13
 }
+
+DO NOT return anything else.
 
 Clinical Risks:
 ${JSON.stringify(risks, null, 2)}
