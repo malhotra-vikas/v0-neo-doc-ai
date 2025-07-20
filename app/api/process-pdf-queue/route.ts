@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 import { logger } from "@/lib/logger"
 import { logServerAuditEvent } from "@/lib/audit-logger"
-import { generateCaseStudyHighlight, generateCaseStudyHighlightForPatient } from "@/app/actions/generate-case-study"
+import { generateCaseStudyHighlightForPatient } from "@/app/actions/generate-case-study"
 
 const COMPONENT = "ProcessPDFQueue"
 
@@ -265,25 +265,9 @@ ${extractedText}
                 }
 
                 //const geenratedHighlight = await generateCaseStudyHighlight(queueItem.file_id)
+                //console.log("Startsing tio generateCaseStudyHighlightForPatient ", patientData.patient_id )
 
-                const geenratedPatientHighlight = await generateCaseStudyHighlightForPatient(patientData.patient_id)
-
-                // Log the successful generation
-                if (user) {
-                    await logServerAuditEvent(supabase, {
-                        userId: user.id,
-                        userEmail: user.email || "",
-                        actionType: "process",
-                        entityType: "case_study",
-                        entityId: queueItem.file_id,
-                        details: {
-                            status: "generation_completed",
-                            file_id: queueItem.file_id,
-                            patient_id: patientData.patient_id,
-                            text_length: geenratedPatientHighlight.highlight?.length,
-                        },
-                    })
-                }
+                //const geenratedPatientHighlight = await generateCaseStudyHighlightForPatient(patientData.patient_id)
 
                 logger.info(COMPONENT, "Case study highlight saved to database", { fileId: queueItem.file_id })
             } catch (caseStudyError: any) {
