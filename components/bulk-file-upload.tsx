@@ -103,6 +103,8 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       { pattern: /SNF Unified/i, type: "SNF Unified" },
       { pattern: /Unified/i, type: "Unified" },
       { pattern: /Patient Engagement\d*/i, type: "Patient Engagement" },
+      { pattern: /Patient In Facility\d*/i, type: "Patient In Facility" },
+      { pattern: /Hospital Stay Notes\d*/i, type: "Patient Hospital Stay Notes" }
     ]
 
     // Find the first matching pattern

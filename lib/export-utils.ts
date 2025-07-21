@@ -38,6 +38,8 @@ interface CaseStudy {
     id: string;
     patient_id: string;
     hospital_discharge_summary_text: string;
+    facility_summary_text: string;
+    engagement_summary_text: string
     highlight_text: string;
     created_at: string;
     patient_name?: string;
@@ -1017,11 +1019,17 @@ const addCaseStudiesSection = (
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(11);
 
-        const summaryText = capitalizeFirst(study.hospital_discharge_summary_text || '');
+        const hospitalDischargeSummaryText = capitalizeFirst(study.hospital_discharge_summary_text || '');
+        const inFacilitySummaryText = capitalizeFirst(study.facility_summary_text || '');
+        const engagementSummaryText = capitalizeFirst(study.engagement_summary_text || '');
+
         const highlightText = capitalizeFirst(study.highlight_text || '');
 
         const allLines = doc.splitTextToSize(
-            `${summaryText}\n\n${highlightText}`,
+            `
+            ${hospitalDischargeSummaryText}\n\n
+            ${inFacilitySummaryText}\n\n
+            ${engagementSummaryText}`,
             boxWidth - (boxPadding * 2 + borderWidth + 10)
         );
 

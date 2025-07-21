@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { format } from "date-fns"
 import { FileDownIcon, FileIcon, FileTextIcon, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
@@ -16,8 +15,6 @@ import { exportToPDF, exportToDOCX } from "@/lib/export-utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format as dateformat } from "date-fns"
-import { jsPDF } from "jspdf"
-import { useReactToPrint } from "react-to-print"
 import * as XLSX from 'xlsx'
 
 import {
@@ -35,6 +32,7 @@ import {
     LabelList,
 } from "recharts"
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
+import { generateCaseStudyHighlightForPatient } from "@/app/actions/generate-case-study"
 
 const facilityNameMap: Record<string, { patientsName: string; readmitName: string }> = {
     "Harborview Briarwood": {
@@ -70,9 +68,13 @@ interface CaseStudyHighlight {
     id: string
     patient_id: string
     highlight_text: string
+    facility_summary_text: string
+    engagement_summary_text: string
     hospital_discharge_summary_text: string
     highlight_quotes?: { quote: string; source_file_id: string }[]
     hospital_discharge_summary_quotes?: { quote: string; source_file_id: string }[]
+    facility_summary_quotes?: { quote: string; source_file_id: string }[]
+    engagement_summary_quotes?: { quote: string; source_file_id: string }[]
     interventions?: string[]
     outcomes?: string[]
     clinical_risks?: string[]
@@ -182,18 +184,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     // Add intervention counts state for the Touchpoints chart
     const [interventionCounts, setInterventionCounts] = useState<Array<{ name: string; count: number }>>([
-        { name: "Medication reconciliations", count: 16 },
-        { name: "Hospital discharge reviews", count: 5 },
-        { name: "Specialist coordination", count: 29 },
-        { name: "Caregiver education", count: 17 },
     ])
 
     // Add clinical risks state for the Top Clinical Risks chart
     const [clinicalRisks, setClinicalRisks] = useState<Array<{ risk: string; count: number }>>([
-        { risk: "Congestive Heart Failure", count: 36 },
-        { risk: "Chronic Kidney Disease", count: 23 },
-        { risk: "Fall Risk (e.g., fractures)", count: 24 },
-        { risk: "Cognitive Impairment", count: 7 },
     ])
 
     // Add patient metrics state
@@ -384,6 +378,28 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 return
             }
 
+            const { data: existingHighlights } = await supabase
+                .from("patient_case_study_highlights")
+                .select("patient_id")
+                .in("patient_id", patientIds);
+
+            const existingIds = new Set(existingHighlights?.map(h => h.patient_id) || []);
+            const idsToGenerate = patientIds.filter(id => !existingIds.has(id));
+
+            console.log("Need to generate for ", idsToGenerate)            
+
+            await Promise.all(
+                idsToGenerate.map(async (id) => {
+                    console.log("🧠 Generating case study highlight for patient:", id);
+                    try {
+                        await generateCaseStudyHighlightForPatient(id);
+                    } catch (err) {
+                        console.error(`❌ Failed to generate highlight for patient ${id}:`, err);
+                    }
+                })
+            );
+
+
             // Get case studies for selected patients in the date range
             const { data, error } = await supabase
                 .from("patient_case_study_highlights")
@@ -392,6 +408,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     patient_id,
                     hospital_discharge_summary_text,
                     highlight_text,
+                    facility_summary_text,
+                    engagement_summary_text,
+                    facility_summary_quotes,
+                    engagement_summary_quotes,
                     interventions,
                     outcomes,
                     clinical_risks,
@@ -419,6 +439,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     patient_id: cs.patient_id,
                     hospital_discharge_summary_text: cs.hospital_discharge_summary_text,
                     highlight_text: cs.highlight_text,
+                    facility_summary_text: cs.facility_summary_text,
+                    engagement_summary_text: cs.engagement_summary_text,
+                    facility_summary_quotes: cs.facility_summary_quotes,
+                    engagement_summary_quotes: cs.engagement_summary_quotes,
                     interventions: cs.interventions,
                     outcomes: cs.outcomes,
                     clinical_risks: cs.clinical_risks,
@@ -436,7 +460,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             console.log(`selectedNursingHomeId is `, selectedNursingHomeId)
 
-            const facilityMappedName = facilityNameMap[selectedNursingHomeName] || {
+            const facilityMappedName = facilityNameMap[selectedNursingHomeName!] || {
                 originalName: selectedNursingHomeName,
                 mappedName: selectedNursingHomeName
             }
@@ -448,8 +472,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             if (!patientsSheet || !nonCcmSheet) {
                 console.error("One or both Excel files not found or unreadable")
-                return
+                return            
             }
+
             const patients = XLSX.utils.sheet_to_json(patientsSheet)
             const nonCcm = XLSX.utils.sheet_to_json(nonCcmSheet)
 
@@ -506,10 +531,11 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const allInterventions = [
                 ...new Set(
                     formattedCaseStudies
-                        .flatMap((cs) => cs.interventions || [])
+                        .flatMap((cs) => cs.detailed_interventions || [])
                         .filter(Boolean)
                 ),
             ]
+            console.log("BEfore categorization - allInterventions - ", allInterventions)
 
             if (allInterventions.length > 0) {
                 const parsedInterventions = allInterventions.map((item) =>
@@ -533,9 +559,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 } else {
                     console.warn("❗ Unexpected categorization response:", categorized);
                 }
-
-                //categorizedInterventions = categorized
-                //setCategorizedInterventions(categorized)
             }
 
             const uniqueRisks = [
@@ -751,9 +774,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         const prompt = `
 Below is a list of clinical risks observed in nursing home patients. 
 Your task is to classify them into a small number (5 to 7) of clear, medically meaningful categories (e.g. Fall Risk, Chronic Condition Complications, Readmission Risk, etc.). 
-Each risk should map into **one** of these categories. 
 Return the result as a JSON object with category names as keys and counts as values."
 
+Here is the Sample response: 
 {
   "Fall Risk (e.g., fractures)": 10,
   "Chronic Condition Complications": 7,
@@ -928,25 +951,6 @@ ${JSON.stringify(parsed, null, 2)}
                                         Choose specific patients for this report or use AI to auto-select relevant patients.
                                     </p>
                                 </div>
-                                {/* 
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="checkbox"
-                                        id="useAI"
-                                        checked={useAISelection}
-                                        onChange={(e) => {
-                                            setUseAISelection(e.target.checked)
-                                            if (e.target.checked) {
-                                                handleAIPatientSelection()
-                                            }
-                                        }}
-                                        className="rounded border-gray-300"
-                                    />
-                                    <Label htmlFor="useAI" className="text-sm">
-                                        Use AI Selection
-                                    </Label>
-                                </div>
-*/}
                             </div>
 
                             {isLoadingPatients ? (
@@ -1178,82 +1182,6 @@ ${JSON.stringify(parsed, null, 2)}
                                             </div>
                                         </div>
                                     </div>
-                                    {/* 
-                                    {categorizedInterventions && typeof categorizedInterventions === "object" ? (
-                                        Object.entries(categorizedInterventions)
-                                            .filter(([_, items]) => Array.isArray(items) && items.length > 0)
-                                            .map(([subcategory, items]) => (
-                                                <div key={subcategory} className="mb-4">
-                                                    <h4 className="text-md font-semibold text-blue-700 mb-2">{subcategory}</h4>
-                                                    <ul className="list-disc list-inside ml-4 text-sm text-gray-700 space-y-1">
-                                                        {items.map((item, index) => {
-                                                            let parsed: any = item;
-
-                                                            // Try to parse if it's a string that looks like JSON
-                                                            if (typeof item === "string") {
-                                                                const trimmed = item.trim();
-                                                                try {
-                                                                    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-                                                                        parsed = JSON.parse(trimmed);
-                                                                    } else {
-                                                                        // It's just a string like "Follow-up call"
-                                                                        parsed = { intervention: trimmed };
-                                                                    }
-                                                                } catch (e) {
-                                                                    console.warn("❌ Failed to parse intervention:", item);
-                                                                    parsed = { intervention: item };
-                                                                }
-                                                            }
-
-                                                            if (!parsed || typeof parsed !== "object") {
-                                                                return (
-                                                                    <li key={index}>
-                                                                        {String(parsed ?? "—")}
-                                                                    </li>
-                                                                );
-                                                            }
-
-                                                            console.log("👉 categorizedInterventions:", categorizedInterventions);
-                                                            console.log(
-                                                                "👉 entries with items:",
-                                                                Object.entries(categorizedInterventions || {}).filter(
-                                                                    ([_, items]) => Array.isArray(items) && items.length > 0
-                                                                )
-                                                            );
-                                                            return (
-                                                                <li key={index}>
-                                                                    {parsed.intervention || "—"}
-                                                                    {(parsed.source_quote || parsed.source_file_id) && (
-                                                                        <p className="text-xs text-gray-500 italic mt-1 pl-2">
-                                                                            {parsed.source_quote ? `"${parsed.source_quote}"` : ""}
-                                                                            {parsed.source_file_id ? (
-                                                                                <>
-                                                                                    {" — "}
-                                                                                    <a
-                                                                                        href={`/api/download-file?id=${parsed.source_file_id}`}
-                                                                                        target="_blank"
-                                                                                        rel="noopener noreferrer"
-                                                                                        className="text-blue-600 underline ml-1"
-                                                                                    >
-                                                                                        Download Source
-                                                                                    </a>
-                                                                                </>
-                                                                            ) : (
-                                                                                parsed.source_quote ? " — Source file not available" : null
-                                                                            )}
-                                                                        </p>
-                                                                    )}
-                                                                </li>
-                                                            );
-                                                        })}
-                                                    </ul>
-                                                </div>
-                                            ))
-                                    ) : (
-                                        <div className="text-sm text-gray-500 italic">No interventions found.</div>
-                                    )}
-*/}
-
                                     {/* Puzzle's Touchpoints with Bar Chart */}
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h2 className="text-xl font-semibold text-blue-800 mb-4">Puzzle's Touchpoints</h2>
@@ -1468,6 +1396,8 @@ ${JSON.stringify(parsed, null, 2)}
                                     </div>
 
                                     {/* Case Studies */}
+                                    {console.log("📘 Case Studies:", caseStudies)}
+
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Case Study Highlights</h3>
                                         {caseStudies.length > 0 ? (
@@ -1489,11 +1419,19 @@ ${JSON.stringify(parsed, null, 2)}
                                                     <Citations label="Cited from" quotes={study.hospital_discharge_summary_quotes || []} />
 
                                                     <p className="text-sm mt-4">
-                                                        {study.highlight_text
-                                                            ? study.highlight_text.charAt(0).toUpperCase() + study.highlight_text.slice(1)
+                                                        {study.facility_summary_text
+                                                            ? study.facility_summary_text.charAt(0).toUpperCase() + study.facility_summary_text.slice(1)
                                                             : ''}
                                                     </p>
-                                                    <Citations label="Cited from" quotes={study.highlight_quotes || []} />
+                                                    <Citations label="Cited from" quotes={study.facility_summary_quotes || []} />
+
+                                                    <p className="text-sm mt-4">
+                                                        {study.engagement_summary_text
+                                                            ? study.engagement_summary_text.charAt(0).toUpperCase() + study.engagement_summary_text.slice(1)
+                                                            : ''}
+                                                    </p>
+                                                    <Citations label="Cited from" quotes={study.engagement_summary_quotes || []} />
+
                                                 </div>
                                             ))
                                         ) : (
@@ -1514,7 +1452,7 @@ ${JSON.stringify(parsed, null, 2)}
 
 async function categorizeIntervention(interventionText: string): Promise<string> {
     const prompt = `
-You are a medical classification assistant. Categorize the following intervention into one of the following categories:
+You are a medical classification assistant. Categorize the following intervention into unique categories:
 
 - Care Coordination
 - Therapy & Rehab
