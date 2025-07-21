@@ -4,7 +4,6 @@ import { NextResponse } from "next/server"
 import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 import { logger } from "@/lib/logger"
 import { logServerAuditEvent } from "@/lib/audit-logger"
-import { generateCaseStudyHighlightForPatient } from "@/app/actions/generate-case-study"
 
 const COMPONENT = "ProcessPDFQueue"
 

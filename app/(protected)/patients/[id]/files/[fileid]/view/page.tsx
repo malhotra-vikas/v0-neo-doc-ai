@@ -146,6 +146,7 @@ export default async function PatientFileViewPage({
                 </Card>
 
                 {/* Add Case Study Highlight component */}
+                {/*
                 {file.processing_status === "completed" && (
                     <CaseStudyHighlight
                         fileId={fileId}
@@ -154,7 +155,7 @@ export default async function PatientFileViewPage({
                         fileName={file.file_name}
                     />
                 )}
-
+            */}
                 <Card className="mt-6">
                     <CardHeader>
                         <CardTitle>Extracted Text Content</CardTitle>
