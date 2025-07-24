@@ -5,8 +5,12 @@ import { cookies } from "next/headers"
 import OpenAI from "openai";
 import { logServerAuditEvent } from "@/lib/audit-logger"
 import { revalidatePath } from "next/cache"
+import pLimit from "p-limit"
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const TOKEN_LIMIT_PER_MINUTE = Number(process.env.TOKEN_LIMIT_PER_MINUTE) || 30000
+const TOKEN_BUFFER = Number(process.env.TOKEN_BUFFER) || 10000
 
 // Helper function to abbreviate names for PII protection
 function abbreviateName(fullName: string): string {
@@ -65,6 +69,54 @@ function sanitizePII(text: string, patientName: string): string {
 
     return sanitized
 }
+
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
+
+// p-limit parallel handler
+export const processPatientsWithLimit = async (patientIds: string[], concurrency: number = 25) => {
+    const limit = pLimit(concurrency)
+    const results: any[] = []
+
+    const WINDOW_MS = 60 * 1000
+
+    const usageHistory: { timestamp: number; tokens: number }[] = []
+
+    const getTokensUsedInLastMinute = () => {
+        const now = Date.now()
+        // Remove old entries beyond 60s window
+        while (usageHistory.length > 0 && usageHistory[0].timestamp < now - WINDOW_MS) {
+            usageHistory.shift()
+        }
+        return usageHistory.reduce((sum, record) => sum + record.tokens, 0)
+    }
+
+    for (let i = 0; i < patientIds.length; i++) {
+        const id = patientIds[i]
+
+        const task = limit(async () => {
+            // Check and wait if we're over the threshold
+            while (getTokensUsedInLastMinute() >= TOKEN_LIMIT_PER_MINUTE - TOKEN_BUFFER) {
+                console.log("⏱ Throttling to respect TPM... waiting 30s")
+                await sleep(30000)
+            }
+
+            console.log("🚀 Processing patient:", id)
+
+            const result = await generateCaseStudyHighlightForPatient(id)
+            const tokensUsed = result?.tokensUsed ?? 0
+
+            usageHistory.push({ timestamp: Date.now(), tokens: tokensUsed })
+            console.log(`🔢 Just used ${tokensUsed} tokens. Total in last 60s: ${getTokensUsedInLastMinute()}`)
+
+            return result
+        })
+
+        results.push(task)
+    }
+
+    return Promise.all(results)
+}
+
 
 export async function generateCaseStudyHighlightForPatient(patientId: string) {
     try {
@@ -140,6 +192,7 @@ Your task is to read the extracted text from the patient’s **Hospital Stay** d
 6. What are the key Clinical Risks upon Discharge that needs to be managed post discharge?
 
 Write in clear, medically accurate language using short paragraphs or bullet points. Focus on clinical clarity, avoid speculation, and do not include irrelevant administrative details.
+No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
 
 For each section, also include 1-2 source quotes from the source text that support the content. Do not fabricate — only use actual phrases or sentences from the text.
 For each quote, include the associated File ID from the document chunks. You will find these clearly marked like:
@@ -188,9 +241,12 @@ Your task is to review the extracted text from the patient’s In-Facility docum
 
 ⚠️ Important constraints – DO NOT VIOLATE:
 Puzzle NEVER prescribes or manages medications.
+Puzzle NEVER recomends or initiates any therapy.
+Do NOT add any dates to the summary.
 Exclude all care managed by the facility’s primary care or nursing teams.
 Include ONLY actions, findings, or assessments that fall within the scope of physiatry.
-
+No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
+Do not use words like "initiate", "recommeded".
 Your summary must address the following, clearly emphasizing Puzzle’s physiatry-specific role:
 
 1. Visit Frequency & Encounter Timing
@@ -258,6 +314,9 @@ Puzzle NEVER prescribes medication, keep that in mind while building the summary
 
 ⚠️ Important constraints – DO NOT VIOLATE:
 Puzzle NEVER prescribes or manages medications.
+Puzzle NEVER recomends or initiates any therapy.
+Do NOT add any dates to the summary.
+No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
 Exclude all care managed by the facility’s primary care or nursing teams.
 Include ONLY actions, findings, or assessments that fall within the scope of physiatry.
 
@@ -320,8 +379,11 @@ ${engagementText}
                     { role: "user", content: prompt },
                 ],
                 temperature: 0.5,
-                max_tokens: 1500,
+                max_tokens: 1300,
             });
+
+            const tokensUsed = completion.usage?.total_tokens ?? 0
+            console.log(`🧠 Tokens used in this prompt: ${tokensUsed}`)
 
             let content = completion.choices[0]?.message?.content;
             if (!content) throw new Error("No response from OpenAI");
@@ -332,15 +394,28 @@ ${engagementText}
                 content = content.replace(/^```json\n?/, "").replace(/```$/, "").trim();
             }
 
-            return JSON.parse(content); // Will throw if invalid JSON
+            const parsed = JSON.parse(content) // This will throw if invalid JSON
+
+            return { data: parsed, tokensUsed }
         };
 
-        let hospitalData, facilityData, engagementData, sanitizedHospitalSummary, sanitizedFacilitySummary, sanitizedEngagementSummary;
+        let sanitizedHospitalSummary, sanitizedFacilitySummary, sanitizedEngagementSummary;
+
+        const [hospitalResp, facilityResp, engagementResp] = await Promise.all([
+            getPromptedJSON(patientHospitalStayPrompt).catch(e => { console.error("❌ Hospital", e); return null }),
+            getPromptedJSON(patientInFacilityPrompt).catch(e => { console.error("❌ Facility", e); return null }),
+            getPromptedJSON(patientEngagementPrompt).catch(e => { console.error("❌ Engagement", e); return null }),
+        ])
+
+        const hospitalData = hospitalResp?.data ?? {}
+        const facilityData = facilityResp?.data ?? {}
+        const engagementData = engagementResp?.data ?? {}
+
+        const totalTokensUsed = (hospitalResp?.tokensUsed ?? 0) + (facilityResp?.tokensUsed ?? 0) + (engagementResp?.tokensUsed ?? 0)
+        console.log(`📊 Total tokens used for this patient: ${totalTokensUsed}`)
 
         try {
-            hospitalData = await getPromptedJSON(patientHospitalStayPrompt);
             console.log("🏥 Hospital Summary:\n", hospitalData);
-
             sanitizedHospitalSummary = hospitalData.hospital_discharge_summary?.summary
 
         } catch (err) {
@@ -348,18 +423,14 @@ ${engagementText}
         }
 
         try {
-            facilityData = await getPromptedJSON(patientInFacilityPrompt);
             console.log("🏨 In-Facility Summary:\n", facilityData);
-
             sanitizedFacilitySummary = facilityData.in_facility_summary?.summary
         } catch (err) {
             console.error("❌ Failed to get facility summary:", err);
         }
 
         try {
-            engagementData = await getPromptedJSON(patientEngagementPrompt);
             console.log("🧑‍⚕️ Engagement Summary:\n", engagementData);
-
             sanitizedEngagementSummary = engagementData.assessment?.summary
         } catch (err) {
             console.error("❌ Failed to get engagement summary:", err);
@@ -408,7 +479,8 @@ ${engagementText}
         }
 
 
-        return { success: true, highlight: highlightPayload };
+        //return { success: true, highlight: highlightPayload };
+        return { success: true, highlight: highlightPayload, tokensUsed: totalTokensUsed };
 
     } catch (error: any) {
         return {

@@ -32,7 +32,7 @@ import {
     LabelList,
 } from "recharts"
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
-import { generateCaseStudyHighlightForPatient } from "@/app/actions/generate-case-study"
+import { processPatientsWithLimit } from "@/app/actions/generate-case-study"
 
 const facilityNameMap: Record<string, { patientsName: string; readmitName: string }> = {
     "Harborview Briarwood": {
@@ -385,19 +385,14 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             const existingIds = new Set(existingHighlights?.map(h => h.patient_id) || []);
             const idsToGenerate = patientIds.filter(id => !existingIds.has(id));
+            let buildRiskAndInterventionCategories = false
 
-            console.log("Need to generate for ", idsToGenerate)            
+            console.log("Need to generate for ", idsToGenerate)
+            await processPatientsWithLimit(idsToGenerate, 20);
 
-            await Promise.all(
-                idsToGenerate.map(async (id) => {
-                    console.log("🧠 Generating case study highlight for patient:", id);
-                    try {
-                        await generateCaseStudyHighlightForPatient(id);
-                    } catch (err) {
-                        console.error(`❌ Failed to generate highlight for patient ${id}:`, err);
-                    }
-                })
-            );
+            if (idsToGenerate && idsToGenerate.length > 0) {
+                buildRiskAndInterventionCategories = true
+            }
 
 
             // Get case studies for selected patients in the date range
@@ -420,7 +415,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     detailed_interventions,
                     detailed_outcomes,
                     detailed_clinical_risks,
-                    created_at
+                    created_at,
+                    categorizedRisks,
+                    categorizedInterventions
                 `)
                 .in("patient_id", patientIds)
                 .gte("created_at", startDate)
@@ -453,6 +450,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     detailed_clinical_risks: cs.detailed_clinical_risks,
                     created_at: cs.created_at,
                     patient_name: patient?.name || "Unknown Patient",
+                    categorizedInterventions: cs.categorizedInterventions,
+                    categorizedRisks: cs.categorizedRisks
                 }
             })
 
@@ -472,7 +471,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             if (!patientsSheet || !nonCcmSheet) {
                 console.error("One or both Excel files not found or unreadable")
-                return            
+                return
             }
 
             const patients = XLSX.utils.sheet_to_json(patientsSheet)
@@ -527,74 +526,108 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 successfulTransitions,
             })
 
-            // Now categorize interventions
-            const allInterventions = [
-                ...new Set(
-                    formattedCaseStudies
-                        .flatMap((cs) => cs.detailed_interventions || [])
-                        .filter(Boolean)
-                ),
-            ]
-            console.log("BEfore categorization - allInterventions - ", allInterventions)
+            console.log("buildRiskAndInterventionCategories is - ", buildRiskAndInterventionCategories)
 
-            if (allInterventions.length > 0) {
-                const parsedInterventions = allInterventions.map((item) =>
-                    typeof item === 'string' ? JSON.parse(item) : item
-                )
-                console.log("BEfore categorization - Parsed Interventions - ", parsedInterventions)
+            // Moving this to one
+            if (buildRiskAndInterventionCategories) {
+                console.log("buildRiskAndInterventionCategories is - ", buildRiskAndInterventionCategories)
 
-                const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
-                console.log("After categorization - Catogorized Interventions - ", categorized)
+                // Now categorize interventions
+                const allInterventions = [
+                    ...new Set(
+                        formattedCaseStudies
+                            .flatMap((cs) => cs.detailed_interventions || [])
+                            .filter(Boolean)
+                    ),
+                ]
+                console.log("BEfore categorization - allInterventions - ", allInterventions)
 
-                if (categorized && typeof categorized === "object") {
-                    const counts = Object.entries(categorized)
-                        .map(([name, count]) => ({
-                            name,
+                if (allInterventions.length > 0) {
+                    const parsedInterventions = allInterventions.map((item) =>
+                        typeof item === 'string' ? JSON.parse(item) : item
+                    )
+                    console.log("BEfore categorization - Parsed Interventions - ", parsedInterventions)
+
+                    const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
+                    console.log("After categorization - Catogorized Interventions - ", categorized)
+
+                    if (categorized && typeof categorized === "object") {
+                        const counts = Object.entries(categorized)
+                            .map(([name, count]) => ({
+                                name,
+                                count: Number(count) || 0,
+                            }))
+                            .filter(item => item.count > 0) // ⬅️ filter out 0s
+                            .sort((a, b) => b.count - a.count); // optional sorting
+                        console.log("After Intervention categorization - Counts - ", counts)
+
+                        setInterventionCounts(counts);
+
+                        const formattedCaseStudies = data.map(async (cs) => {
+                            // Update the categorized data into DB
+                            const { error: updateError } = await supabase
+                                .from("patient_case_study_highlights")
+                                .update({
+                                    categorizedInterventions: counts
+                                })
+                                .eq("patient_id", cs.patient_id)
+                        });
+                    } else {
+                        console.warn("❗ Unexpected categorization response:", categorized);
+                    }
+                }
+
+                const uniqueRisks = [
+                    ...new Set(
+                        formattedCaseStudies
+                            .flatMap(study => study.clinical_risks || [])
+                            .map((item) => {
+                                try {
+                                    const parsed = typeof item === "string" ? JSON.parse(item) : item
+                                    return parsed.risk?.trim()
+                                } catch {
+                                    return null
+                                }
+                            })
+                            .filter(Boolean)
+                    )
+                ];
+                console.log("BEfore categorization - uniqueRisks - ", uniqueRisks)
+
+                const categorizedRisks = await categorizeClinicalRisksWithOpenAI(uniqueRisks)
+                console.log("After categorization - Catogorized Risks - ", categorizedRisks)
+
+                if (categorizedRisks && typeof categorizedRisks === "object") {
+                    const counts = Object.entries(categorizedRisks)
+                        .map(([risk, count]) => ({
+                            risk,
                             count: Number(count) || 0,
                         }))
                         .filter(item => item.count > 0) // ⬅️ filter out 0s
                         .sort((a, b) => b.count - a.count); // optional sorting
+                    console.log("After RISK categorization - Counts - ", counts)
 
-                    setInterventionCounts(counts);
+                    setClinicalRisks(counts);
+
+                    const formattedCaseStudies = data.map(async (cs) => {
+                        // Update the categorized data into DB
+                        const { error: updateError } = await supabase
+                            .from("patient_case_study_highlights")
+                            .update({
+                                categorizedRisks: counts
+                            })
+                            .eq("patient_id", cs.patient_id)
+                    });
+
                 } else {
-                    console.warn("❗ Unexpected categorization response:", categorized);
+                    console.warn("❗ Unexpected categorization response:", categorizedRisks);
                 }
-            }
-
-            const uniqueRisks = [
-                ...new Set(
-                    formattedCaseStudies
-                        .flatMap(study => study.clinical_risks || [])
-                        .map((item) => {
-                            try {
-                                const parsed = typeof item === "string" ? JSON.parse(item) : item
-                                return parsed.risk?.trim()
-                            } catch {
-                                return null
-                            }
-                        })
-                        .filter(Boolean)
-                )
-            ];
-            console.log("BEfore categorization - uniqueRisks - ", uniqueRisks)
-
-            const categorizedRisks = await categorizeClinicalRisksWithOpenAI(uniqueRisks)
-            console.log("After categorization - Catogorized Risks - ", categorizedRisks)
-
-            if (categorizedRisks && typeof categorizedRisks === "object") {
-                const counts = Object.entries(categorizedRisks)
-                    .map(([risk, count]) => ({
-                        risk,
-                        count: Number(count) || 0,
-                    }))
-                    .filter(item => item.count > 0) // ⬅️ filter out 0s
-                    .sort((a, b) => b.count - a.count); // optional sorting
-
-                setClinicalRisks(counts);
             } else {
-                console.warn("❗ Unexpected categorization response:", categorizedRisks);
+                const formattedCaseStudies = data.map(async (cs) => {
+                    setClinicalRisks(cs.categorizedRisks);
+                    setInterventionCounts(cs.categorizedInterventions);
+                });
             }
-
         } catch (error: any) {
             console.error("Error fetching case studies:", error?.message || error || "Unknown error")
 
@@ -1255,7 +1288,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                 <ChartContainer
                                                     config={{
                                                         patients: {
-                                                            label: "Number of Patients",
+                                                            label: "Count across Patients",
                                                             color: "#ef4444",
                                                         },
                                                     }}
@@ -1270,7 +1303,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                             <XAxis type="number" />
                                                             <YAxis dataKey="risk" type="category" width={180} tick={{ fontSize: 12 }} />
                                                             <Tooltip />
-                                                            <Bar dataKey="count" name="Number of Patients">
+                                                            <Bar dataKey="count" name="Count across Patients">
                                                                 {clinicalRisks.map((entry, index) => (
                                                                     <Cell key={`cell-${index}`} fill={RISK_COLORS[index % RISK_COLORS.length]} />
                                                                 ))}
@@ -1290,7 +1323,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                                 Clinical Risk
                                                             </th>
                                                             <th className="px-4 py-2 text-right text-sm font-medium text-gray-500 tracking-wider">
-                                                                Number of Patients
+                                                                Count across Patients
                                                             </th>
                                                         </tr>
                                                     </thead>
@@ -1448,39 +1481,4 @@ ${JSON.stringify(parsed, null, 2)}
             )}
         </div>
     )
-}
-
-async function categorizeIntervention(interventionText: string): Promise<string> {
-    const prompt = `
-You are a medical classification assistant. Categorize the following intervention into unique categories:
-
-- Care Coordination
-- Therapy & Rehab
-- Medication Management
-- Post-Discharge Support
-- Patient Education
-- Other
-
-Intervention: "${interventionText}"
-
-Category:
-  `;
-
-    const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-            {
-                role: "system",
-                content:
-                    prompt,
-            },
-            { role: "user", content: prompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 10,
-    });
-
-    return completion.choices[0].message.content?.trim();
-
-
 }
