@@ -192,7 +192,7 @@ Your task is to read the extracted text from the patient’s **Hospital Stay** d
 6. What are the key Clinical Risks upon Discharge that needs to be managed post discharge?
 
 Write in clear, medically accurate language using short paragraphs or bullet points. Focus on clinical clarity, avoid speculation, and do not include irrelevant administrative details.
-No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
+No not add any hyperbole like "significantly", "immensely", "coordination" etc. Only report facts.
 
 For each section, also include 1-2 source quotes from the source text that support the content. Do not fabricate — only use actual phrases or sentences from the text.
 For each quote, include the associated File ID from the document chunks. You will find these clearly marked like:
@@ -246,7 +246,7 @@ Do NOT add any dates to the summary.
 Exclude all care managed by the facility’s primary care or nursing teams.
 Include ONLY actions, findings, or assessments that fall within the scope of physiatry.
 No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
-Do not use words like "initiate", "recommeded".
+Do not use words like "initiate", "recommeded", "coordination", "coordinated"
 Your summary must address the following, clearly emphasizing Puzzle’s physiatry-specific role:
 
 1. Visit Frequency & Encounter Timing
@@ -326,7 +326,7 @@ Focus on the following structure:
 2. **Intervention** – What was done during engagement? Include education, motivation, care coordination, or behavioral interventions. Puzzle NEVER prescribes medication.
 3. **Outcome** – What was the result or follow-up from the engagement? Was there progress, resistance, follow-through, or a need for further support?
 
-Structure the summary clearly under the three sections above. Be specific, clinical, and concise. Avoid generic statements and focus on measurable actions or observations documented in the engagement notes.
+Start the summary with "Post Discharge, ". Structure the summary clearly under the three sections above. Be specific, clinical, and concise. Avoid generic statements and focus on measurable actions or observations documented in the engagement notes.
 
 For each section, also include 1-2 source quotes from the source text that support the content. Do not fabricate — only use actual phrases or sentences from the text.
 For each quote, include the associated File ID from the document chunks. You will find these clearly marked like:
