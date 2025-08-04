@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
         // Step 3: Fetch existing names
         const { data: existing, error: fetchError } = await supabase
             .from('nursing_homes')
-            .select('name')
+            .select('id, name')
 
         if (fetchError) {
             console.error("❌ Failed to fetch existing nursing homes:", fetchError)
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
         const toInsert = uniqueFacilities
             .filter((name) => !existingNames.has(normalize(name)))
-            .map((name) => ({ 
+            .map((name) => ({
                 name: name.trim(),
                 facility_id: "6a6ed56c-4ff9-4c36-8126-b56685cc9721", // Puzzle's Facility ID
             })) // insert with clean display name
@@ -99,8 +99,78 @@ export async function POST(req: NextRequest) {
             console.log("ℹ️ No new facilities to insert")
         }
 
+        // Re-fetch all homes for ID mapping
+        const { data: homes } = await supabase
+            .from('nursing_homes')
+            .select('id, name')
+
+        const nameToId = new Map(homes.map(h => [normalize(h.name), h.id]))
+
+        // Count patients by facility from each sheet
+        const sheetNames = ['CCM Master', 'CCM Master Discharged', 'Non - CCM Master']
+        const sheetWiseCounts: Record<string, Record<string, number>> = {}
+
+        for (const sheetName of sheetNames) {
+            const sheet = workbook.Sheets[sheetName]
+            if (!sheet) {
+                console.warn(`⚠️ Sheet "${sheetName}" not found`)
+                continue
+            }
+
+            const data = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' })
+            const counts: Record<string, number> = {}
+
+            for (const row of data) {
+                const raw = row['SNF Facility Name']
+                const name = raw?.toString().trim()
+                if (!name) continue
+                const key = normalize(name)
+                counts[key] = (counts[key] || 0) + 1
+            }
+
+            sheetWiseCounts[sheetName] = counts
+        }
+
+        const facilityPatientSummary: Record<
+            string,
+            {
+                facilityName: string
+                ccmMasterCount: number
+                ccmMasterDischargedCount: number
+                nonCcmMasterCount: number
+            }
+        > = {}
+
+        for (const [sheetName, facilityCounts] of Object.entries(sheetWiseCounts)) {
+            for (const [normalizedName, count] of Object.entries(facilityCounts)) {
+                if (!facilityPatientSummary[normalizedName]) {
+                    facilityPatientSummary[normalizedName] = {
+                        facilityName: normalizedName,
+                        ccmMasterCount: 0,
+                        ccmMasterDischargedCount: 0,
+                        nonCcmMasterCount: 0,
+                    }
+                }
+
+                if (sheetName === 'CCM Master') {
+                    facilityPatientSummary[normalizedName].ccmMasterCount += count
+                } else if (sheetName === 'CCM Master Discharged') {
+                    facilityPatientSummary[normalizedName].ccmMasterDischargedCount += count
+                } else if (sheetName === 'Non - CCM Master') {
+                    facilityPatientSummary[normalizedName].nonCcmMasterCount += count
+                }
+            }
+        }
+
+        const facilitySummaryArray = Object.values(facilityPatientSummary)
+        console.log("✅ Final patient count breakdown:")
+        console.dir(facilitySummaryArray, { depth: null })
+
+
         console.log(`✅ Process completed in ${Date.now() - start}ms`)
-        return NextResponse.json({ inserted: toInsert.length })
+        return NextResponse.json({
+            inserted: toInsert.length
+        })
     } catch (err: any) {
         console.error("💥 Unexpected error:", err)
         return NextResponse.json({ error: "Internal server error", detail: err.message }, { status: 500 })
