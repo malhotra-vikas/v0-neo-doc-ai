@@ -154,7 +154,7 @@ export default function UploadFileDialog({
       await fetch('/api/process-nursing-home-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath }),
+        body: JSON.stringify({ filePath, month, year }),
       })
         .then((res) => res.json())
         .then((result) => {
