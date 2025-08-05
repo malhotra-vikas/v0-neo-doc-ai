@@ -125,6 +125,31 @@ export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
     )
 }
 
+async function getFacilitySummary(nursingHomeId: string, month: string, year: string) {
+    const supabase = createClientComponentClient()
+
+    console.log("Running getFacilitySummary for - ", nursingHomeId)
+    console.log("Running getFacilitySummary for - ", month)
+    console.log("Running getFacilitySummary for - ", year)
+
+    const { data, error } = await supabase
+        .from('facility_readmission_summary')
+        .select('*')
+        .eq('nursing_home_id', nursingHomeId)
+        .eq('month', month)
+        .eq('year', year)
+        .single() // returns one row instead of array        
+
+    console.log("getFacilitySummary Data is - ", data)
+
+    if (error) {
+        console.error("❌ Failed to fetch facility summary:", error)
+        return null
+    }
+
+    return data
+}
+
 async function getFilePaths(nursingHomeId: string, month: string, year: string) {
     const supabase = createClientComponentClient()
 
@@ -181,6 +206,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const clinicalRisksChartRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
     //let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
+    const [facilityReadmissionData, setFacilityReadmissionData] = useState<any>()
 
     // Add intervention counts state for the Touchpoints chart
     const [interventionCounts, setInterventionCounts] = useState<Array<{ name: string; count: number }>>([
@@ -192,10 +218,18 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     // Add patient metrics state
     const [patientMetrics, setPatientMetrics] = useState({
-        totalPatients: 0,
-        readmissions: 0,
-        readmissionRate: 0,
-        successfulTransitions: 0,
+        totalCCMPatients: 0,
+        totalNonCCMPatients: 0,
+        commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
+        commulative30DayReadmissionCount_fromSNFDischargeDate: 0,
+        commulative60DayReadmissionCount: 0,
+        commulative90DayReadmissionCount: 0,
+        nonCCMReadmissionCount: 0,
+        ccm30Day_ReadmissionRate_SNFAdmitDate: 0,
+        ccm30Day_ReadmissionRate_SNFDischargeDate: 0,
+        ccm60Day_ReadmissionRate: 0,
+        ccm90Day_ReadmissionRate: 0,
+        nonccm_ReadmissionRate: 0,
     })
 
     // Add patient selection state
@@ -207,12 +241,73 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     // Add effect to fetch patients when nursing home changes
     useEffect(() => {
-        if (selectedNursingHomeId && selectedNursingHomeName && selectedMonth && selectedYear) {
-            fetchAvailablePatients()
-        } else {
-            setAvailablePatients([])
-            setSelectedPatients([])
+        const run = async () => {
+            if (selectedNursingHomeId && selectedNursingHomeName && selectedMonth && selectedYear) {
+                await fetchAvailablePatients()
+            } else {
+                setAvailablePatients([])
+                setSelectedPatients([])
+            }
+
+            if (selectedNursingHomeId && selectedMonth && selectedYear) {
+                console.log("Running getFacilitySummary for - ", selectedNursingHomeId)
+                console.log("Running getFacilitySummary for - ", selectedMonth)
+                console.log("Running getFacilitySummary for - ", selectedYear)
+
+                const data = await getFacilitySummary(selectedNursingHomeId, selectedMonth, selectedYear)
+                console.log("getFacilitySummary Data is - ", data)
+
+                setFacilityReadmissionData(data)
+
+                if (!data) return
+
+                const totalCCMPatients = (data.ccm_master_count || 0) + (data.ccm_master_discharged_count || 0)
+                const totalNonCCMPatients = data.non_ccm_master_count || 0
+
+                const commulative30DayReadmissionCount_fromSNFAdmitDate = data.h30_admit || 0
+                const commulative30DayReadmissionCount_fromSNFDischargeDate = data.h30_discharge || 0
+                const commulative60DayReadmissionCount = data.h60 || 0
+                const commulative90DayReadmissionCount = data.h90 || 0
+                const nonCCMReadmissionCount = data.h_reported || 0
+
+                const ccm30Day_ReadmissionRate_SNFAdmitDate = totalCCMPatients > 0
+                    ? (commulative30DayReadmissionCount_fromSNFAdmitDate / totalCCMPatients) * 100
+                    : 0
+
+                const ccm30Day_ReadmissionRate_SNFDischargeDate = totalCCMPatients > 0
+                    ? (commulative30DayReadmissionCount_fromSNFDischargeDate / totalCCMPatients) * 100
+                    : 0
+
+                const ccm60Day_ReadmissionRate = totalCCMPatients > 0
+                    ? (commulative60DayReadmissionCount / totalCCMPatients) * 100
+                    : 0
+
+                const ccm90Day_ReadmissionRate = totalCCMPatients > 0
+                    ? (commulative90DayReadmissionCount / totalCCMPatients) * 100
+                    : 0
+
+                const nonccm_ReadmissionRate = totalNonCCMPatients > 0
+                    ? (nonCCMReadmissionCount / totalNonCCMPatients) * 100
+                    : 0
+
+                setPatientMetrics({
+                    totalCCMPatients,
+                    totalNonCCMPatients,
+                    commulative30DayReadmissionCount_fromSNFAdmitDate,
+                    commulative30DayReadmissionCount_fromSNFDischargeDate,
+                    commulative60DayReadmissionCount,
+                    commulative90DayReadmissionCount,
+                    nonCCMReadmissionCount,
+                    ccm30Day_ReadmissionRate_SNFAdmitDate,
+                    ccm30Day_ReadmissionRate_SNFDischargeDate,
+                    ccm60Day_ReadmissionRate,
+                    ccm90Day_ReadmissionRate,
+                    nonccm_ReadmissionRate,
+                })
+            }
         }
+
+        run()
     }, [selectedNursingHomeId, selectedNursingHomeName, selectedMonth, selectedYear])
 
     const fetchAvailablePatients = async () => {
@@ -354,6 +449,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     // Replace the existing fetchCaseStudies function with this updated version
     const fetchCaseStudies = async () => {
         if (!selectedNursingHomeId) return
+        console.log("selectedNursingHomeId is ", selectedNursingHomeId)
+
 
         setIsLoadingCaseStudies(true)
 
@@ -465,66 +562,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             }
 
             console.log("facilityMappedName ios ", facilityMappedName)
-            const { patientsPath, nonCcmPath } = await getFilePaths(selectedNursingHomeId, selectedMonth, selectedYear)
-            const patientsSheet = await fetchAndParseExcel(patientsPath)
-            const nonCcmSheet = await fetchAndParseExcel(nonCcmPath)
-
-            if (!patientsSheet || !nonCcmSheet) {
-                console.error("One or both Excel files not found or unreadable")
-                return
-            }
-
-            const patients = XLSX.utils.sheet_to_json(patientsSheet)
-            const nonCcm = XLSX.utils.sheet_to_json(nonCcmSheet)
-
-            // ⚠ Facility name might have extra spaces, so normalize it for safety
-            const clean = (s: any) => (typeof s === 'string' ? s.trim().toLowerCase() : '')
-
-
-            console.log("Cleaned selectedNursingHomeName:", clean(selectedNursingHomeName));
-
-            const uniquePatientFacilities = [
-                ...new Set(patients.map(p => p.Facility).filter(Boolean)),
-            ]
-
-            const uniqueReadmitFacilities = [
-                ...new Set(nonCcm.map(p => p["SNF Facility Name"]).filter(Boolean)),
-            ]
-
-            console.log("🏥 Unique Facilities in Patients File:")
-            console.table(uniquePatientFacilities)
-
-            console.log("🏥 Unique Facilities in Non CCM File:")
-            console.table(uniqueReadmitFacilities)
-
-            const readmissionsData = nonCcm.filter(row => {
-                return clean(row["SNF Facility Name"]) === clean(selectedNursingHomeName)
-            })
-
-            console.log("🔍 Matching Patients Facility Name:", facilityMappedName.patientsName)
-
-            const allPatientsData = patients.filter(row => {
-                return clean(row["Facility"]) === clean(facilityMappedName.patientsName)
-            })
-
-            console.log(`Facility patients Data `, allPatientsData)
-            console.log(`Facility Readdimision Data  `, readmissionsData)
-
-            const readmissionCount = readmissionsData.length
-            const totalPatients = allPatientsData.length
-
-            console.log(`patients count `, totalPatients)
-            console.log(`Readdimision count  `, readmissionCount)
-
-            const readmissionRate = totalPatients > 0 ? (readmissionCount / totalPatients) * 100 : 0
-            const successfulTransitions = totalPatients - readmissionCount
-
-            setPatientMetrics({
-                totalPatients,
-                readmissions: readmissionCount,
-                readmissionRate,
-                successfulTransitions,
-            })
 
             console.log("buildRiskAndInterventionCategories is - ", buildRiskAndInterventionCategories)
 
@@ -896,8 +933,8 @@ ${JSON.stringify(parsed, null, 2)}
 
     // Prepare data for the readmissions pie chart
     const readmissionChartData = [
-        { name: "Successful Transitions", value: patientMetrics.successfulTransitions },
-        { name: "30-Day Readmissions", value: patientMetrics.readmissions },
+        { name: "Successful Transitions", value: patientMetrics.totalCCMPatients - (patientMetrics.commulative30DayReadmissionCount_fromSNFDischargeDate) },
+        { name: "30-Day Readmissions (SNF Admit)", value: 5 },
     ]
 
     // Calculate total interventions for the touchpoints section
@@ -1191,27 +1228,61 @@ ${JSON.stringify(parsed, null, 2)}
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         <tr>
                                                             <td className="px-4 py-3 text-sm text-gray-900">
-                                                                Total Puzzle Continuity Care Patients Tracked
+                                                                Total Puzzle Continuity Care Patients Tracked (Active and Previously Discharged)
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.totalPatients}
+                                                                {patientMetrics.totalCCMPatients}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">-</td>
                                                         </tr>
                                                         <tr>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (Puzzle Patients)</td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (From SNF Admit Date)</td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.readmissions}
+                                                                {patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.readmissionRate.toFixed(1)}%
+                                                                {patientMetrics.ccm30Day_ReadmissionRate_SNFAdmitDate.toFixed(1)}%
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (From SNF Discharge Date)</td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                                {patientMetrics.commulative30DayReadmissionCount_fromSNFDischargeDate}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">
+                                                                {patientMetrics.ccm30Day_ReadmissionRate_SNFDischargeDate.toFixed(1)}%
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">60-Day Readmissions</td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                                {patientMetrics.commulative60DayReadmissionCount}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">
+                                                                {patientMetrics.ccm60Day_ReadmissionRate.toFixed(1)}%
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">90-Day Readmissions</td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                                {patientMetrics.commulative90DayReadmissionCount}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">
+                                                                {patientMetrics.ccm90Day_ReadmissionRate.toFixed(1)}%
+                                                            </td>
+                                                        </tr>
+
+                                                        <tr>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">Non CCM Readmissions</td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                                {patientMetrics.nonCCMReadmissionCount}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">
+                                                                {patientMetrics.nonccm_ReadmissionRate.toFixed(1)}%
                                                             </td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
-                                                <p className="text-xs text-gray-500 mt-4">
-                                                    Note: Readmissions reflect only patients supported by Puzzle Continuity Care.
-                                                </p>
                                             </div>
                                         </div>
                                     </div>
