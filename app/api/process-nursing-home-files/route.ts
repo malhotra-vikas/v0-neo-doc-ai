@@ -118,10 +118,10 @@ export async function POST(req: NextRequest) {
                 ccmMasterDischargedCount: number
                 nonCcmMasterCount: number
                 h30Admit: number
-                h30Discharge: number
-                h60: number
-                h90: number
-                hReported: number
+                //h30Discharge: number
+                //h60: number
+                //h90: number
+                //hReported: number
             }
         > = {}
 
@@ -145,10 +145,10 @@ export async function POST(req: NextRequest) {
                         ccmMasterDischargedCount: 0,
                         nonCcmMasterCount: 0,
                         h30Admit: 0,
-                        h30Discharge: 0,
-                        h60: 0,
-                        h90: 0,
-                        hReported: 0
+                        //h30Discharge: 0,
+                        //h60: 0,
+                        //h90: 0,
+                        //hReported: 0
                     }
                 }
 
@@ -157,22 +157,22 @@ export async function POST(req: NextRequest) {
                 if (sheetName === 'CCM Master') {
                     summary.ccmMasterCount += 1
                     if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
-                    if (row['30 Day Reported Hospitalization - From SNF Discharge Date']) summary.h30Discharge += 1
-                    if (row['60 Day Reported Hospitalization']) summary.h60 += 1
-                    if (row['90 Day Reported Hospitalization']) summary.h90 += 1
+                    //if (row['30 Day Reported Hospitalization - From SNF Discharge Date']) summary.h30Discharge += 1
+                    //if (row['60 Day Reported Hospitalization']) summary.h60 += 1
+                    //if (row['90 Day Reported Hospitalization']) summary.h90 += 1
                 }
 
                 if (sheetName === 'CCM Master Discharged') {
                     summary.ccmMasterDischargedCount += 1
                     if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
-                    if (row['30 Day Reported Hospitalization - From SNF Discharge Date']) summary.h30Discharge += 1
-                    if (row['60 Day Reported Hospitalization']) summary.h60 += 1
-                    if (row['90 Day Reported Hospitalization']) summary.h90 += 1
+                    //if (row['30 Day Reported Hospitalization - From SNF Discharge Date']) summary.h30Discharge += 1
+                    //if (row['60 Day Reported Hospitalization']) summary.h60 += 1
+                    //if (row['90 Day Reported Hospitalization']) summary.h90 += 1
                 }
 
                 if (sheetName === 'Non - CCM Master') {
                     summary.nonCcmMasterCount += 1
-                    if (row['Reported Hospitalization']) summary.hReported += 1
+                    if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
                 }
             }
         }
@@ -197,10 +197,10 @@ export async function POST(req: NextRequest) {
                     ccm_master_discharged_count: summary.ccmMasterDischargedCount,
                     non_ccm_master_count: summary.nonCcmMasterCount,
                     h30_admit: summary.h30Admit,
-                    h30_discharge: summary.h30Discharge,
-                    h60: summary.h60,
-                    h90: summary.h90,
-                    h_reported: summary.hReported,
+                    //h30_discharge: summary.h30Discharge,
+                    //h60: summary.h60,
+                    //h90: summary.h90,
+                    //h_reported: summary.hReported,
                 }
             })
             .filter(Boolean)

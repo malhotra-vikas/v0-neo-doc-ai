@@ -218,6 +218,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     // Add patient metrics state
     const [patientMetrics, setPatientMetrics] = useState({
+        totalPuzzlePatients: 0,
+        commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
+        commulative30Day_ReadmissionRate: 0,
+/*        
         totalCCMPatients: 0,
         totalNonCCMPatients: 0,
         commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
@@ -230,6 +234,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         ccm60Day_ReadmissionRate: 0,
         ccm90Day_ReadmissionRate: 0,
         nonccm_ReadmissionRate: 0,
+*/        
     })
 
     // Add patient selection state
@@ -261,19 +266,24 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
                 if (!data) return
 
-                const totalCCMPatients = (data.ccm_master_count || 0) + (data.ccm_master_discharged_count || 0)
-                const totalNonCCMPatients = data.non_ccm_master_count || 0
+                //const totalCCMPatients = (data.ccm_master_count || 0) + (data.ccm_master_discharged_count || 0)
+                //const totalNonCCMPatients = data.non_ccm_master_count || 0
+
+                const totalPuzzlePatients = (data.ccm_master_count || 0) + 
+                    (data.ccm_master_discharged_count || 0) +
+                    (data.non_ccm_master_count || 0)
+
 
                 const commulative30DayReadmissionCount_fromSNFAdmitDate = data.h30_admit || 0
-                const commulative30DayReadmissionCount_fromSNFDischargeDate = data.h30_discharge || 0
-                const commulative60DayReadmissionCount = data.h60 || 0
-                const commulative90DayReadmissionCount = data.h90 || 0
-                const nonCCMReadmissionCount = data.h_reported || 0
+                //const commulative30DayReadmissionCount_fromSNFDischargeDate = data.h30_discharge || 0
+                //const commulative60DayReadmissionCount = data.h60 || 0
+                //const commulative90DayReadmissionCount = data.h90 || 0
+                //const nonCCMReadmissionCount = data.h_reported || 0
 
-                const ccm30Day_ReadmissionRate_SNFAdmitDate = totalCCMPatients > 0
-                    ? (commulative30DayReadmissionCount_fromSNFAdmitDate / totalCCMPatients) * 100
+                const commulative30Day_ReadmissionRate = totalPuzzlePatients > 0
+                    ? (commulative30DayReadmissionCount_fromSNFAdmitDate / totalPuzzlePatients) * 100
                     : 0
-
+/*
                 const ccm30Day_ReadmissionRate_SNFDischargeDate = totalCCMPatients > 0
                     ? (commulative30DayReadmissionCount_fromSNFDischargeDate / totalCCMPatients) * 100
                     : 0
@@ -289,20 +299,22 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 const nonccm_ReadmissionRate = totalNonCCMPatients > 0
                     ? (nonCCMReadmissionCount / totalNonCCMPatients) * 100
                     : 0
-
+*/
                 setPatientMetrics({
-                    totalCCMPatients,
-                    totalNonCCMPatients,
+                    totalPuzzlePatients,
+//                    totalCCMPatients,
+//                    totalNonCCMPatients,
                     commulative30DayReadmissionCount_fromSNFAdmitDate,
-                    commulative30DayReadmissionCount_fromSNFDischargeDate,
-                    commulative60DayReadmissionCount,
-                    commulative90DayReadmissionCount,
-                    nonCCMReadmissionCount,
-                    ccm30Day_ReadmissionRate_SNFAdmitDate,
-                    ccm30Day_ReadmissionRate_SNFDischargeDate,
-                    ccm60Day_ReadmissionRate,
-                    ccm90Day_ReadmissionRate,
-                    nonccm_ReadmissionRate,
+                    commulative30Day_ReadmissionRate,
+//                    commulative30DayReadmissionCount_fromSNFDischargeDate,
+//                    commulative60DayReadmissionCount,
+//                    commulative90DayReadmissionCount,
+//                    nonCCMReadmissionCount,
+//                    ccm30Day_ReadmissionRate_SNFAdmitDate,
+//                    ccm30Day_ReadmissionRate_SNFDischargeDate,
+//                    ccm60Day_ReadmissionRate,
+//                    ccm90Day_ReadmissionRate,
+//                    nonccm_ReadmissionRate,
                 })
             }
         }
@@ -933,14 +945,34 @@ ${JSON.stringify(parsed, null, 2)}
 
     // Prepare data for the readmissions pie chart
     const readmissionChartData = [
-        { name: "Successful Transitions", value: patientMetrics.totalCCMPatients - (patientMetrics.commulative30DayReadmissionCount_fromSNFDischargeDate) },
-        { name: "30-Day Readmissions (SNF Admit)", value: 5 },
+        {
+            name: "Successful Transitions",
+            value: (patientMetrics.totalCCMPatients + patientMetrics.totalNonCCMPatients) - (
+                patientMetrics.commulative30DayReadmissionCount_fromSNFDischargeDate +
+                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate +
+                patientMetrics.commulative60DayReadmissionCount +
+                patientMetrics.commulative90DayReadmissionCount
+            ),
+            color: "#4ade80", // green
+        },
+        {
+            name: "30-Day Readmissions",
+            value: (
+                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate
+            ),
+            color: "#facc15", // yellow
+        }
     ]
 
     // Calculate total interventions for the touchpoints section
     const totalInterventions = interventionCounts.reduce((sum, item) => sum + item.count, 0)
 
-    const COLORS = ["#4ade80", "#f87171"] // Green for success, red for readmissions
+    //const COLORS = ["#4ade80", "#f87171"] // Green for success, red for readmissions
+    const COLORS = [
+        "#4ade80", // Successful
+        "#facc15" // 30-Day
+    ]
+
     const INTERVENTION_COLORS = ["#60a5fa", "#34d399", "#a78bfa", "#fbbf24"] // Blue, green, purple, yellow
     const RISK_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16"] // Red, orange, yellow, green
 
@@ -1180,7 +1212,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                             color: "#4ade80",
                                                         },
                                                         readmissions: {
-                                                            label: "30-Day Readmissions",
+                                                            label: "30-Day Readmissions (Puzzle Patients)",
                                                             color: "#f87171",
                                                         },
                                                     }}
@@ -1228,57 +1260,20 @@ ${JSON.stringify(parsed, null, 2)}
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         <tr>
                                                             <td className="px-4 py-3 text-sm text-gray-900">
-                                                                Total Puzzle Continuity Care Patients Tracked (Active and Previously Discharged)
+                                                                Total Puzzle Continuity Care Patients Tracked
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.totalCCMPatients}
+                                                                {patientMetrics.totalPuzzlePatients }
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">-</td>
                                                         </tr>
                                                         <tr>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (From SNF Admit Date)</td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (Puzzle Patients)</td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
                                                                 {patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.ccm30Day_ReadmissionRate_SNFAdmitDate.toFixed(1)}%
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (From SNF Discharge Date)</td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.commulative30DayReadmissionCount_fromSNFDischargeDate}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.ccm30Day_ReadmissionRate_SNFDischargeDate.toFixed(1)}%
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">60-Day Readmissions</td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.commulative60DayReadmissionCount}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.ccm60Day_ReadmissionRate.toFixed(1)}%
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">90-Day Readmissions</td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.commulative90DayReadmissionCount}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.ccm90Day_ReadmissionRate.toFixed(1)}%
-                                                            </td>
-                                                        </tr>
-
-                                                        <tr>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">Non CCM Readmissions</td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.nonCCMReadmissionCount}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.nonccm_ReadmissionRate.toFixed(1)}%
+                                                                {patientMetrics.commulative30Day_ReadmissionRate.toFixed(1)}%
                                                             </td>
                                                         </tr>
                                                     </tbody>
