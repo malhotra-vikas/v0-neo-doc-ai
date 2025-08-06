@@ -124,6 +124,27 @@ export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
         </div>
     )
 }
+async function getFacilityStatic(nursingHomeId: string) {
+    const supabase = createClientComponentClient()
+
+    console.log("Running getFacilityStatic for - ", nursingHomeId)
+
+
+    const { data, error } = await supabase
+        .from('nursing_homes')
+        .select('*')
+        .eq('id', nursingHomeId)
+        .single() // returns one row instead of array        
+
+    console.log("getFacilityStatic Data is - ", data)
+
+    if (error) {
+        console.error("❌ Failed to fetch facility summary:", error)
+        return null
+    }
+
+    return data
+}
 
 async function getFacilitySummary(nursingHomeId: string, month: string, year: string) {
     const supabase = createClientComponentClient()
@@ -205,8 +226,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const touchpointsChartRef = useRef<HTMLDivElement>(null)
     const clinicalRisksChartRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
-    //let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
+    let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
     const [facilityReadmissionData, setFacilityReadmissionData] = useState<any>()
+    const [facilityData, setFacilityData] = useState<any>()
 
     // Add intervention counts state for the Touchpoints chart
     const [interventionCounts, setInterventionCounts] = useState<Array<{ name: string; count: number }>>([
@@ -221,20 +243,11 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         totalPuzzlePatients: 0,
         commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
         commulative30Day_ReadmissionRate: 0,
-/*        
-        totalCCMPatients: 0,
-        totalNonCCMPatients: 0,
-        commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
-        commulative30DayReadmissionCount_fromSNFDischargeDate: 0,
-        commulative60DayReadmissionCount: 0,
-        commulative90DayReadmissionCount: 0,
-        nonCCMReadmissionCount: 0,
-        ccm30Day_ReadmissionRate_SNFAdmitDate: 0,
-        ccm30Day_ReadmissionRate_SNFDischargeDate: 0,
-        ccm60Day_ReadmissionRate: 0,
-        ccm90Day_ReadmissionRate: 0,
-        nonccm_ReadmissionRate: 0,
-*/        
+        facilityName: " ",
+        executiveSummary: " ",
+        closingStatement: " ",
+        publicLogoLink: " ",
+        nationalReadmissionsBenchmark: 0
     })
 
     // Add patient selection state
@@ -252,6 +265,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             } else {
                 setAvailablePatients([])
                 setSelectedPatients([])
+                setSelectedNursingHomeName("NAN")
             }
 
             if (selectedNursingHomeId && selectedMonth && selectedYear) {
@@ -261,60 +275,37 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
                 const data = await getFacilitySummary(selectedNursingHomeId, selectedMonth, selectedYear)
                 console.log("getFacilitySummary Data is - ", data)
-
                 setFacilityReadmissionData(data)
+
+                const facilityStaticInfo = await getFacilityStatic(selectedNursingHomeId)
+                setFacilityData(facilityStaticInfo)
 
                 if (!data) return
 
-                //const totalCCMPatients = (data.ccm_master_count || 0) + (data.ccm_master_discharged_count || 0)
-                //const totalNonCCMPatients = data.non_ccm_master_count || 0
 
-                const totalPuzzlePatients = (data.ccm_master_count || 0) + 
+                const totalPuzzlePatients = (data.ccm_master_count || 0) +
                     (data.ccm_master_discharged_count || 0) +
                     (data.non_ccm_master_count || 0)
 
 
                 const commulative30DayReadmissionCount_fromSNFAdmitDate = data.h30_admit || 0
-                //const commulative30DayReadmissionCount_fromSNFDischargeDate = data.h30_discharge || 0
-                //const commulative60DayReadmissionCount = data.h60 || 0
-                //const commulative90DayReadmissionCount = data.h90 || 0
-                //const nonCCMReadmissionCount = data.h_reported || 0
 
                 const commulative30Day_ReadmissionRate = totalPuzzlePatients > 0
                     ? (commulative30DayReadmissionCount_fromSNFAdmitDate / totalPuzzlePatients) * 100
                     : 0
-/*
-                const ccm30Day_ReadmissionRate_SNFDischargeDate = totalCCMPatients > 0
-                    ? (commulative30DayReadmissionCount_fromSNFDischargeDate / totalCCMPatients) * 100
-                    : 0
+                const executiveSummary = `We are pleased to share this Puzzle SNF Report highlighting our collaborative work at ${facilityStaticInfo.name}. Our coordinated efforts have supported seamless transitions, identified key risks early, and driven down avoidable readmissions. This report reflects the outcomes achieved through our joint commitment to high-quality, post-acute care.`
+                const closingStatement = `Together at ${facilityStaticInfo.name}, we've made important strides in reducing avoidable hospital returns and improving resident care experiences. We value this partnership deeply and look forward to building on this foundation to deliver even more impactful care.`
 
-                const ccm60Day_ReadmissionRate = totalCCMPatients > 0
-                    ? (commulative60DayReadmissionCount / totalCCMPatients) * 100
-                    : 0
-
-                const ccm90Day_ReadmissionRate = totalCCMPatients > 0
-                    ? (commulative90DayReadmissionCount / totalCCMPatients) * 100
-                    : 0
-
-                const nonccm_ReadmissionRate = totalNonCCMPatients > 0
-                    ? (nonCCMReadmissionCount / totalNonCCMPatients) * 100
-                    : 0
-*/
                 setPatientMetrics({
                     totalPuzzlePatients,
-//                    totalCCMPatients,
-//                    totalNonCCMPatients,
                     commulative30DayReadmissionCount_fromSNFAdmitDate,
                     commulative30Day_ReadmissionRate,
-//                    commulative30DayReadmissionCount_fromSNFDischargeDate,
-//                    commulative60DayReadmissionCount,
-//                    commulative90DayReadmissionCount,
-//                    nonCCMReadmissionCount,
-//                    ccm30Day_ReadmissionRate_SNFAdmitDate,
-//                    ccm30Day_ReadmissionRate_SNFDischargeDate,
-//                    ccm60Day_ReadmissionRate,
-//                    ccm90Day_ReadmissionRate,
-//                    nonccm_ReadmissionRate,
+                    facilityName: facilityStaticInfo.name,
+                    publicLogoLink: facilityStaticInfo.logo_url,
+                    executiveSummary: executiveSummary,
+                    closingStatement: closingStatement,
+
+                    nationalReadmissionsBenchmark: Number(process.env.NEXT_PUBLIC_NATIONAL_READMISSION_BENCHMARK)
                 })
             }
         }
@@ -712,7 +703,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const handlePrint = useCallback(async () => {
+    const handlePrint = useCallback(async (patientMetrics: any) => {
         try {
 
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
@@ -723,13 +714,16 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             setIsPrinting(true)
 
+            console.log("categorizedInterventions are ", categorizedInterventions)
+
             // Use the exportToPDF function to generate a PDF blob
             const result = await exportToPDF({
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
+                patientMetrics,
                 logoPath: "/puzzle_background.png",
-                //categorizedInterventions,
+                categorizedInterventions,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
@@ -775,7 +769,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         toast,
     ])
 
-    const handleExportPDF = async () => {
+    const handleExportPDF = async (patientMetrics: any) => {
+
         try {
             setIsExporting(true)
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
@@ -789,8 +784,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
+                patientMetrics,
                 logoPath: "/puzzle_background.png",
-                //categorizedInterventions,
+                categorizedInterventions,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
@@ -812,7 +808,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const handleExportDOCX = async () => {
+    const handleExportDOCX = async (patientMetrics: any) => {
+
         try {
             setIsExporting(true);
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId);
@@ -824,6 +821,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
+                patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
                 returnBlob: false,
@@ -947,11 +945,9 @@ ${JSON.stringify(parsed, null, 2)}
     const readmissionChartData = [
         {
             name: "Successful Transitions",
-            value: (patientMetrics.totalCCMPatients + patientMetrics.totalNonCCMPatients) - (
-                patientMetrics.commulative30DayReadmissionCount_fromSNFDischargeDate +
-                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate +
-                patientMetrics.commulative60DayReadmissionCount +
-                patientMetrics.commulative90DayReadmissionCount
+            value: (
+                patientMetrics.totalPuzzlePatients -
+                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate
             ),
             color: "#4ade80", // green
         },
@@ -963,6 +959,8 @@ ${JSON.stringify(parsed, null, 2)}
             color: "#facc15", // yellow
         }
     ]
+
+    console.log("Facility Metrics ", patientMetrics)
 
     // Calculate total interventions for the touchpoints section
     const totalInterventions = interventionCounts.reduce((sum, item) => sum + item.count, 0)
@@ -1160,7 +1158,9 @@ ${JSON.stringify(parsed, null, 2)}
                             )}
                         </div>
                         <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={handlePrint} disabled={isGenerating || isPrinting}>
+                            <Button variant="outline" size="sm"
+                                onClick={() => handlePrint(patientMetrics)} // <- passing explicitly
+                                disabled={isGenerating || isPrinting}>
                                 <PrinterIcon className={`h-4 w-4 mr-2`} />
                                 {isPrinting ? "Preparing..." : "Print"}
                             </Button>
@@ -1180,11 +1180,17 @@ ${JSON.stringify(parsed, null, 2)}
                                 </DropdownMenuTrigger>
 
                                 <DropdownMenuContent align="end" className="border border-border shadow-md p-1 rounded-md">
-                                    <DropdownMenuItem onClick={handleExportPDF}>
+                                    <DropdownMenuItem
+                                        onClick={() => handleExportPDF(patientMetrics)} // <- passing explicitly
+
+                                    >
                                         <FileTextIcon className="h-4 w-4 mr-2" />
                                         Export as PDF
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={handleExportDOCX}>
+                                    <DropdownMenuItem
+                                        onClick={() => handleExportDOCX(patientMetrics)} // <- passing explicitly
+
+                                    >
                                         <FileIcon className="h-4 w-4 mr-2" />
                                         Export as DOCX
                                     </DropdownMenuItem>
@@ -1263,7 +1269,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                                 Total Puzzle Continuity Care Patients Tracked
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.totalPuzzlePatients }
+                                                                {patientMetrics.totalPuzzlePatients}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">-</td>
                                                         </tr>
