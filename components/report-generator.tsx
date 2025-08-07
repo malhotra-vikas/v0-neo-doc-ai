@@ -250,6 +250,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         nationalReadmissionsBenchmark: 0
     })
 
+    const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null)
+
     // Add patient selection state
     const [selectedPatients, setSelectedPatients] = useState<string[]>([])
     const [availablePatients, setAvailablePatients] = useState<{ id: string; name: string; created_at: string }[]>([])
@@ -724,6 +726,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
+                expandedPatientId,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
@@ -787,6 +790,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
+                expandedPatientId,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
@@ -825,6 +829,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
                 returnBlob: false,
+                expandedPatientId,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current
@@ -1096,18 +1101,36 @@ ${JSON.stringify(parsed, null, 2)}
                                         {availablePatients.map((patient) => (
                                             <div
                                                 key={patient.id}
-                                                className="flex items-center space-x-2 p-2 rounded border bg-white hover:bg-slate-50"
+                                                className="flex flex-col p-2 rounded border bg-white hover:bg-slate-50"
                                             >
-                                                <input
-                                                    type="checkbox"
-                                                    id={`patient-${patient.id}`}
-                                                    checked={selectedPatients.includes(patient.id)}
-                                                    onChange={() => handlePatientToggle(patient.id)}
-                                                    className="rounded border-gray-300"
-                                                />
-                                                <Label htmlFor={`patient-${patient.id}`} className="text-sm cursor-pointer flex-1 truncate">
-                                                    {patient.name}
-                                                </Label>
+                                                <div className="flex items-center space-x-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`patient-${patient.id}`}
+                                                        checked={selectedPatients.includes(patient.id)}
+                                                        onChange={() => handlePatientToggle(patient.id)}
+                                                        className="rounded border-gray-300"
+                                                    />
+                                                    <Label htmlFor={`patient-${patient.id}`} className="text-sm cursor-pointer flex-1 truncate">
+                                                        {patient.name}
+                                                    </Label>
+                                                </div>
+
+                                                {selectedPatients.includes(patient.id) && (
+                                                    <div className="flex items-center pl-6 pt-1">
+                                                        <input
+                                                            type="radio"
+                                                            id={`expanded-${patient.id}`}
+                                                            name="expandedPatient"
+                                                            checked={expandedPatientId === patient.id}
+                                                            onChange={() => setExpandedPatientId(patient.id)}
+                                                            className="mr-2"
+                                                        />
+                                                        <Label htmlFor={`expanded-${patient.id}`} className="text-xs text-muted-foreground">
+                                                            Mark as Expanded Summary Patient
+                                                        </Label>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>

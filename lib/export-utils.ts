@@ -56,6 +56,7 @@ interface ExportPDFOptions {
     patientMetrics?: any;
     categorizedInterventions: Record<string, string[]>;
     returnBlob?: boolean;
+    expandedPatientId?: any;
     chartRef?: HTMLDivElement | null; // Deprecated - kept for backward compatibility
     readmissionsChartRef?: HTMLDivElement | null;
     touchpointsChartRef?: HTMLDivElement | null;
@@ -70,6 +71,7 @@ interface ExportDOCXOptions {
     logoPath?: string;
     categorizedInterventions: Record<string, string[]>;
     returnBlob?: boolean;
+    expandedPatientId?: any;
     readmissionsChartRef?: HTMLDivElement | null;
     touchpointsChartRef?: HTMLDivElement | null;
     clinicalRisksChartRef?: HTMLDivElement | null;
@@ -106,6 +108,7 @@ export const exportToPDF = async ({
     categorizedInterventions,
     returnBlob = false,
     chartRef = null, // Deprecated
+    expandedPatientId,
     readmissionsChartRef = null,
     touchpointsChartRef = null,
     clinicalRisksChartRef = null
@@ -117,6 +120,8 @@ export const exportToPDF = async ({
     let yPosition = 10;
 
     console.log("patientMetrics in PDF is ", patientMetrics)
+    console.log("Expanded Patient is ", expandedPatientId)
+
     try {
         // Load and add full-width header image
         const img = new Image();
