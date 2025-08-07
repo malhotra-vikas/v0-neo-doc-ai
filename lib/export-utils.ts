@@ -6,7 +6,7 @@ import html2canvas from 'html2canvas';
 const COLORS = {
     PUZZLE_BLUE: '#28317c',
     PAGE_NUMBER: '#11b3dc',
-    TITLE: '#1e40af',
+    TITLE: '#1e3578',
     SUB_TITLE: '#3b82f6',
     BULLET_TEXT: '#6b789a',
     PATIENT_NAME: '#858387',
@@ -87,15 +87,27 @@ const hexToRgb = (hex: string): number[] => {
 };
 
 export interface PatientMetrics {
-  totalPuzzlePatients: number
-  commulative30DayReadmissionCount_fromSNFAdmitDate: number
-  commulative30Day_ReadmissionRate: number
-  facilityName: string
-  executiveSummary: string
-  closingStatement: string
-  publicLogoLink: string
-  nationalReadmissionsBenchmark: number
+    totalPuzzlePatients: number
+    commulative30DayReadmissionCount_fromSNFAdmitDate: number
+    commulative30Day_ReadmissionRate: number
+    facilityName: string
+    executiveSummary: string
+    closingStatement: string
+    publicLogoLink: string
+    nationalReadmissionsBenchmark: number
 }
+
+const loadImageFromUrl = async (url: string) => {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function () {
+            resolve(reader.result);
+        };
+        reader.readAsDataURL(blob);
+    });
+};
 
 export const exportToPDF = async ({
     nursingHomeName,
@@ -118,51 +130,13 @@ export const exportToPDF = async ({
 
     console.log("patientMetrics in PDF is ", patientMetrics)
     try {
-        // Load and add full-width header image
-        const img = new Image();
-        img.src = logoPath;
-        await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-        });
 
-        // Make image take half the page height
-        const targetHeight = pageHeight / 2;
-        const targetWidth = pageWidth;
-        doc.addImage(img, 'PNG', 0, 0, targetWidth, targetHeight);
-
-        // Position text after the existing line (around 55% of page width)
-        const lineX = pageWidth * 0.48; // Position after the line
-        const textY = targetHeight * 0.42; // Move text up slightly for better centering
-        const textX = lineX + 10; // Position text after the line
-
-        doc.setTextColor(255, 255, 255); // White text
-
-        // Nursing home name - with text wrapping if needed
-        const maxWidth = pageWidth * 0.4; // Maximum width for text
-        doc.setFontSize(18); // Slightly smaller font
-        doc.setFont('helvetica', 'bold');
-
-        // Handle text wrapping for nursing home name
-        const nameLines = doc.splitTextToSize(nursingHomeName, maxWidth);
-        nameLines.forEach((line: string, index: number) => {
-            doc.text(line, textX, textY + (index * 15)); // Reduced line spacing to 15
-        });
-
-        // Month and year - minimal spacing after name
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'normal');
-        doc.text(monthYear, textX, textY + (nameLines.length * 10)); // Only 1 unit gap
-
-        yPosition = targetHeight + 20;
-
-        // Helper function for section headers
-        const addSectionHeader = (text: string) => {
+        const addSectionHeader = (text: string, fontSize?: number) => {
             doc.setTextColor(COLORS.TITLE);
-            doc.setFontSize(16);
+            doc.setFontSize(fontSize ?? 16);
             doc.setFont('helvetica', 'bold');
             doc.text(text, 20, yPosition);
-            yPosition += 12;
+            yPosition += 10;
         };
 
         // Helper function for bullet points
@@ -173,7 +147,6 @@ export const exportToPDF = async ({
 
             items.forEach(item => {
                 if (yPosition > pageHeight - 40) {
-                    addFooter(doc);
                     doc.addPage();
                     currentPage++;
                     yPosition = 30;
@@ -202,53 +175,58 @@ export const exportToPDF = async ({
             yPosition += 5;
         };
 
-        const addFooter = (doc: jsPDF) => {
-            const pageWidth = doc.internal.pageSize.width;
-            const pageHeight = doc.internal.pageSize.height;
-            const footerY = pageHeight - 5;
-
-            // Footer content
-            const puzzleText = 'puzzle';
-            const pageText = `${doc.getCurrentPageInfo().pageNumber}`;
-
-            // Styles for puzzle text
-            doc.setFontSize(12);
-            doc.setTextColor(COLORS.PUZZLE_BLUE);
-
-            // Calculate positions
-            const puzzleTextWidth = doc.getTextWidth(puzzleText);
-            const pageTextWidth = doc.getTextWidth(pageText);
-            const totalWidth = puzzleTextWidth + 2 + pageTextWidth;
-            // Position both elements from the right
-            const startX = pageWidth - 5 - totalWidth;
-
-            // Draw puzzle text
-            doc.text(puzzleText, startX, footerY);
-
-            // Draw page number
-            doc.setFontSize(12);
-            doc.setTextColor(COLORS.PAGE_NUMBER);
-            doc.text(pageText, startX + puzzleTextWidth + 2, footerY);
-        };
-
         yPosition += 10;
-        addSectionHeader('Patient Snapshot Overview: 30-Day Readmissions');
 
-        // Add chart if available
-        if (readmissionsChartRef) {
-            const result = await renderChart(doc, readmissionsChartRef, yPosition, 'Readmissions chart rendering error:');
-            yPosition = result.newYPosition;
-        }
+        addSectionHeader(`Puzzle SNF Report for ${nursingHomeName}`, 24);
+
+        yPosition += 4;
+
+        addSectionHeader('Executive Summary', 18);
+
+        yPosition += 20;
+
+        const pageWidth = doc.internal.pageSize.getWidth(); // e.g., 210 for A4
+        const margin = 15;
+        const usableWidth = pageWidth - margin * 2;
+
+        const textWidth = usableWidth * 0.6;
+        const imageWidth = usableWidth * 0.4;
+        const imageHeight = 30; // Fixed height
+        const imageX = margin + textWidth + 5;
+        const textY = 44;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(12);
+
+        const summary = patientMetrics.executiveSummary;
+        const lines = doc.splitTextToSize(summary, textWidth);
+        doc.text(lines, 20, textY);
+
+        // Load image
+        const img = new Image();
+        img.src = patientMetrics.publicLogoLink;
+
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+        });
+
+        const scaleFactor = imageWidth / img.width;
+        const scaledHeight = img.height * scaleFactor;
+
+        doc.addImage(img, 'PNG', imageX, textY, imageWidth, scaledHeight);
+
+        yPosition += 25;
+
+        addSectionHeader('Patient Snapshot Overview: 30-Day Readmissions',18);
 
         // Force this section to a new page
-        addFooter(doc);
         doc.addPage();
         currentPage++;
         yPosition = 30;
 
         // Puzzle Touchpoints Section with Chart
         if (yPosition > pageHeight - 50) {
-            addFooter(doc);
             doc.addPage();
             currentPage++;
             yPosition = 30;
@@ -256,16 +234,10 @@ export const exportToPDF = async ({
         yPosition += 15;
         addSectionHeader('Puzzle Touchpoints');
 
-        // Add Puzzle Touchpoints chart if available
-        if (touchpointsChartRef) {
-            const result = await renderChart(doc, touchpointsChartRef, yPosition, 'Touchpoints chart rendering error:');
-            yPosition = result.newYPosition;
-        }
         yPosition += 2;
 
         // Clinical Risks Section with Chart
         if (yPosition > pageHeight - 50) {
-            addFooter(doc);
             doc.addPage();
             currentPage++;
             yPosition = 30;
@@ -280,7 +252,6 @@ export const exportToPDF = async ({
         yPosition += 5;
 
         // Clinical Risks Section
-        addFooter(doc);
         doc.addPage();
         currentPage++;
         yPosition = 30;
@@ -307,7 +278,6 @@ export const exportToPDF = async ({
         addListItems(uniqueRisks.slice(0, 30));
 
         // Outcomes Section
-        addFooter(doc);
         doc.addPage();
         currentPage++;
         yPosition = 30;
@@ -353,7 +323,6 @@ export const exportToPDF = async ({
 
         interventionOutcomeItems.forEach(line => {
             if (yPosition > pageHeight - 40) {
-                addFooter(doc);
                 doc.addPage();
                 currentPage++;
                 yPosition = 30;
@@ -361,6 +330,7 @@ export const exportToPDF = async ({
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(COLORS.BULLET_TEXT);
             }
+
 
             const isBullet = line.trim().startsWith('•');
             const isSectionHeading = !isBullet && (line.includes('Interventions:') || line.includes('Outcomes:'));
@@ -392,14 +362,10 @@ export const exportToPDF = async ({
         });
 
         // Case Studies Section with box layout
-        addFooter(doc);
         doc.addPage();
         currentPage++;
         yPosition = 30;
-        yPosition = addCaseStudiesSection(doc, caseStudies, yPosition, pageWidth, pageHeight, addFooter);
-
-        // Add footer to the last page
-        addFooter(doc);
+        yPosition = addCaseStudiesSection(doc, caseStudies, yPosition, pageWidth, pageHeight);
 
         // Return blob or save file based on returnBlob option
         if (returnBlob) {
@@ -1013,7 +979,6 @@ const addCaseStudiesSection = (
     yPosition: number,
     pageWidth: number,
     pageHeight: number,
-    addFooter: (doc: jsPDF) => void
 ) => {
     // Add section header
     doc.setTextColor(COLORS.TITLE);
@@ -1059,7 +1024,6 @@ const addCaseStudiesSection = (
         const spaceNeededForHeader = boxHeaderHeight + lineHeight * 2;
 
         if (yPosition + spaceNeededForHeader > maxBoxBottom) {
-            addFooter(doc);
             doc.addPage();
             yPosition = 10;
             doc.setTextColor(COLORS.TITLE);
@@ -1109,7 +1073,6 @@ const addCaseStudiesSection = (
         yPosition += firstBoxHeight + 6;
 
         if (textOnNextPage.length > 0) {
-            addFooter(doc);
             doc.addPage();
             yPosition = 10;
             doc.setTextColor(COLORS.TITLE);
@@ -1140,9 +1103,6 @@ const addCaseStudiesSection = (
             );
             const nextTextHeight = nextLines.length * lineHeight;
             const nextBoxHeight = Math.max(35, nextTextHeight + boxPadding + boxHeaderHeight);
-            if (yPosition + nextBoxHeight > pageHeight - 30) {
-                addFooter(doc);
-            }
         }
     });
 
