@@ -322,7 +322,7 @@ Include ONLY actions, findings, or assessments that fall within the scope of phy
 
 Focus on the following structure:
 
-1. **Assessment** – 200-250 word summary on what was observed or assessed about the patient (e.g., behavior, mood, understanding, adherence)?
+1. **Assessment** – 75-100 word summary on what was observed or assessed about the patient (e.g., behavior, mood, understanding, adherence)?
 2. **Intervention** – What was done during engagement? Include education, motivation, care coordination, or behavioral interventions. Puzzle NEVER prescribes medication.
 3. **Outcome** – What was the result or follow-up from the engagement? Was there progress, resistance, follow-through, or a need for further support?
 
@@ -350,7 +350,7 @@ Return valid JSON in this format:
 
 {
   "assessment": {
-    "summary": "200-250 word paragraph that summarizes the patient's interventions. Use professional medical terminology. No superlatives.",
+    "summary": "Always start the summary with "Post Discharge, ". 75-100 word paragraph that summarizes the patient's interventions. Use professional medical terminology. No superlatives.",
     "source_quotes": [
          { "quote": "quote 1", "source_file_id": "123" },
          { "quote": "quote 2", "source_file_id": "456" }
@@ -411,7 +411,10 @@ ${engagementText}
         const facilityData = facilityResp?.data ?? {}
         const engagementData = engagementResp?.data ?? {}
 
-        const totalTokensUsed = (hospitalResp?.tokensUsed ?? 0) + (facilityResp?.tokensUsed ?? 0) + (engagementResp?.tokensUsed ?? 0)
+        const totalTokensUsed = (hospitalResp?.tokensUsed ?? 0) +
+            (facilityResp?.tokensUsed ?? 0) +
+            (engagementResp?.tokensUsed ?? 0)
+
         console.log(`📊 Total tokens used for this patient: ${totalTokensUsed}`)
 
         try {
