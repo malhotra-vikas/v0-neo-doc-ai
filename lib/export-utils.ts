@@ -53,8 +53,10 @@ interface ExportPDFOptions {
     monthYear: string;
     caseStudies: CaseStudy[];
     logoPath?: string;
-    //categorizedInterventions: Record<string, string[]>;
+    patientMetrics?: any;
+    categorizedInterventions: Record<string, string[]>;
     returnBlob?: boolean;
+    expandedPatientId?: any;
     chartRef?: HTMLDivElement | null; // Deprecated - kept for backward compatibility
     readmissionsChartRef?: HTMLDivElement | null;
     touchpointsChartRef?: HTMLDivElement | null;
@@ -65,9 +67,11 @@ interface ExportDOCXOptions {
     nursingHomeName: string;
     monthYear: string;
     caseStudies: CaseStudy[];
+    patientMetrics?: any;
     logoPath?: string;
     categorizedInterventions: Record<string, string[]>;
     returnBlob?: boolean;
+    expandedPatientId?: any;
     readmissionsChartRef?: HTMLDivElement | null;
     touchpointsChartRef?: HTMLDivElement | null;
     clinicalRisksChartRef?: HTMLDivElement | null;
@@ -84,15 +88,27 @@ const hexToRgb = (hex: string): number[] => {
         : [255, 255, 255];
 };
 
+export interface PatientMetrics {
+  totalPuzzlePatients: number
+  commulative30DayReadmissionCount_fromSNFAdmitDate: number
+  commulative30Day_ReadmissionRate: number
+  facilityName: string
+  executiveSummary: string
+  closingStatement: string
+  publicLogoLink: string
+  nationalReadmissionsBenchmark: number
+}
 
 export const exportToPDF = async ({
     nursingHomeName,
     monthYear,
     caseStudies,
+    patientMetrics,
     logoPath = "/puzzle_background.png",
-    //categorizedInterventions,
+    categorizedInterventions,
     returnBlob = false,
     chartRef = null, // Deprecated
+    expandedPatientId,
     readmissionsChartRef = null,
     touchpointsChartRef = null,
     clinicalRisksChartRef = null
@@ -102,6 +118,9 @@ export const exportToPDF = async ({
     const pageHeight = doc.internal.pageSize.getHeight();
     let currentPage = 1;
     let yPosition = 10;
+
+    console.log("patientMetrics in PDF is ", patientMetrics)
+    console.log("Expanded Patient is ", expandedPatientId)
 
     try {
         // Load and add full-width header image
@@ -486,6 +505,7 @@ export const exportToDOCX = async ({
     nursingHomeName,
     monthYear,
     caseStudies,
+    patientMetrics,
     logoPath = "/placeholder-logo.png",
     categorizedInterventions,
     returnBlob = false,

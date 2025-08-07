@@ -118,10 +118,6 @@ export default function LoginForm() {
         </form>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4 border-t bg-gray-50 p-6 text-center text-sm text-gray-600 rounded-b-lg">
-        <div className="flex items-center justify-center space-x-1">
-          <span>Default credentials:</span>
-          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs">malhotra.vikas@gmail.com / test@123</code>
-        </div>
       </CardFooter>
     </Card>
   )
