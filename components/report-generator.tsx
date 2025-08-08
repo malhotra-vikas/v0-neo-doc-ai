@@ -731,6 +731,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
                 returnBlob: true,
+                interventionCounts:interventionCounts,
+                totalInterventions:totalInterventions,
+                clinicalRisks:clinicalRisks
             })
 
             if (!result || !(result instanceof Blob)) {
@@ -794,6 +797,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
+                interventionCounts:interventionCounts,
+                totalInterventions:totalInterventions,
+                clinicalRisks:clinicalRisks
+
             })
 
             toast({
