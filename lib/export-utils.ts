@@ -272,6 +272,8 @@ if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summ
     Expanded Resident Success Story: ${initials}
     </h2>
     <div style="border-left: 3px solid #D3F1FC; padding-left: 16px; margin: 16px 0; color: #07226c;">
+    <p>${expandedStory.hospital_discharge_summary_text}</p>
+    <p>${expandedStory.facility_summary_text}</p>
     <p>${expandedStory.engagement_summary_text}</p>
     </div>
 </div>
@@ -378,7 +380,7 @@ if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summ
                                 Intervention Type
                             </th>
                             <th style="width:140px; text-align:center; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
-                                Number Delivered
+                                Count
                             </th>
                             </tr>
                         </thead>
@@ -403,7 +405,7 @@ if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summ
                                         Clinical Risk</th>
                                     <th
                                         style="width:140px; text-align:center; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                        Number of Patients</th>
+                                        Count</th>
                                 </tr>
                             </thead>
                             <tbody>
