@@ -242,7 +242,7 @@ Your task is to review the extracted text from the patient’s In-Facility docum
 ⚠️ Important constraints – DO NOT VIOLATE:
 Puzzle NEVER prescribes or manages medications.
 Puzzle NEVER recomends or initiates any therapy.
-Do NOT add any dates to the summary.
+NEVER add any dates to the summary.
 Exclude all care managed by the facility’s primary care or nursing teams.
 Include ONLY actions, findings, or assessments that fall within the scope of physiatry.
 No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
@@ -315,7 +315,7 @@ Puzzle NEVER prescribes medication, keep that in mind while building the summary
 ⚠️ Important constraints – DO NOT VIOLATE:
 Puzzle NEVER prescribes or manages medications.
 Puzzle NEVER recomends or initiates any therapy.
-Do NOT add any dates to the summary.
+NEVER add any dates to the summary.
 No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
 Exclude all care managed by the facility’s primary care or nursing teams.
 Include ONLY actions, findings, or assessments that fall within the scope of physiatry.
