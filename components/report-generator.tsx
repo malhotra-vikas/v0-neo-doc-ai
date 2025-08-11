@@ -800,7 +800,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 interventionCounts:interventionCounts,
                 totalInterventions:totalInterventions,
                 clinicalRisks:clinicalRisks
-
             })
 
             toast({
@@ -837,9 +836,11 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 categorizedInterventions,
                 returnBlob: false,
                 expandedPatientId,
+                interventionCounts:interventionCounts,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
-                clinicalRisksChartRef: clinicalRisksChartRef.current
+                clinicalRisksChartRef: clinicalRisksChartRef.current,
+                clinicalRisks:clinicalRisks
             })
 
             toast({
