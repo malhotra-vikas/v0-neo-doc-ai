@@ -46,6 +46,8 @@ interface CaseStudy {
     interventions?: string[];
     outcomes?: string[];
     clinical_risks?: string[];
+    detailed_interventions?: { intervention: string; source_quote: string; source_file_id: string }[];
+    detailed_outcomes?: { outcome: string; source_quote: string; source_file_id: string }[]
 }
 
 interface ExportPDFOptions {
@@ -131,30 +133,81 @@ export const exportToPDF = async ({
 
     const logoUrl = patientMetrics?.publicLogoLink;
 
-   let interventionListHTML = `
-  <div style="font-size: 16px; font-weight: 600; margin-bottom: 16px;color:#07226c;">
-      Total Interventions Delivered: ${totalInterventions}
-  </div>
-  <ul style="margin: 0; padding: 0; list-style: none; font-size: 14px; color: #07226c;">
-`;
+  let interventionTableRowsHTML = '';
 
-interventionCounts.forEach(item => {
-  interventionListHTML += `
-    <li style="display: flex; align-items: center; margin-bottom: 8px;">
-      <span style="
-        display: inline-block;
-        width: 3px;
-        height: 3px;
-        border-radius: 50%;
-        background-color: #07226c;;
-        margin-right: 8px;
-      "></span>
-      ${item.count} ${item.name}
-    </li>
+interventionCounts.forEach((item, index) => {
+  const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
+  interventionTableRowsHTML += `
+    <tr>
+      <td style="padding:14px; border:1px solid #eef4f9; ${background}">${item.name}</td>
+      <td style="text-align:center; padding:14px; border:1px solid #eef4f9; ${background}">${item.count}</td>
+    </tr>
   `;
 });
 
-interventionListHTML += `</ul>`;
+
+let keyOutcomesHTML = caseStudies.map((study) => {
+    const [first, last] = (study.patient_name || "").split(" ");
+    const shortName = first && last ? `${first} ${last[0]}.` : (study.patient_name || "Unknown");
+
+    const interventionsHTML = (study.detailed_interventions || [])
+        .map(item => `
+            <li style="
+                list-style: none;
+                font-size: 14px;
+                color: #07226c;
+                line-height: 1.4;
+                display: flex;
+                align-items: center;
+            ">
+                <span style="display:inline-block; font-size:14px; margin-right:6px;">•</span>
+                <span>${item.intervention}</span>
+            </li>
+        `)
+        .join("");
+
+    const outcomesHTML = (study.detailed_outcomes || [])
+        .map(item => `
+            <li style="
+                list-style: none;
+                font-size: 14px;
+                color: #07226c;
+                line-height: 1.4;
+                display: flex;
+                align-items: center;
+            ">
+                <span style="display:inline-block; font-size:14px; margin-right:6px;">•</span>
+                <span>${item.outcome}</span>
+            </li>
+        `)
+        .join("");
+
+    return `
+        <div style="margin-bottom: 24px;">
+            <p style="font-size: 14px; font-weight:bold; color: #07226c; margin-bottom: 6px;">
+                (${shortName}):
+            </p>
+
+            ${interventionsHTML ? `
+                <p style="font-size: 14px; font-weight: 500; color: #07226c; margin-bottom: 4px;">
+                    Interventions:
+                </p>
+                <ul style="margin: 0; padding-left: 18px;">
+                    ${interventionsHTML}
+                </ul>
+            ` : ""}
+
+            ${outcomesHTML ? `
+                <p style="font-size: 14px; font-weight: 500; color: #07226c; margin-top: 10px; margin-bottom: 4px;">
+                    Outcomes:
+                </p>
+                <ul style="margin: 0; padding-left: 18px;">
+                    ${outcomesHTML}
+                </ul>
+            ` : ""}
+        </div>
+    `;
+}).join("");
 
     let tableRowsHTML = '';
 
@@ -171,14 +224,15 @@ interventionListHTML += `</ul>`;
 
 
   let cardsHTML = `
-<div style="
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 12px;
-">
-`;
-
-caseStudies.forEach(item => {
+    <div style="
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 12px;
+    color: #07226c;
+    ">
+    `;
+const filteredCaseStudies = caseStudies.filter(item => item.patient_id !== expandedPatientId);
+filteredCaseStudies.forEach(item => {
     const [first, last] = item.patient_name ? item.patient_name.split(" ") : [];
 
   cardsHTML += `
@@ -186,15 +240,17 @@ caseStudies.forEach(item => {
     flex: 1 1 calc((100% - 24px) / 3);
     min-width: 200px;
     padding: 10px;
+    color: #07226c;
     border: 1px solid #d7e3f4;
     border-radius: 8px;
     box-sizing: border-box;
     margin-bottom: 16px;
   ">
     <span style="font-weight:bold; color:#002d74; margin-right:6px;">
-      (${first ? first[0] + "." : ""}${last ? last[0] : ""}):
+      (${first ? first[0] + "." : ""}${last ? last[0] +".": ""}):
     </span>
-    <span style="font-size:13px; color:#000;">
+    <span style="font-size:13px; color: #07226c;
+">
       ${item.engagement_summary_text}
     </span>
   </div>
@@ -202,6 +258,26 @@ caseStudies.forEach(item => {
 });
 
 cardsHTML += `</div>`;
+
+
+let expandedStoryHTML = '';
+
+if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summary_text) {
+    const [first, last] = expandedStory.patient_name.split(" ");
+    const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
+
+    expandedStoryHTML = `
+<div style="margin-top: 36px;">
+    <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
+    Expanded Resident Success Story: ${initials}
+    </h2>
+    <div style="border-left: 3px solid #D3F1FC; padding-left: 16px; margin: 16px 0; color: #07226c;">
+    <p>${expandedStory.engagement_summary_text}</p>
+    </div>
+</div>
+`;
+}
+
 
     const htmlContentVal = `
 <html lang="en">
@@ -228,7 +304,7 @@ cardsHTML += `</div>`;
             <div style="width: 60%; padding-right: 20px; box-sizing: border-box;">
                 <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Executive Summary
                 </h2>
-                <p style="margin: 0; font-size: 15px; color: #21385a; line-height: 1.6;">
+                <p style="margin: 0; font-size: 15px; color: #07226c; line-height: 1.6;">
                     ${patientMetrics?.executiveSummary}
                 </p>
             </div>
@@ -240,13 +316,13 @@ cardsHTML += `</div>`;
         </div>
 
         <!-- Section title -->
-        <div style="margin-top: 20px;">
+        <div style="margin-top: 32px;">
             <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;margin-bottom: 16px;">Patient Snapshot
                 Overview: 30-Day Readmissions</h2>
 
             <!-- Table -->
             <div style="width: 100%;margin-top:16px">
-                <table style="width:100%; border-collapse: collapse; font-size:14px; color:#123;">
+                <table style="width:100%; border-collapse: collapse; font-size:14px;color: #07226c;">
                     <thead>
                         <tr>
                         <th style="text-align:left; padding:14px; border:1px solid #e6edf5;  font-weight:700; color:#07226c;">
@@ -277,88 +353,49 @@ cardsHTML += `</div>`;
                         </tr>
                     </tbody>
                 </table>
-                <p style="font-size:14px; margin:12px 0 0 0;">Note: Readmissions reflect only patients
+                <p style="font-size:14px; margin:12px 0 0 0;color: #07226c;">Note: Readmissions reflect only patients
                     supported by Puzzle Continuity Care.</p>
             </div>
         </div>
 
-        <div style="margin-top: 28px;">
+        <div style="margin-top: 32px;">
             <div style="height: 18px;"></div>
 
-            <div
-                style="position: relative; width: 100%; padding:24px; border: 1px solid #A0E4F8; border-top: 8px solid #7fdbff; border-radius: 10px;">
-                 <div style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; background-color: #7fd9f1; border-radius: 50%; z-index: 2;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+
+                <div
+                    style="flex: 1; min-width: 300px; position: relative; padding:24px; border: 1px solid #A0E4F8; border-top: 8px solid #7fdbff; border-radius: 10px;">
+                    <div
+                        style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; background-color: #7fd9f1; border-radius: 50%; z-index: 2;">
+                    </div>
+                    <div style="text-align:center; color:#07226c; font-size:20px; font-weight:700; margin-bottom: 16px;">
+                        Types of Puzzle Interventions Delivered
+                    </div>
+                   <table style="width:100%; border-collapse: collapse; font-size:14px; color:#07226c;">
+                        <thead>
+                            <tr>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Intervention Type
+                            </th>
+                            <th style="width:140px; text-align:center; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Number Delivered
+                            </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${interventionTableRowsHTML}
+                        </tbody>
+                    </table>
                 </div>
-                
-                <div style="text-align:center;color: #07226c; font-size:20px; font-weight:700; color:#07226c; margin-bottom: 10px;">
-                    Types of Interventions Delivered
-                </div>
-
-                <ul
-                    style="margin: 0; padding-left: 18px; list-style-type: disc; list-style-position: inside; font-size:16px; color:#123; line-height:1.6;">
-                    <li style="margin-bottom:8px;">
-                        <strong style="font-size:15px; color:#07226c;">Transitional Support</strong>
-                        <ul
-                            style="margin:6px 0 8px 18px; padding:0; list-style-type: circle; list-style-position: inside; color:#123; font-size:14px;">
-                            <li>Discharge plan coordination with hospital teams</li>
-                            <li>Home health service referrals</li>
-                        </ul>
-                    </li>
-
-                    <li style="margin-bottom:8px;">
-                        <strong style="font-size:15px; color:#07226c;">Clinical Risk Management</strong>
-                        <ul
-                            style="margin:6px 0 8px 18px; padding:0; list-style-type: circle; list-style-position: inside; color:#123; font-size:14px;">
-                            <li>Medication reconciliation during all successful patient contacts</li>
-                        </ul>
-                    </li>
-
-                    <li style="margin-bottom:8px;">
-                        <strong style="font-size:15px; color:#07226c;">Engagement &amp; Education</strong>
-                        <ul
-                            style="margin:6px 0 8px 18px; padding:0; list-style-type: circle; list-style-position: inside; color:#123; font-size:14px;">
-                            <li>Family and caregiver education</li>
-                            <li>Post-discharge symptom monitoring</li>
-                        </ul>
-                    </li>
-
-                    <li style="margin-bottom:8px;">
-                        <strong style="font-size:15px; color:#07226c;">Care Navigation</strong>
-                        <ul
-                            style="margin:6px 0 0 18px; padding:0; list-style-type: circle; list-style-position: inside; color:#123; font-size:14px;">
-                            <li>Specialist appointment coordination</li>
-                            <li>Community resource linkage</li>
-                        </ul>
-                    </li>
-                </ul>
-            </div>
-
-            <div style="margin-top: 36px;">
-                <h2 style="font-size: 26px; color: #07226c;margin-bottom:16px; font-weight: 800; margin: 0 0 14px 0;">Puzzle's Touchpoints
-                </h2>
-                ${interventionListHTML}
-            </div>
-            <div style="margin-top: 36px;">
-                <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;">Key Interventions and
-                    Outcomes</h2>
-                <ul style="margin: 0; padding: 0; list-style: disc; font-size: 14px; color: #123;">
-                    <li>Specialist linkage ensured timely follow-up for high-risk conditions like CHF, COPD, and
-                        diabetes.</li>
-                    <li>Medication safety was addressed systematically through reconciliation at every point of contact.
-                    </li>
-                    <li>Caregiver engagement provided added stability for patients with cognitive and functional
-                        challenges.</li>
-                </ul>
-            </div>
-            <div style="margin-top: 36px;">
-
-                <div style="margin-top: 5px; display: flex; width: 100%; gap: 40px;">
-
-                    <div style="flex: 1; padding-right: 20px; box-sizing: border-box;">
-                        <h2 style="margin: 0 0 16px 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">Top Clinical
-                            Risks Identified
-                            at Discharge</h2>
-                        <table style="width:100%; border-collapse: collapse; font-size:14px; color:#123;">
+                <div
+                    style="flex: 1; min-width: 300px; position: relative; padding:24px; border: 1px solid #A0E4F8; border-top: 8px solid #7fdbff; border-radius: 10px;">
+                    <div
+                        style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; background-color: #7fd9f1; border-radius: 50%; z-index: 2;">
+                    </div>
+                    <div style="text-align:center; color:#07226c; font-size:20px; font-weight:700; margin-bottom: 16px;">
+                        Top Clinical Risks Identified at Discharge
+                    </div>
+                    <table style="width:100%; border-collapse: collapse; font-size:14px; color:#07226c;">
                             <thead>
                                 <tr>
                                     <th
@@ -373,125 +410,26 @@ cardsHTML += `</div>`;
                                 ${tableRowsHTML}
                             </tbody>
                         </table>
-
-
-                    </div>
-
-                    <div style="flex: 1; padding-left: 20px; box-sizing: border-box;">
-                        <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c;margin-bottom:16px;font-weight: 700;">Risk
-                            Stratification of Puzzle
-                            Continuity Care Patients</h2>
-                        <table style="width:100%; border-collapse: collapse; font-size:14px; color:#123;">
-                            <thead>
-                                <tr>
-                                    <th
-                                        style="text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                        Risk Level</th>
-                                    <th
-                                        style="width:140px; text-align:center; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                        Patient Count</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">High
-                                    </td>
-                                    <td style="text-align:center; padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                                        39 </td>
-
-                                </tr>
-                                <tr>
-                                    <td style="padding:14px; border:1px solid #eef4f9;">Low
-                                    </td>
-                                    <td style="text-align:center; padding:14px; border:1px solid #eef4f9;">
-                                        30</td>
-
-                                </tr>
-                                <tr>
-                                    <td style="padding:14px; border:1px solid #eef4f9; background: #f5f5f5;">Medium
-                                    </td>
-                                    <td style="text-align:center; padding:14px; border:1px solid #eef4f9; background: #f5f5f5;">
-                                        2
-                                    </td>
-                                </tr>
-
-                            </tbody>
-                        </table>
-
-                    </div>
-
                 </div>
 
             </div>
-
+    
             <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Real-Time ADT
-                    Interventions</h2>
-                <table style="width:100%; border-collapse: collapse; font-size:14px; color:#123;">
-                    <thead>
-                        <tr>
-                            <th
-                                style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;  font-weight:700; color:#07226c;">
-                                Patient Initials
-                            </th>
-                            <th
-                                style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;  font-weight:700; color:#07226c;">
-                                Event Type
-                            </th>
-                            <th
-                                style="width:33.33%; text-align:center; padding:14px; border:1px solid #e6edf5;  font-weight:700; color:#07226c;">
-                                Intervention Summary
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">L.S.</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">Hospital Admit</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">Contacted SNF for plan-of-care update.
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding:14px; border:1px solid #eef4f9;">B.T.</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;">ED Visit</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;">Triggered medication safety check-in.
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">A.J.</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">Hospital Disch</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">Coordinated with HH agency on follow-up.
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding:14px; border:1px solid #eef4f9;">M.C.</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;">SNF Transfer</td>
-                            <td style="padding:14px; border:1px solid #eef4f9;">Ensured PCP appointment was preserved.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <p style="font-size:14px; margin:12px 0 0 0;">All interventions were fully de-identified and actioned
-                    within HIPAA guidelines.</p>
+                <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;">Key Interventions and
+                    Outcomes</h2>
+                ${keyOutcomesHTML}
             </div>
-
             <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 16px 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">Case Study
+                <h2 style="margin: 0 0 0 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">Case Study
                     Highlights: Individual Patient Successes</h2>
                 ${cardsHTML}
             </div>
-            <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Expanded Resident
-                    Success Story: ${expandedStory ? expandedStory.patient_name : ''}</h2>
-                <div style="border-left: 3px solid #002d74; padding-left: 16px; padding-left: 16px;margin: 16px 0">
-                    <p>${expandedStory ? expandedStory.engagement_summary_text : ''}</p>
-                </div>
-            </div>
+            ${expandedStoryHTML}
             <div style="margin-top: 36px;">
                 <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">National Benchmark
                     Comparison</h2>
                 <div>
-                    <table style="width:100%; border-collapse: collapse; font-size:14px; color:#123;">
+                    <table style="width:100%; border-collapse: collapse; font-size:14px;   color: #07226c;">
                         <thead>
                             <tr>
                                 <th
@@ -520,8 +458,7 @@ cardsHTML += `</div>`;
                         </tbody>
                     </table>
                 </div>
-                <p style="font-size:13px; margin:12px 0 0 0;">Source: CMS SNF QRP 2024 National Averages.</p>
-
+                <p style="font-size:13px; margin:12px 0 0 0; color: #07226c;">Source: CMS SNF QRP 2024 National Averages.</p>
             </div>
 
 
@@ -539,15 +476,15 @@ cardsHTML += `</div>`;
                                 style="position: absolute; top:0; left:0; z-index: 0;">
                                 <polygon points="0,0 329,0 366,40 329,80 0,80 37,40" fill="#D3F1FC" />
                             </svg>
-                            <img src="https://img.icons8.com/ios-filled/24/00205B/hospital-room.png"
+                            <img src="https://img.icons8.com/ios-filled/24/07226c/hospital-room.png"
                                 style="width: 24px; height: 24px; position: relative; z-index: 1;" />
                         </div>
                         <div
-                            style="font-size: 20px; font-weight: bold; color: #00205B; margin-top: 12px; margin-left:30px; text-align: left;">
+                            style="font-size: 20px; font-weight: bold; color: #07226c; margin-top: 12px; margin-left:30px; text-align: left;">
                             Reduce Readmissions
                         </div>
                         <div
-                            style="font-size: 16px; color: #00205B; margin-top: 6px; line-height: 1.4;text-align: left;margin-left:30px;">
+                            style="font-size: 16px; color: #07226c; margin-top: 6px; line-height: 1.4;text-align: left;margin-left:30px;">
                             Through proactive escalation and<br />earlier detection.
                         </div>
                     </div>
@@ -564,7 +501,7 @@ cardsHTML += `</div>`;
                                 height="24"
                                 viewBox="0 0 24 24"
                                 fill="none"
-                                stroke="#00205B"
+                                stroke="#07226c"
                                 stroke-width="2"
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
@@ -575,11 +512,11 @@ cardsHTML += `</div>`;
                             </svg>
                         </div>
                         <div
-                            style="font-size: 20px; font-weight: bold; color: #00205B; margin-top: 12px;text-align: left;margin-left:30px;">
+                            style="font-size: 20px; font-weight: bold; color: #07226c; margin-top: 12px;text-align: left;margin-left:30px;">
                             Strengthen Fall Prevention
                         </div>
                         <div
-                            style="font-size: 16px; color: #00205B; margin-top: 6px; line-height: 1.4;text-align: left;margin-left:30px;">
+                            style="font-size: 16px; color: #07226c; margin-top: 6px; line-height: 1.4;text-align: left;margin-left:30px;">
                             With enhanced assessments and<br />environment safety reviews.
                         </div>
                     </div>
@@ -595,7 +532,7 @@ cardsHTML += `</div>`;
                                 height="24"
                                 viewBox="0 0 24 24"
                                 fill="none"
-                                stroke="#00205B"
+                                stroke="#07226c"
                                 stroke-width="2"
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
@@ -606,21 +543,20 @@ cardsHTML += `</div>`;
                             </svg>
                         </div>
                         <div
-                            style="font-size: 20px;text-align: left;margin-left:30px; font-weight: bold; color: #00205B; margin-top: 12px;">
+                            style="font-size: 20px;text-align: left;margin-left:30px; font-weight: bold; color: #07226c; margin-top: 12px;">
                             Advance CHF Management
                         </div>
                         <div
-                            style="font-size: 16px; text-align: left;margin-left:30px;color: #00205B; margin-top: 6px; line-height: 1.4;">
+                            style="font-size: 16px; text-align: left;margin-left:30px;color: #07226c; margin-top: 6px; line-height: 1.4;">
                             By prioritizing early symptom<br />monitoring and follow-up adherence.
                         </div>
                     </div>
                 </div>
             </div>
             <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
-                ${patientMetrics?.closingStatement}
+                <h2 style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
+                <p style="color: #07226c;">${patientMetrics?.closingStatement}</p>
             </div>
-            <div style="height: 26px;"></div>
         </div>
 </body>
 
@@ -669,7 +605,7 @@ let firstPage = true;
 while (remainingHeight > 0) {
     const sliceHeight = Math.min(pageHeightPx, remainingHeight);
 
-    if (sliceHeight < 5) break;
+    if (sliceHeight < 52) break;
 
     const pageCanvas = document.createElement("canvas");
     pageCanvas.width = canvas.width;
@@ -1267,34 +1203,35 @@ const createCaseStudyCard = (study: any, theme: any) => {
                             verticalAlign: VerticalAlign.TOP,
                             children: [
                                 new Paragraph({
-                                    children: [
-                                        new TextRun({
-                                            //                                            text: study.patient_name || "Unknown Patient",
-                                            text: (() => {
-                                                const [first, last] = (study.patient_name || "Unknown Patient").split(" ");
-                                                return first && last ? `${first[0]}.${last}` : (study.patient_name || "Unknown Patient");
-                                            })(),
-                                            bold: true,
-                                            size: 24,
-                                            color: hexToDocxColor(theme.TITLE),
-                                            font: "Helvetica",
-                                        }),
-                                    ],
-                                    spacing: { before: 120, after: 240 },
-                                    alignment: AlignmentType.LEFT,
-                                }),
-                                new Paragraph({
-                                    children: [
-                                        new TextRun({
-                                            text: study.highlight_text,
-                                            size: 22,
-                                            color: hexToDocxColor(theme.TEXT),
-                                            font: "Helvetica",
-                                        }),
-                                    ],
-                                    spacing: { before: 120, after: 120, line: 360 },
-                                    alignment: AlignmentType.LEFT,
-                                }),
+    children: [
+        new TextRun({
+            text: (() => {
+                const safeName = study.patient_name || "Unknown Patient";
+                const [first, last] = safeName.split(" ");
+                return first && last ? `${first[0]}.${last}` : safeName;
+            })(),
+            bold: true,
+            size: 24,
+            color: hexToDocxColor(theme.TITLE),
+            font: "Helvetica",
+        }),
+    ],
+    spacing: { before: 120, after: 240 },
+    alignment: AlignmentType.LEFT,
+}),
+new Paragraph({
+    children: [
+        new TextRun({
+            text: study.highlight_text || "",
+            size: 22,
+            color: hexToDocxColor(theme.TEXT),
+            font: "Helvetica",
+        }),
+    ],
+    spacing: { before: 120, after: 120, line: 360 },
+    alignment: AlignmentType.LEFT,
+}),
+
                             ],
                         }),
                     ],
