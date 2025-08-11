@@ -6,7 +6,7 @@ import html2canvas from 'html2canvas';
 const COLORS = {
     PUZZLE_BLUE: '#28317c',
     PAGE_NUMBER: '#11b3dc',
-    TITLE: '#1e40af',
+    TITLE: '#1e3578',
     SUB_TITLE: '#3b82f6',
     BULLET_TEXT: '#6b789a',
     PATIENT_NAME: '#858387',
@@ -46,6 +46,8 @@ interface CaseStudy {
     interventions?: string[];
     outcomes?: string[];
     clinical_risks?: string[];
+    detailed_interventions?: { intervention: string; source_quote: string; source_file_id: string }[];
+    detailed_outcomes?: { outcome: string; source_quote: string; source_file_id: string }[]
 }
 
 interface ExportPDFOptions {
@@ -61,6 +63,9 @@ interface ExportPDFOptions {
     readmissionsChartRef?: HTMLDivElement | null;
     touchpointsChartRef?: HTMLDivElement | null;
     clinicalRisksChartRef?: HTMLDivElement | null;
+    interventionCounts: { name: string; count: number }[];
+    totalInterventions: number;
+    clinicalRisks: { risk: string; count: number }[];
 }
 
 interface ExportDOCXOptions {
@@ -89,335 +94,563 @@ const hexToRgb = (hex: string): number[] => {
 };
 
 export interface PatientMetrics {
-  totalPuzzlePatients: number
-  commulative30DayReadmissionCount_fromSNFAdmitDate: number
-  commulative30Day_ReadmissionRate: number
-  facilityName: string
-  executiveSummary: string
-  closingStatement: string
-  publicLogoLink: string
-  nationalReadmissionsBenchmark: number
+    totalPuzzlePatients: number
+    commulative30DayReadmissionCount_fromSNFAdmitDate: number
+    commulative30Day_ReadmissionRate: number
+    facilityName: string
+    executiveSummary: string
+    closingStatement: string
+    publicLogoLink: string
+    nationalReadmissionsBenchmark: number
 }
+
+const loadImageFromUrl = async (url: string) => {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function () {
+            resolve(reader.result);
+        };
+        reader.readAsDataURL(blob);
+    });
+};
 
 export const exportToPDF = async ({
     nursingHomeName,
     monthYear,
     caseStudies,
     patientMetrics,
-    logoPath = "/puzzle_background.png",
-    categorizedInterventions,
     returnBlob = false,
-    chartRef = null, // Deprecated
     expandedPatientId,
-    readmissionsChartRef = null,
-    touchpointsChartRef = null,
-    clinicalRisksChartRef = null
+    interventionCounts,
+    totalInterventions,
+    clinicalRisks
 }: ExportPDFOptions): Promise<void | Blob> => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    let currentPage = 1;
-    let yPosition = 10;
 
-    console.log("patientMetrics in PDF is ", patientMetrics)
-    console.log("Expanded Patient is ", expandedPatientId)
 
-    try {
-        // Load and add full-width header image
-        const img = new Image();
-        img.src = logoPath;
-        await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-        });
+    const expandedStory = caseStudies.find(story => story.patient_id === expandedPatientId);
 
-        // Make image take half the page height
-        const targetHeight = pageHeight / 2;
-        const targetWidth = pageWidth;
-        doc.addImage(img, 'PNG', 0, 0, targetWidth, targetHeight);
+    const logoUrl = patientMetrics?.publicLogoLink;
 
-        // Position text after the existing line (around 55% of page width)
-        const lineX = pageWidth * 0.48; // Position after the line
-        const textY = targetHeight * 0.42; // Move text up slightly for better centering
-        const textX = lineX + 10; // Position text after the line
+  let interventionTableRowsHTML = '';
 
-        doc.setTextColor(255, 255, 255); // White text
+interventionCounts.forEach((item, index) => {
+  const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
+  interventionTableRowsHTML += `
+    <tr>
+      <td style="padding:14px; border:1px solid #eef4f9; ${background}">${item.name}</td>
+      <td style="text-align:center; padding:14px; border:1px solid #eef4f9; ${background}">${item.count}</td>
+    </tr>
+  `;
+});
 
-        // Nursing home name - with text wrapping if needed
-        const maxWidth = pageWidth * 0.4; // Maximum width for text
-        doc.setFontSize(18); // Slightly smaller font
-        doc.setFont('helvetica', 'bold');
 
-        // Handle text wrapping for nursing home name
-        const nameLines = doc.splitTextToSize(nursingHomeName, maxWidth);
-        nameLines.forEach((line: string, index: number) => {
-            doc.text(line, textX, textY + (index * 15)); // Reduced line spacing to 15
-        });
+let keyOutcomesHTML = caseStudies.map((study) => {
+    const [first, last] = (study.patient_name || "").split(" ");
+    const shortName = first && last ? `${first} ${last[0]}.` : (study.patient_name || "Unknown");
 
-        // Month and year - minimal spacing after name
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'normal');
-        doc.text(monthYear, textX, textY + (nameLines.length * 10)); // Only 1 unit gap
+    const interventionsHTML = (study.detailed_interventions || [])
+        .map(item => `
+            <li style="
+                list-style: none;
+                font-size: 14px;
+                color: #07226c;
+                line-height: 1.4;
+                display: flex;
+                align-items: center;
+            ">
+                <span style="display:inline-block; font-size:14px; margin-right:6px;">•</span>
+                <span>${item.intervention}</span>
+            </li>
+        `)
+        .join("");
 
-        yPosition = targetHeight + 20;
+    const outcomesHTML = (study.detailed_outcomes || [])
+        .map(item => `
+            <li style="
+                list-style: none;
+                font-size: 14px;
+                color: #07226c;
+                line-height: 1.4;
+                display: flex;
+                align-items: center;
+            ">
+                <span style="display:inline-block; font-size:14px; margin-right:6px;">•</span>
+                <span>${item.outcome}</span>
+            </li>
+        `)
+        .join("");
 
-        // Helper function for section headers
-        const addSectionHeader = (text: string) => {
-            doc.setTextColor(COLORS.TITLE);
-            doc.setFontSize(16);
-            doc.setFont('helvetica', 'bold');
-            doc.text(text, 20, yPosition);
-            yPosition += 12;
-        };
+    return `
+        <div style="margin-bottom: 24px;">
+            <p style="font-size: 14px; font-weight:bold; color: #07226c; margin-bottom: 6px;">
+                (${shortName}):
+            </p>
 
-        // Helper function for bullet points
-        const addListItems = (items: string[]) => {
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(COLORS.BULLET_TEXT);
+            ${interventionsHTML ? `
+                <p style="font-size: 14px; font-weight: 500; color: #07226c; margin-bottom: 4px;">
+                    Interventions:
+                </p>
+                <ul style="margin: 0; padding-left: 18px;">
+                    ${interventionsHTML}
+                </ul>
+            ` : ""}
 
-            items.forEach(item => {
-                if (yPosition > pageHeight - 40) {
-                    addFooter(doc);
-                    doc.addPage();
-                    currentPage++;
-                    yPosition = 30;
-                    doc.setFontSize(11);
-                    doc.setFont('helvetica', 'normal');
-                    doc.setTextColor(COLORS.BULLET_TEXT);
-                }
+            ${outcomesHTML ? `
+                <p style="font-size: 14px; font-weight: 500; color: #07226c; margin-top: 10px; margin-bottom: 4px;">
+                    Outcomes:
+                </p>
+                <ul style="margin: 0; padding-left: 18px;">
+                    ${outcomesHTML}
+                </ul>
+            ` : ""}
+        </div>
+    `;
+}).join("");
 
-                // Draw bullet point
-                doc.setFillColor(COLORS.BULLET_TEXT);
-                doc.circle(20 + BULLET_STYLE.INDENT, yPosition + 3, BULLET_STYLE.RADIUS, 'F');
+    let tableRowsHTML = '';
 
-                // Text with proper color
-                const maxWidth = pageWidth - BULLET_STYLE.TEXT_INDENT - 40;
-                const lines = doc.splitTextToSize(item, maxWidth);
+    clinicalRisks.forEach((item, index) => {
+  const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
+  
+  tableRowsHTML += `
+    <tr>
+      <td style="padding:14px; border:1px solid #eef4f9;${background}">${item.risk}</td>
+      <td style="text-align:center; padding:14px; border:1px solid #eef4f9;${background}">${item.count}</td>
+    </tr>
+  `;
+});
 
-                lines.forEach((line: string, index: number) => {
-                    doc.text(line, 20 + BULLET_STYLE.TEXT_INDENT, yPosition + 4 + (index * BULLET_STYLE.LINE_HEIGHT));
-                });
 
-                // Adjusted spacing between bullet points — removed +3
-                yPosition += (lines.length * BULLET_STYLE.LINE_HEIGHT) + 1; // minimal padding between bullets
-            });
+  let cardsHTML = `
+    <div style="
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 12px;
+    color: #07226c;
+    ">
+    `;
+const filteredCaseStudies = caseStudies.filter(item => item.patient_id !== expandedPatientId);
+filteredCaseStudies.forEach(item => {
+    const [first, last] = item.patient_name ? item.patient_name.split(" ") : [];
 
-            // Optional spacing after the whole list
-            yPosition += 5;
-        };
+  cardsHTML += `
+    <div style="
+    flex: 1 1 calc((100% - 24px) / 3);
+    min-width: 200px;
+    padding: 10px;
+    color: #07226c;
+    border: 1px solid #d7e3f4;
+    border-radius: 8px;
+    box-sizing: border-box;
+    margin-bottom: 16px;
+  ">
+    <span style="font-weight:bold; color:#002d74; margin-right:6px;">
+      (${first ? first[0] + "." : ""}${last ? last[0] +".": ""}):
+    </span>
+    <span style="font-size:13px; color: #07226c;
+">
+      ${item.engagement_summary_text}
+    </span>
+  </div>
+  `;
+});
 
-        const addFooter = (doc: jsPDF) => {
-            const pageWidth = doc.internal.pageSize.width;
-            const pageHeight = doc.internal.pageSize.height;
-            const footerY = pageHeight - 5;
+cardsHTML += `</div>`;
 
-            // Footer content
-            const puzzleText = 'puzzle';
-            const pageText = `${doc.getCurrentPageInfo().pageNumber}`;
 
-            // Styles for puzzle text
-            doc.setFontSize(12);
-            doc.setTextColor(COLORS.PUZZLE_BLUE);
+let expandedStoryHTML = '';
 
-            // Calculate positions
-            const puzzleTextWidth = doc.getTextWidth(puzzleText);
-            const pageTextWidth = doc.getTextWidth(pageText);
-            const totalWidth = puzzleTextWidth + 2 + pageTextWidth;
-            // Position both elements from the right
-            const startX = pageWidth - 5 - totalWidth;
+if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summary_text) {
+    const [first, last] = expandedStory.patient_name.split(" ");
+    const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
 
-            // Draw puzzle text
-            doc.text(puzzleText, startX, footerY);
+    expandedStoryHTML = `
+<div style="margin-top: 36px;">
+    <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
+    Expanded Resident Success Story: ${initials}
+    </h2>
+    <div style="border-left: 3px solid #D3F1FC; padding-left: 16px; margin: 16px 0; color: #07226c;">
+    <p>${expandedStory.hospital_discharge_summary_text}</p>
+    <p>${expandedStory.facility_summary_text}</p>
+    <p>${expandedStory.engagement_summary_text}</p>
+    </div>
+</div>
+`;
+}
 
-            // Draw page number
-            doc.setFontSize(12);
-            doc.setTextColor(COLORS.PAGE_NUMBER);
-            doc.text(pageText, startX + puzzleTextWidth + 2, footerY);
-        };
 
-        yPosition += 10;
-        addSectionHeader('Patient Snapshot Overview: 30-Day Readmissions');
+    const htmlContentVal = `
+<html lang="en">
 
-        // Add chart if available
-        if (readmissionsChartRef) {
-            const result = await renderChart(doc, readmissionsChartRef, yPosition, 'Readmissions chart rendering error:');
-            yPosition = result.newYPosition;
-        }
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Puzzle SNF Report for ${nursingHomeName}</title>
+</head>
 
-        // Force this section to a new page
-        addFooter(doc);
-        doc.addPage();
-        currentPage++;
-        yPosition = 30;
+<body style="margin:0 20px; padding:0; background:#f6f7fb; font-family: Arial, Helvetica, sans-serif;">
+    <!-- Page wrapper sized to mimic print width (1200px wide for clarity) -->
+    <div
+        style="width: 1200px; margin: 0 auto; background: #ffffff; padding: 40px; box-sizing: border-box; border-radius: 4px;">
 
-        // Puzzle Touchpoints Section with Chart
-        if (yPosition > pageHeight - 50) {
-            addFooter(doc);
-            doc.addPage();
-            currentPage++;
-            yPosition = 30;
-        }
-        yPosition += 15;
-        addSectionHeader('Puzzle Touchpoints');
+        <!-- Header -->
+        <div style="position: relative; width: 100%; ">
+            <h1 style="margin: 0; font-size: 40px; color: #07226c; font-weight: 700; line-height: 1;">Puzzle SNF Report
+                for ${nursingHomeName}</h1>
+        </div>
 
-        // Add Puzzle Touchpoints chart if available
-        if (touchpointsChartRef) {
-            const result = await renderChart(doc, touchpointsChartRef, yPosition, 'Touchpoints chart rendering error:');
-            yPosition = result.newYPosition;
-        }
-        yPosition += 2;
+        <div style="margin-top: 50px; display: flex; align-items: center; width: 100%;">
 
-        // Clinical Risks Section with Chart
-        if (yPosition > pageHeight - 50) {
-            addFooter(doc);
-            doc.addPage();
-            currentPage++;
-            yPosition = 30;
-        }
-        addSectionHeader('Top Clinical Risks');
+            <div style="width: 60%; padding-right: 20px; box-sizing: border-box;">
+                <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Executive Summary
+                </h2>
+                <p style="margin: 0; font-size: 15px; color: #07226c; line-height: 1.6;">
+                    ${patientMetrics?.executiveSummary}
+                </p>
+            </div>
 
-        // Add Clinical Risks chart if available
-        if (clinicalRisksChartRef) {
-            const result = await renderChart(doc, clinicalRisksChartRef, yPosition, 'Clinical risks chart rendering error:');
-            yPosition = result.newYPosition;
-        }
-        yPosition += 5;
+            <div style="width: 40%; display: flex; align-items: center; justify-content: center;">
+                <img src="${logoUrl}" alt="Logo" style="max-width: 100%; max-height: 90px; object-fit: contain;" />
+            </div>
 
-        // Clinical Risks Section
-        addFooter(doc);
-        doc.addPage();
-        currentPage++;
-        yPosition = 30;
-        yPosition += 10; // Add extra space before section
+        </div>
 
-        addSectionHeader('Top Clinical Risks Identified at Discharge');
+        <!-- Section title -->
+        <div style="margin-top: 32px;">
+            <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;margin-bottom: 16px;">Patient Snapshot
+                Overview: 30-Day Readmissions</h2>
 
-        const uniqueRisks = [
-            ...new Set(
-                caseStudies
-                    .flatMap(study => study.clinical_risks || [])
-                    .map((item) => {
-                        try {
-                            const parsed = typeof item === "string" ? JSON.parse(item) : item
-                            return parsed.risk?.trim()
-                        } catch {
-                            return null
-                        }
-                    })
-                    .filter(Boolean)
-            )
-        ];
+            <!-- Table -->
+            <div style="width: 100%;margin-top:16px">
+                <table style="width:100%; border-collapse: collapse; font-size:14px;color: #07226c;">
+                    <thead>
+                        <tr>
+                        <th style="text-align:left; padding:14px; border:1px solid #e6edf5;  font-weight:700; color:#07226c;">
+                            Metric</th>
+                        <th
+                            style="width:140px; text-align:center; padding:14px; border:1px solid #e6edf5;  font-weight:700; color:#07226c;">
+                            Count</th>
+                        <th
+                            style="width:160px; text-align:center; padding:14px; border:1px solid #e6edf5;  font-weight:700; color:#07226c;">
+                            Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                        <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">Total Puzzle Continuity Care Patients
+                            Tracked</td>
+                        <td style="text-align:center; padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+                            ${patientMetrics?.totalPuzzlePatients}</td>
+                        <td style="text-align:center; padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">-</td>
+                        </tr>
+                        <tr>
+                        <td style="padding:14px; border:1px solid #eef4f9;">30-Day Readmissions (Puzzle Patients)
+                        </td>
+                        <td style="text-align:center; padding:14px; border:1px solid #eef4f9;">
+                            ${patientMetrics?.commulative30DayReadmissionCount_fromSNFAdmitDate}</td>
+                        <td style="text-align:center; padding:14px; border:1px solid #eef4f9;">
+                            ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="font-size:14px; margin:12px 0 0 0;color: #07226c;">Note: Readmissions reflect only patients
+                    supported by Puzzle Continuity Care.</p>
+            </div>
+        </div>
 
-        addListItems(uniqueRisks.slice(0, 30));
+        <div style="margin-top: 32px;">
+            <div style="height: 18px;"></div>
 
-        // Outcomes Section
-        addFooter(doc);
-        doc.addPage();
-        currentPage++;
-        yPosition = 30;
-        addSectionHeader('Puzzle\'s Key Interventions and Outcomes for Patients');
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
 
-        console.log("caseStudies are is ", caseStudies)
+                <div
+                    style="flex: 1; min-width: 300px; position: relative; padding:24px; border: 1px solid #A0E4F8; border-top: 8px solid #7fdbff; border-radius: 10px;">
+                    <div
+                        style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; background-color: #7fd9f1; border-radius: 50%; z-index: 2;">
+                    </div>
+                    <div style="text-align:center; color:#07226c; font-size:20px; font-weight:700; margin-bottom: 16px;">
+                        Types of Puzzle Interventions Delivered
+                    </div>
+                   <table style="width:100%; border-collapse: collapse; font-size:14px; color:#07226c;">
+                        <thead>
+                            <tr>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Intervention Type
+                            </th>
+                            <th style="width:140px; text-align:center; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Count
+                            </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${interventionTableRowsHTML}
+                        </tbody>
+                    </table>
+                </div>
+                <div
+                    style="flex: 1; min-width: 300px; position: relative; padding:24px; border: 1px solid #A0E4F8; border-top: 8px solid #7fdbff; border-radius: 10px;">
+                    <div
+                        style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; background-color: #7fd9f1; border-radius: 50%; z-index: 2;">
+                    </div>
+                    <div style="text-align:center; color:#07226c; font-size:20px; font-weight:700; margin-bottom: 16px;">
+                        Top Clinical Risks Identified at Discharge
+                    </div>
+                    <table style="width:100%; border-collapse: collapse; font-size:14px; color:#07226c;">
+                            <thead>
+                                <tr>
+                                    <th
+                                        style="text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+                                        Clinical Risk</th>
+                                    <th
+                                        style="width:140px; text-align:center; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+                                        Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRowsHTML}
+                            </tbody>
+                        </table>
+                </div>
 
-        const interventionOutcomeItems: string[] = [];
+            </div>
+    
+            <div style="margin-top: 36px;">
+                <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;">Key Interventions and
+                    Outcomes</h2>
+                ${keyOutcomesHTML}
+            </div>
+            <div style="margin-top: 36px;">
+                <h2 style="margin: 0 0 0 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">Case Study
+                    Highlights: Individual Patient Successes</h2>
+                ${cardsHTML}
+            </div>
+            ${expandedStoryHTML}
+            <div style="margin-top: 36px;">
+                <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">National Benchmark
+                    Comparison</h2>
+                <div>
+                    <table style="width:100%; border-collapse: collapse; font-size:14px;   color: #07226c;">
+                        <thead>
+                            <tr>
+                                <th
+                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+                                    Metric
+                                </th>
+                                <th
+                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+                                    ${nursingHomeName}
+                                </th>
+                                <th
+                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+                                    National Benchmark*
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">30-Day Readmission Rate (Puzzle
+                                    Patients)</td>
+                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+                                    ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%</td>
+                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+                                    ${patientMetrics?.nationalReadmissionsBenchmark}%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p style="font-size:13px; margin:12px 0 0 0; color: #07226c;">Source: CMS SNF QRP 2024 National Averages.</p>
+            </div>
 
-        caseStudies.forEach((study) => {
-            const [first, last] = (study.patient_name || '').split(" ");
-            const shortName = first && last ? `${first[0]}.${last}` : (study.patient_name || 'Unknown');
 
-            const interventions = study.detailed_interventions || [];
-            const outcomes = study.detailed_outcomes || [];
+            <div style="margin-top: 36px;">
+                <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Ongoing Focus Areas
+                </h2>
 
-            if (interventions.length > 0 || outcomes.length > 0) {
-                interventionOutcomeItems.push(`${shortName}:`);
 
-                if (interventions.length > 0) {
-                    interventionOutcomeItems.push("  Interventions:");
-                    interventions.forEach((intv) => {
-                        const text = typeof intv === "string" ? (JSON.parse(intv).intervention || '').trim() : intv.intervention?.trim();
-                        if (text) interventionOutcomeItems.push(`  • ${text}`);
-                    });
-                }
+                <div id="card-wrapper"
+                    style="display: flex; gap: 24px; justify-content: start; background: white;margin-top: 24px;">
+                    <div style="width: 366px; text-align: center;">
+                        <div
+                            style="width: 100%; height: 80px; background: transparent; display: flex; justify-content: center; align-items: center; position: relative;">
+                            <svg width="100%" height="80" viewBox="0 0 366 80" preserveAspectRatio="none"
+                                style="position: absolute; top:0; left:0; z-index: 0;">
+                                <polygon points="0,0 329,0 366,40 329,80 0,80 37,40" fill="#D3F1FC" />
+                            </svg>
+                            <img src="https://img.icons8.com/ios-filled/24/07226c/hospital-room.png"
+                                style="width: 24px; height: 24px; position: relative; z-index: 1;" />
+                        </div>
+                        <div
+                            style="font-size: 20px; font-weight: bold; color: #07226c; margin-top: 12px; margin-left:30px; text-align: left;">
+                            Reduce Readmissions
+                        </div>
+                        <div
+                            style="font-size: 16px; color: #07226c; margin-top: 6px; line-height: 1.4;text-align: left;margin-left:30px;">
+                            Through proactive escalation and<br />earlier detection.
+                        </div>
+                    </div>
 
-                if (outcomes.length > 0) {
-                    interventionOutcomeItems.push("  Outcomes:");
-                    outcomes.forEach((outc) => {
-                        const text = typeof outc === "string" ? (JSON.parse(outc).outcome || '').trim() : outc.outcome?.trim();
-                        if (text) interventionOutcomeItems.push(`  • ${text}`);
-                    });
-                }
+                    <div style="width: 366px; text-align: center;">
+                        <div
+                            style="width: 100%; height: 80px; background: transparent; display: flex; justify-content: center; align-items: center; position: relative;">
+                            <svg width="100%" height="80" viewBox="0 0 366 80" preserveAspectRatio="none"
+                                style="position: absolute; top:0; left:0; z-index: 0;">
+                                <polygon points="0,0 329,0 366,40 329,80 0,80 37,40" fill="#D3F1FC" />
+                            </svg>
+                           <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="#07226c"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="position: relative; z-index: 1;"
+                                xmlns="http://www.w3.org/2000/svg"
+                            >
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                        </div>
+                        <div
+                            style="font-size: 20px; font-weight: bold; color: #07226c; margin-top: 12px;text-align: left;margin-left:30px;">
+                            Strengthen Fall Prevention
+                        </div>
+                        <div
+                            style="font-size: 16px; color: #07226c; margin-top: 6px; line-height: 1.4;text-align: left;margin-left:30px;">
+                            With enhanced assessments and<br />environment safety reviews.
+                        </div>
+                    </div>
+                    <div style="width: 366px; text-align: center;">
+                        <div
+                            style="width: 100%; height: 80px; background: transparent; display: flex; justify-content: center; align-items: center; position: relative;">
+                            <svg width="100%" height="80" viewBox="0 0 366 80" preserveAspectRatio="none"
+                                style="position: absolute; top:0; left:0; z-index: 0;">
+                                <polygon points="0,0 329,0 366,40 329,80 0,80 37,40" fill="#D3F1FC" />
+                            </svg>
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="#07226c"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                xmlns="http://www.w3.org/2000/svg"
+                                style="position: relative; z-index: 1;"
+                                >
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                            </svg>
+                        </div>
+                        <div
+                            style="font-size: 20px;text-align: left;margin-left:30px; font-weight: bold; color: #07226c; margin-top: 12px;">
+                            Advance CHF Management
+                        </div>
+                        <div
+                            style="font-size: 16px; text-align: left;margin-left:30px;color: #07226c; margin-top: 6px; line-height: 1.4;">
+                            By prioritizing early symptom<br />monitoring and follow-up adherence.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 36px;">
+                <h2 style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
+                <p style="color: #07226c;">${patientMetrics?.closingStatement}</p>
+            </div>
+        </div>
+</body>
 
-                interventionOutcomeItems.push(""); // spacing between patients
-            }
-        });
+</html>
+   `;
 
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(COLORS.BULLET_TEXT);
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    container.style.top = "0";
+    container.innerHTML = htmlContentVal;
+    document.body.appendChild(container);
 
-        interventionOutcomeItems.forEach(line => {
-            if (yPosition > pageHeight - 40) {
-                addFooter(doc);
-                doc.addPage();
-                currentPage++;
-                yPosition = 30;
-                doc.setFontSize(11);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(COLORS.BULLET_TEXT);
-            }
+    await new Promise(r => setTimeout(r, 300));
 
-            const isBullet = line.trim().startsWith('•');
-            const isSectionHeading = !isBullet && (line.includes('Interventions:') || line.includes('Outcomes:'));
-            const isPatientHeader = !isBullet && !isSectionHeading && line.trim().endsWith(':');
+    const canvas = await html2canvas(container, {
+        scale: 2.5, 
+        useCORS: true,
+        allowTaint: true
+    });
 
-            if (isPatientHeader) {
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(COLORS.TITLE);
-                doc.text(line.trim(), 20, yPosition);
-                yPosition += 6;
-            } else if (isSectionHeading) {
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(COLORS.SUB_TITLE);
-                doc.text(line.trim(), 25, yPosition);
-                yPosition += 5;
-            } else if (isBullet) {
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(COLORS.BULLET_TEXT);
-                doc.circle(20 + BULLET_STYLE.INDENT, yPosition + 2, BULLET_STYLE.RADIUS, 'F');
-                const text = line.replace('•', '').trim();
-                const lines = doc.splitTextToSize(text, pageWidth - BULLET_STYLE.TEXT_INDENT - 20);
-                lines.forEach((wrappedLine, idx) => {
-                    doc.text(wrappedLine, 20 + BULLET_STYLE.TEXT_INDENT, yPosition + 4 + (idx * BULLET_STYLE.LINE_HEIGHT));
-                });
-                yPosition += (lines.length * BULLET_STYLE.LINE_HEIGHT) + 2;
-            } else {
-                yPosition += 4; // small spacing for empty lines
-            }
-        });
+    document.body.removeChild(container);
 
-        // Case Studies Section with box layout
-        addFooter(doc);
-        doc.addPage();
-        currentPage++;
-        yPosition = 30;
-        yPosition = addCaseStudiesSection(doc, caseStudies, yPosition, pageWidth, pageHeight, addFooter);
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
 
-        // Add footer to the last page
-        addFooter(doc);
+const marginLeft = 10;   // mm
+const marginRight = 10;  // mm
+const marginTop = 10;    // mm
+const marginBottom = 10; // mm
 
-        // Return blob or save file based on returnBlob option
-        if (returnBlob) {
-            const pdfBlob = doc.output('blob');
-            return pdfBlob;
-        } else {
-            doc.save(`${nursingHomeName}-case-studies-${monthYear}.pdf`);
-        }
+const usablePageWidth = pageWidth - marginLeft - marginRight;
+const usablePageHeight = pageHeight - marginTop - marginBottom;
 
-    } catch (error) {
-        console.error('Error generating PDF:', error);
-        throw error;
+
+const pxPerMm = canvas.width / usablePageWidth;
+
+const pageHeightPx = Math.floor(usablePageHeight * pxPerMm);
+
+let yPosition = 0;
+let remainingHeight = canvas.height;
+
+let firstPage = true;
+
+while (remainingHeight > 0) {
+    const sliceHeight = Math.min(pageHeightPx, remainingHeight);
+
+    if (sliceHeight < 52) break;
+
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeight;
+
+    const ctx = pageCanvas.getContext("2d");
+    if(ctx){
+        ctx.drawImage(
+            canvas,
+            0,
+            yPosition,
+            canvas.width,
+            sliceHeight,
+            0,
+            0,
+            canvas.width,
+            sliceHeight
+        );
+
     }
+
+    const imgData = pageCanvas.toDataURL("image/jpeg",1);
+
+    const imgHeight = (sliceHeight / canvas.width) * usablePageWidth;
+
+    if (firstPage) {
+        pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
+        firstPage = false;
+    } else {
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
+    }
+
+    yPosition += sliceHeight;
+    remainingHeight -= sliceHeight;
+}
+
+    if (returnBlob) {
+        return pdf.output("blob");
+    } else {
+        pdf.save(`${nursingHomeName}-case-studies-${monthYear}.pdf`);
+    }
+
 };
 
 const downloadFile = (blob: Blob, filename: string) => {
@@ -972,34 +1205,35 @@ const createCaseStudyCard = (study: any, theme: any) => {
                             verticalAlign: VerticalAlign.TOP,
                             children: [
                                 new Paragraph({
-                                    children: [
-                                        new TextRun({
-                                            //                                            text: study.patient_name || "Unknown Patient",
-                                            text: (() => {
-                                                const [first, last] = (study.patient_name || "Unknown Patient").split(" ");
-                                                return first && last ? `${first[0]}.${last}` : (study.patient_name || "Unknown Patient");
-                                            })(),
-                                            bold: true,
-                                            size: 24,
-                                            color: hexToDocxColor(theme.TITLE),
-                                            font: "Helvetica",
-                                        }),
-                                    ],
-                                    spacing: { before: 120, after: 240 },
-                                    alignment: AlignmentType.LEFT,
-                                }),
-                                new Paragraph({
-                                    children: [
-                                        new TextRun({
-                                            text: study.highlight_text,
-                                            size: 22,
-                                            color: hexToDocxColor(theme.TEXT),
-                                            font: "Helvetica",
-                                        }),
-                                    ],
-                                    spacing: { before: 120, after: 120, line: 360 },
-                                    alignment: AlignmentType.LEFT,
-                                }),
+    children: [
+        new TextRun({
+            text: (() => {
+                const safeName = study.patient_name || "Unknown Patient";
+                const [first, last] = safeName.split(" ");
+                return first && last ? `${first[0]}.${last}` : safeName;
+            })(),
+            bold: true,
+            size: 24,
+            color: hexToDocxColor(theme.TITLE),
+            font: "Helvetica",
+        }),
+    ],
+    spacing: { before: 120, after: 240 },
+    alignment: AlignmentType.LEFT,
+}),
+new Paragraph({
+    children: [
+        new TextRun({
+            text: study.highlight_text || "",
+            size: 22,
+            color: hexToDocxColor(theme.TEXT),
+            font: "Helvetica",
+        }),
+    ],
+    spacing: { before: 120, after: 120, line: 360 },
+    alignment: AlignmentType.LEFT,
+}),
+
                             ],
                         }),
                     ],
@@ -1009,150 +1243,6 @@ const createCaseStudyCard = (study: any, theme: any) => {
     ];
 };
 
-const capitalizeFirst = (text) =>
-    text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
-
-const addCaseStudiesSection = (
-    doc: jsPDF,
-    caseStudies: CaseStudy[],
-    yPosition: number,
-    pageWidth: number,
-    pageHeight: number,
-    addFooter: (doc: jsPDF) => void
-) => {
-    // Add section header
-    doc.setTextColor(COLORS.TITLE);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Case Study Highlights', 20, yPosition);
-    yPosition += 12;
-
-    const boxLeftMargin = 20;
-    const boxWidth = pageWidth - 40;
-    const boxPadding = 5;
-    const borderWidth = 0.7;
-    const separatorWidth = 0.2;
-    const textStartX = boxLeftMargin + boxPadding + borderWidth + 5;
-
-    caseStudies.forEach((study, index) => {
-        console.log("Case Study ", study)
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(11);
-
-        const hospitalDischargeSummaryText = capitalizeFirst(study.hospital_discharge_summary_text || '');
-        const inFacilitySummaryText = capitalizeFirst(study.facility_summary_text || '');
-        const engagementSummaryText = capitalizeFirst(study.engagement_summary_text || '');
-
-        const highlightText = capitalizeFirst(study.highlight_text || '');
-
-        const allLines = doc.splitTextToSize(
-            `
-            ${hospitalDischargeSummaryText}\n\n
-            ${inFacilitySummaryText}\n\n
-            ${engagementSummaryText}`,
-            boxWidth - (boxPadding * 2 + borderWidth + 10)
-        );
-
-        const lineHeight = 4.3;
-        const headingHeight = 12;
-        // const boxHeaderHeight = headingHeight + boxPadding + 10;
-        const boxHeaderHeight = headingHeight + boxPadding;
-        const textHeight = allLines.length * lineHeight;
-        const fullBoxHeight = Math.max(35, textHeight + boxPadding);
-
-        const maxBoxBottom = pageHeight - 30;
-        const spaceNeededForHeader = boxHeaderHeight + lineHeight * 2;
-
-        if (yPosition + spaceNeededForHeader > maxBoxBottom) {
-            addFooter(doc);
-            doc.addPage();
-            yPosition = 10;
-            doc.setTextColor(COLORS.TITLE);
-            doc.setFontSize(16);
-            doc.setFont('helvetica', 'bold');
-            yPosition += 12;
-        }
-
-        let splitIndex = allLines.length;
-        let textOnFirstPage = allLines;
-        let textOnNextPage = [];
-
-        if (yPosition + fullBoxHeight > maxBoxBottom) {
-            const maxLinesFirstPage = Math.floor((maxBoxBottom - yPosition - boxHeaderHeight) / lineHeight);
-            splitIndex = Math.max(0, maxLinesFirstPage);
-            textOnFirstPage = allLines.slice(0, splitIndex);
-            textOnNextPage = allLines.slice(splitIndex);
-        }
-
-        const drawCaseBox = (lines: any, topY: any, isContinued = false) => {
-            const boxHeight = Math.max(35, lines.length * lineHeight + boxHeaderHeight);
-            doc.setFillColor(255, 255, 255);
-            doc.rect(boxLeftMargin, topY, boxWidth, boxHeight, 'F');
-            const bgColor = hexToRgb("#1A85FF");
-            doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
-            doc.rect(boxLeftMargin, topY, borderWidth, boxHeight, 'F');
-
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(12);
-            doc.setTextColor(COLORS.PATIENT_NAME);
-            if (!isContinued) {
-                //doc.text(study.patient_name || 'Unknown Patient', textStartX, topY + boxPadding + 0.1);
-                const [first, last] = (study.patient_name || 'Unknown Patient').split(" ");
-                const formattedName = first && last ? `${first[0]}.${last}` : (study.patient_name || 'Unknown Patient');
-                doc.text(formattedName, textStartX, topY + boxPadding + 0.1);
-            }
-
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(11);
-            doc.setTextColor(85, 85, 85);
-            doc.text(lines, textStartX, topY + boxPadding + 10);
-
-            return boxHeight;
-        };
-
-        const firstBoxHeight = drawCaseBox(textOnFirstPage, yPosition, false);
-        yPosition += firstBoxHeight + 6;
-
-        if (textOnNextPage.length > 0) {
-            addFooter(doc);
-            doc.addPage();
-            yPosition = 10;
-            doc.setTextColor(COLORS.TITLE);
-            doc.setFontSize(16);
-            doc.setFont('helvetica', 'bold');
-            yPosition += 12;
-
-            const continuedHeight = drawCaseBox(textOnNextPage, yPosition, true);
-            yPosition += continuedHeight + 6;
-        }
-
-        if (index < caseStudies.length - 1) {
-            doc.setDrawColor(229, 231, 235);
-            doc.setLineWidth(separatorWidth);
-            doc.line(
-                boxLeftMargin,
-                yPosition + (fullBoxHeight ?? firstBoxHeight),
-                boxLeftMargin + boxWidth,
-                yPosition + (fullBoxHeight ?? firstBoxHeight)
-            );
-        }
-
-        const nextStudy = caseStudies[index + 1];
-        if (nextStudy) {
-            const nextLines = doc.splitTextToSize(
-                nextStudy.highlight_text,
-                boxWidth - (boxPadding * 2 + borderWidth + 10)
-            );
-            const nextTextHeight = nextLines.length * lineHeight;
-            const nextBoxHeight = Math.max(35, nextTextHeight + boxPadding + boxHeaderHeight);
-            if (yPosition + nextBoxHeight > pageHeight - 30) {
-                addFooter(doc);
-            }
-        }
-    });
-
-    return yPosition + 15;
-};
 
 
 const renderChart = async (doc: jsPDF, chartRef: HTMLDivElement | null, yPosition: number, errorMessage: string): Promise<{ newYPosition: number, error?: Error }> => {
