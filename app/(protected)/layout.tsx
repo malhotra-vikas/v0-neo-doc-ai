@@ -5,6 +5,8 @@ import DashboardHeader from "@/components/dashboard-header"
 import UserProviderWrapper from "@/contexts/UserProviderWrapper"
 import { Footer } from "@/components/footer"
 
+import { SpeedInsights } from "@vercel/speed-insights/next"
+
 export default async function ProtectedLayout({
   children,
 }: {
