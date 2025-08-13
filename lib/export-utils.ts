@@ -1,8 +1,9 @@
 import { jsPDF } from "jspdf";
 import { Document, Paragraph, TextRun, HeadingLevel, ImageRun, Tab, AlignmentType, BorderStyle, Packer, IStylesOptions, Footer, PageNumber, TableRow, TableCell, Table, WidthType, LineRuleType, VerticalAlign, TableLayoutType, ShadingType, PageOrientation } from 'docx';
 import html2canvas from 'html2canvas';
-
-
+import card1 from "../public/card1.png"
+import card2 from "../public/card2.png"
+import card3 from "../public/card3.png"
 const COLORS = {
     TEXT: '07226c',
     PAGE_NUMBER: '#11b3dc',
@@ -663,7 +664,8 @@ export const exportToDOCX = async ({
     categorizedInterventions,
     returnBlob = false,
     interventionCounts,
-    clinicalRisks
+    clinicalRisks,
+    expandedPatientId,
 }: ExportDOCXOptions): Promise<Blob | void> => {
     try {
         const reportData: ReportData = {
@@ -678,15 +680,13 @@ export const exportToDOCX = async ({
                 outcomes: study.detailed_outcomes?.map(item => item.outcome) || [],
                 patientName: study.patient_name || "Unknown",
             })),
-            caseStudies: caseStudies.map(study => ({
-                patientId: study.patient_id,
-                description: study.hospital_discharge_summary_text
-            })),
+            caseStudies: caseStudies,
             nationalBenchmark: patientMetrics?.nationalReadmissionsBenchmark ? `${patientMetrics.nationalReadmissionsBenchmark}%` : "N/A",
             executiveSummary: patientMetrics?.executiveSummary || "",
             logoUrl: patientMetrics?.publicLogoLink,
             patientMetrics: patientMetrics,
-            interventions: interventionCounts
+            interventions: interventionCounts,
+            expandedPatientId: expandedPatientId,
         }
 
         const doc = await generateDocument(reportData);
@@ -799,65 +799,6 @@ const createDocumentStyles = () => ({
 });
 
 const createStyledTable = (data: ReportData) => {
-    const headerBorderColor = "e6edf5";
-    const bodyBorderColor = "eef4f9";
-    const textColor = COLORS.TEXT;
-    const lightGrayBg = "f5f5f5";
-
-    const createBorder = (color: string) => ({
-        style: BorderStyle.SINGLE,
-        size: 4,
-        color: color,
-    });
-
-    const createCell = ({
-        text,
-        isHeader = false,
-        isCenter = false,
-        bgColor,
-        borderColor,
-        bold = false,
-    }: {
-        text: string;
-        isHeader?: boolean;
-        isCenter?: boolean;
-        bgColor?: string;
-        borderColor: string;
-        bold?: boolean;
-    }) => {
-        return new TableCell({
-            shading: bgColor ? { fill: bgColor } : undefined,
-            margins: {
-                top: 280,
-                bottom: 280,
-                left: 280,
-                right: 280,
-            },
-            borders: {
-                top: createBorder(borderColor),
-                bottom: createBorder(borderColor),
-                left: createBorder(borderColor),
-                right: createBorder(borderColor),
-            },
-            verticalAlign: VerticalAlign.CENTER,
-            children: [
-                new Paragraph({
-                    alignment: isCenter ? AlignmentType.CENTER : AlignmentType.LEFT,
-                    children: [
-                        new TextRun({
-                            text: text,
-                            bold: bold,
-                            color: textColor,
-                            size: 20,
-                            font: "Arial",
-                        }),
-                    ],
-                    spacing: { before: 0, after: 0 },
-                }),
-            ],
-        });
-    };
-
     return new Table({
         width: {
             size: 100,
@@ -939,6 +880,7 @@ const createStyledTable = (data: ReportData) => {
 
 
 interface ReportData {
+    expandedPatientId: string
     executiveSummary: string
     facilityName: string;
     logoUrl?: string;
@@ -957,10 +899,7 @@ interface ReportData {
         outcomes: string[];
         patientName:string;
     }>;
-    caseStudies: Array<{
-        patientId: string;
-        description: string;
-    }>;
+    caseStudies: CaseStudy[]
     nationalBenchmark: string;
 }
 
@@ -1050,12 +989,7 @@ function createCard(title: string, rows: TableRow[]) {
                                 alignment: AlignmentType.CENTER,
                             }),
                         ],
-                        borders: {
-                            top: { style: BorderStyle.NONE },
-                            bottom: { style: BorderStyle.NONE },
-                            left: { style: BorderStyle.NONE },
-                            right: { style: BorderStyle.NONE }
-                        },
+                        borders: noBorder,
                         columnSpan: 2,
                     }),
                 ],
@@ -1072,12 +1006,7 @@ function createCard(title: string, rows: TableRow[]) {
                                 spacing: { after: 240 },
                             }),
                         ],
-                        borders: {
-                            top: { style: BorderStyle.NONE },
-                            bottom: { style: BorderStyle.NONE },
-                            left: { style: BorderStyle.NONE },
-                            right: { style: BorderStyle.NONE }
-                        },
+                        borders: noBorder,
                         columnSpan: 2,
                     }),
                 ],
@@ -1102,7 +1031,7 @@ function createCard(title: string, rows: TableRow[]) {
                     new TableCell({
                         children: [
                             new Paragraph({
-                                text: title.includes("Intervention") ? "Number Delivered" : "Number of Patients",
+                                text: "Count",
                                 alignment: AlignmentType.CENTER,
                                 style: "tableHeader",
                             }),
@@ -1120,8 +1049,245 @@ function createCard(title: string, rows: TableRow[]) {
         ],
     });
 }
+async function loadImage(path: string) {
+    const response = await fetch(path);
+    return await response.arrayBuffer();
+}
+const noBorder = {
+    top: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+    bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+    left: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+    right: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+};
+const createCaseStudyCard = (study: CaseStudy|undefined) => {
 
+    return [
+        // Spacer paragraph for top margin between cards
+        new Paragraph({ spacing: { before: 50 } }),
+
+        new Table({
+            width: {
+                size: 10000,
+                type: WidthType.DXA,
+            },
+            layout: TableLayoutType.AUTOFIT,
+            columnWidths: [9500],
+            indent: {
+                size: 10,
+                type: WidthType.DXA,
+            },
+            rows: [
+                new TableRow({
+                    children: [
+                        new TableCell({
+                            borders: {
+                                top: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+                                bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+                                left: { style: BorderStyle.SINGLE, size: 10, color: "7fd9f1" },
+                                right: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
+                            },
+                            shading: { fill: "FFFFFF" },
+                            margins: {
+                                top: 20,
+                                bottom: 50,
+                                left: 150,
+                                right: 0,
+                            },
+                            verticalAlign: VerticalAlign.TOP,
+                            children: [
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: study?.engagement_summary_text || "",
+                                            size: 20,
+                                            color: "002d74",
+                                            font: "Arial",
+                                        }),
+                                    ],
+                                    spacing: { before: 120, after: 120, line: 360 },
+                                    alignment: AlignmentType.LEFT,
+                                }),
+
+                            ],
+                        }),
+                    ],
+                }),
+            ],
+        }),
+    ];
+};
+
+const createCardsTable = (study: CaseStudy, widthPercent: number) => {
+        const nameParts = (study.patient_name || "").split(" ");
+    const shortName = nameParts.length >= 2
+        ? `${nameParts[0][0]}. ${nameParts[1][0]}.`
+        : study.patient_name || ""
+    return new Table({
+       width: { size: widthPercent * 100, type: WidthType.PERCENTAGE },
+        layout: TableLayoutType.AUTOFIT,
+        columnWidths: [9500],
+        indent: { size: 10, type: WidthType.DXA },
+        rows: [
+            new TableRow({
+                children: [
+                    new TableCell({
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 3, color: "d7e3f4" },
+                            bottom: { style: BorderStyle.SINGLE, size: 3, color: "d7e3f4" },
+                            left: { style: BorderStyle.SINGLE, size: 10, color: "d7e3f4" },
+                            right: { style: BorderStyle.SINGLE, size: 3, color: "d7e3f4" },
+                        },
+                        shading: { fill: "FFFFFF" },
+                        margins: { top: 20, bottom: 50, left: 150, right: 0 },
+                        verticalAlign: VerticalAlign.TOP,
+                        children: [
+                            new Paragraph({
+                                children: [
+                                     new TextRun({
+                                            text: `(${shortName}): `,
+                                            bold: true,
+                                            size: 20,
+                                            font: "Arial",
+                                            color: "002d74",
+                                        }),
+
+                                    new TextRun({
+                                        text: study.engagement_summary_text || "",
+                                        size: 20,
+                                        color: "07226c",
+                                        font: "Arial",
+                                    }),
+                                ],
+                                spacing: { before: 120, after: 120, line: 360 },
+                                alignment: AlignmentType.LEFT,
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+        ],
+    });
+};
+const createBorder = (color: string) => ({
+    style: BorderStyle.SINGLE,
+    size: 4,
+    color: color,
+});
+
+const headerBorderColor = "e6edf5";
+const bodyBorderColor = "eef4f9";
+const textColor = COLORS.TEXT;
+const lightGrayBg = "f5f5f5";
+
+const createCell = ({
+    text,
+    isHeader = false,
+    isCenter = false,
+    bgColor,
+    borderColor,
+    bold = false,
+}: {
+    text: string;
+    isHeader?: boolean;
+    isCenter?: boolean;
+    bgColor?: string;
+    borderColor: string;
+    bold?: boolean;
+}) => {
+    return new TableCell({
+        shading: bgColor ? { fill: bgColor } : undefined,
+        margins: {
+            top: 280,
+            bottom: 280,
+            left: 280,
+            right: 280,
+        },
+        borders: {
+            top: createBorder(borderColor),
+            bottom: createBorder(borderColor),
+            left: createBorder(borderColor),
+            right: createBorder(borderColor),
+        },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [
+            new Paragraph({
+                alignment: isCenter ? AlignmentType.CENTER : AlignmentType.LEFT,
+                children: [
+                    new TextRun({
+                        text: text.toString(),
+                        bold: bold,
+                        color: textColor,
+                        size: 20,
+                        font: "Arial",
+                    }),
+                ],
+                spacing: { before: 0, after: 0 },
+            }),
+        ],
+    });
+};
+
+function createCardLayoutTable(data: CaseStudy[], expandedPatientId: string) {
+  const filteredCaseStudies = data.filter(
+    (study) => study?.patient_id !== expandedPatientId
+  );
+  if (filteredCaseStudies.length === 0) {
+    return new Paragraph({ text: "No case studies available" });
+  }
+
+  const itemsPerRow = 3;
+  const spacingPercent = 2; // fixed spacing width between cards in %
+  const totalWidth = 100;
+
+  const rows: TableRow[] = [];
+  const rowCount = Math.ceil(filteredCaseStudies.length / itemsPerRow);
+
+  for (let r = 0; r < rowCount; r++) {
+    const cardsInRow = Math.min(
+      itemsPerRow,
+      filteredCaseStudies.length - r * itemsPerRow
+    );
+    const totalSpacing = spacingPercent * (cardsInRow - 1);
+    const cardWidth = (totalWidth - totalSpacing) / cardsInRow;
+
+    const cells: TableCell[] = [];
+
+    for (let c = 0; c < cardsInRow; c++) {
+      const index = r * itemsPerRow + c;
+      const card = createCardsTable(filteredCaseStudies[index], cardWidth);
+
+      // Card cell with calculated width
+      cells.push(
+        new TableCell({
+          width: { size: cardWidth, type: WidthType.PERCENTAGE }, // percent width
+          margins: { top: 100, bottom: 100, left: 50, right: 50 },
+          borders: noBorder,
+          verticalAlign: VerticalAlign.TOP,
+          children: [card],
+        })
+      );
+
+    }
+
+    rows.push(
+      new TableRow({
+        children: cells,
+        cantSplit: true,
+      })
+    );
+  }
+
+  return new Table({
+    width: { size: totalWidth * 100, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    borders: noBorder,
+    rows,
+  });
+}
 const generateDocument = async (data: ReportData) => {
+    const img1 = await loadImage(card1.src);
+    const img2 = await loadImage(card2.src);
+    const img3 = await loadImage(card3.src);
     const doc = new Document({
         styles: createDocumentStyles(),
         sections: [
@@ -1159,14 +1325,7 @@ const generateDocument = async (data: ReportData) => {
                             type: WidthType.PERCENTAGE,
                         },
                         columnWidths: [6000, 4000], // 60% and 40%
-                        borders: {
-                            top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                            bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                            left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                            right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                            insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                            insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                        },
+                        borders: noBorder,
                         rows: [
                             new TableRow({
                                 children: [
@@ -1196,6 +1355,7 @@ const generateDocument = async (data: ReportData) => {
                                     }),
                                     new TableCell({
                                         verticalAlign: VerticalAlign.CENTER,
+                                        borders: noBorder,
                                         margins: { top: 0, bottom: 0, left: 0, right: 0 },
                                         children: [
                                             new Paragraph({
@@ -1229,24 +1389,14 @@ const generateDocument = async (data: ReportData) => {
                     new Paragraph({ text: "", spacing: { before: 360 } }),
                     new Table({
                         width: { size: 100, type: WidthType.PERCENTAGE },
-                        borders: {
-                            top: { style: BorderStyle.NONE },
-                            bottom: { style: BorderStyle.NONE },
-                            left: { style: BorderStyle.NONE },
-                            right: { style: BorderStyle.NONE }
-                        },
+                        borders: noBorder,
                         rows: [
                             new TableRow({
                                 children: [
                                     new TableCell({
                                         width: { size: 50, type: WidthType.PERCENTAGE },
                                         margins: { right: 240 },
-                                        borders: {
-                                            top: { style: BorderStyle.NONE },
-                                            bottom: { style: BorderStyle.NONE },
-                                            left: { style: BorderStyle.NONE },
-                                            right: { style: BorderStyle.NONE },
-                                        },
+                                        borders: noBorder,
                                         children: [
                                             createCard(
                                                 "Types of Puzzle Interventions Delivered",
@@ -1263,12 +1413,7 @@ const generateDocument = async (data: ReportData) => {
                                     new TableCell({
                                         width: { size: 50, type: WidthType.PERCENTAGE },
                                         margins: { left: 240 },
-                                        borders: {
-                                            top: { style: BorderStyle.NONE },
-                                            bottom: { style: BorderStyle.NONE },
-                                            left: { style: BorderStyle.NONE },
-                                            right: { style: BorderStyle.NONE },
-                                        },
+                                        borders: noBorder,
                                         children: [
                                             createCard(
                                                 "Top Clinical Risks Identified at Discharge",
@@ -1296,7 +1441,7 @@ const generateDocument = async (data: ReportData) => {
                     ...data.keyInterventions.map(study => {
                         const patientName = study.patientName.split(" ");
                         const shortName = patientName.length >= 2 
-                            ? `${patientName[0]} ${patientName[1][0]}.` 
+                            ? `${patientName[0][0]}. ${patientName[1][0]}.` 
                             : study.patientName;
 
                         return [
@@ -1389,6 +1534,280 @@ const generateDocument = async (data: ReportData) => {
                             }),
                         ];
                     }).flat(),
+                    new Paragraph({
+                            text: "Case Study Highlights: Individual Patient Successes",
+                            style: "heading2",
+                            spacing: { before: 360, after: 280 },
+                        }),
+
+
+                    createCardLayoutTable(data.caseStudies, data.expandedPatientId),
+                     ...(data.expandedPatientId ? [
+                            new Paragraph({
+                                children: [
+                                    new TextRun({
+                                        text: `Expanded Resident Success Story: ${(() => {
+                                            const story = data.caseStudies.find(study => study.patient_id === data.expandedPatientId);
+                                            if (!story?.patient_name) return "";
+                                            const parts = story.patient_name.trim().split(/\s+/);
+                                            const firstInitial = parts[0]?.[0] ? parts[0][0] + "." : "";
+                                            const lastInitial = parts[1]?.[0] ? parts[1][0] + "." : "";
+                                            return `${firstInitial}${lastInitial}`;
+                                        })()}`,
+                                        bold: true,
+                                        size: 40,
+                                        font: "Arial",
+                                        color: "07226C",
+                                    }),
+                                ],
+                                spacing: { before: 720, after: 100 },
+                            }),
+                            ...createCaseStudyCard(data.caseStudies.find(study => study.patient_id === data.expandedPatientId)),
+                        ] : []),
+
+                        new Paragraph({
+                            text: "National Benchmark Comparison",
+                            style: "heading2",
+                            spacing: { before: 720, after: 320 },
+                        }),
+
+                        new Table({
+                            width: { size: 100, type: WidthType.PERCENTAGE },
+                            layout: TableLayoutType.FIXED,
+                            borders: {
+                                top: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                                bottom: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                                left: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                                right: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                            },
+                            rows: [
+                                // Header Row
+                                new TableRow({
+                                    children: [
+                                        createCell({
+                                            text: "Metric",
+                                            isHeader: true,
+                                            bold: true,
+                                            borderColor: "e6edf5",
+                                            bgColor: undefined,
+                                            isCenter: false,
+                                        }),
+                                        createCell({
+                                            text: data.facilityName,
+                                            isHeader: true,
+                                            bold: true,
+                                            borderColor: "e6edf5",
+                                            isCenter: false,
+                                        }),
+                                        createCell({
+                                            text: "National Benchmark*",
+                                            isHeader: true,
+                                            bold: true,
+                                            borderColor: "e6edf5",
+                                            isCenter: false,
+                                        }),
+                                    ],
+                                }),
+                                // Data Row
+                                new TableRow({
+                                    children: [
+                                        createCell({
+                                            text: "30-Day Readmission Rate (Puzzle Patients)",
+                                            borderColor: "eef4f9",
+                                            bgColor: "f5f5f5",
+                                            isCenter: false,
+                                        }),
+                                        createCell({
+                                            text: `${data.patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%`,
+                                            borderColor: "eef4f9",
+                                            bgColor: "f5f5f5",
+                                            isCenter: false,
+                                        }),
+                                        createCell({
+                                            text: `${data.patientMetrics?.nationalReadmissionsBenchmark}%`,
+                                            borderColor: "eef4f9",
+                                            bgColor: "f5f5f5",
+                                            isCenter: false,
+                                        }),
+                                    ],
+                                }),
+                            ],
+                        }),
+
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: "Source: CMS SNF QRP 2024 National Averages.",
+                                    size: 20,
+                                    color: "07226c",
+                                    font: "Arial",
+                                }),
+                            ],
+                            spacing: { before: 240, after: 240 },
+                        }),
+
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: "Ongoing Focus Areas",
+                                    font: "Arial",
+                                    size: 40, // 28px
+                                    bold: true,
+                                    color: "07226C",
+                                }),
+                            ],
+                            spacing: { before: 720, after: 320 },
+                        }),
+
+                        new Table({
+                            width: { size: 100, type: WidthType.PERCENTAGE },
+                            borders: noBorder,
+                            rows: [
+                                new TableRow({
+                                    children: [
+                                        // First card
+                                        new TableCell({
+                                            borders: noBorder,
+                                            children: [
+                                                new Paragraph({
+                                                    children: [
+                                                        new ImageRun({
+                                                            data: img1,
+                                                            transformation: { width: 218, height: 65 }, // Fits cell
+                                                            type: "png",
+                                                        }),
+                                                    ],
+                                                }),
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: "Reduce Readmissions",
+                                                            bold: true,
+                                                            font: "Arial",
+                                                            size: 24,
+                                                            color: "07226C",
+                                                        }),
+                                                    ],
+                                                    spacing: { before: 150, after: 150 },
+                                                }),
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: "Through proactive escalation and earlier detection.",
+                                                            size: 20,
+                                                            font: "Arial",
+                                                            color: "07226C",
+                                                        }),
+                                                    ],
+                                                    spacing: { before: 150, after: 150 },
+                                                }),
+                                            ],
+                                        }),
+
+                                        // Second card
+                                        new TableCell({
+                                            borders: noBorder,
+                                            children: [
+                                                new Paragraph({
+                                                    children: [
+                                                        new ImageRun({
+                                                            data: img2,
+                                                            transformation: { width: 218, height: 65 }, // Fits cell
+                                                            type: "png",
+                                                        }),
+                                                    ],
+                                                }),
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: "Strengthen Fall Prevention",
+                                                            bold: true,
+                                                            font: "Arial",
+                                                            size: 24,
+                                                            color: "07226C",
+                                                        }),
+                                                    ],
+                                                    spacing: { before: 150, after: 150 },
+
+                                                }),
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: "With enhanced assessments and environment safety reviews.",
+                                                            size: 20,
+                                                            font: "Arial",
+                                                            color: "07226C",
+                                                        }),
+                                                    ],
+                                                    spacing: { before: 150, after: 150 },
+                                                }),
+                                            ],
+                                        }),
+
+                                        // Third card
+                                        new TableCell({
+                                            borders: noBorder,
+                                            children: [
+                                                new Paragraph({
+                                                    children: [
+                                                        new ImageRun({
+                                                            data: img3,
+                                                            transformation: { width: 218, height: 65 }, // Fits cell
+                                                            type: "png",
+                                                        }),
+                                                    ],
+                                                }),
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: "Advance CHF Management",
+                                                            bold: true,
+                                                            size: 24,
+                                                            font: "Arial",
+                                                            color: "07226C",
+                                                        }),
+                                                    ],
+                                                    spacing: { before: 150, after: 150 },
+                                                }),
+                                                new Paragraph({
+                                                    children: [
+                                                        new TextRun({
+                                                            text: "By prioritizing early symptom monitoring and follow-up adherence.",
+                                                            size: 20,
+                                                            color: "07226C",
+                                                            font: "Arial",
+                                                        }),
+                                                    ],
+                                                    spacing: { before: 150, after: 150 },
+                                                }),
+                                            ],
+                                        }),
+                                    ],
+                                }),
+                            ],
+                        }),
+
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: "Closing Summary",
+                                }),
+                            ],
+                            style: "heading2",
+                            spacing: { after: 200 },
+                        }),
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: data.patientMetrics.closingStatement,
+                                    color: "07226c",
+                                    font: "Arial",
+                                    size: 20,
+                                }),
+                            ],
+                            alignment: AlignmentType.LEFT,
+                            spacing: { after: 240 },
+                        }),
                 ],
             },
         ],
