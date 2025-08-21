@@ -11,7 +11,7 @@ import Loading from "./loading"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "NursingCare Pro | Nursing Home Management",
+  title: "Puzzle Healthcare",
   description: "Secure, reliable nursing home management software for healthcare professionals.",
 }
 
