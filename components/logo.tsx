@@ -72,10 +72,6 @@ export function Logo({ size = "md", facilityName, facilityLogoUrl }: LogoProps) 
             ) : (
                 <Building className="mr-2 h-6 w-6 text-primary-600" />
             )}
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-secondary-600">
-                {facilityName || "NursingCare"}
-            </span>
-            {!facilityName && <span className="text-gray-700">Pro</span>}
         </Link>
     )
 }
