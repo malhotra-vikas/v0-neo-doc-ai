@@ -30,6 +30,7 @@ interface UploadFileDialogProps {
   nursingHomeName: string
   month: string
   year: string
+  usState: string
 }
 
 export default function UploadFileDialog({
@@ -39,6 +40,7 @@ export default function UploadFileDialog({
   nursingHomeName,
   month,
   year,
+  usState
 }: UploadFileDialogProps) {
   const [fileType, setFileType] = useState("")
   const [file, setFile] = useState<File | null>(null)
@@ -76,11 +78,12 @@ export default function UploadFileDialog({
       // Generate a unique file path
       const fileExt = file.name.split(".").pop()
       const fileName = `${nursingHomeName} ${fileType} - ${month} ${year}.${fileExt}`
-      const filePath = `${nursingHomeId}/${year}/${month}/${fileName}`
+      const filePath = `${nursingHomeId}/${usState}/${year}/${month}/${fileName}`
 
       console.log("Uploading file:", {
         fileName,
         filePath,
+        usState,
         fileSize: file.size,
         fileType: file.type,
       })
@@ -118,6 +121,7 @@ export default function UploadFileDialog({
             file_type: fileType,
             month,
             year,
+            us_state: usState,
             file_path: filePath,
           },
         ])
