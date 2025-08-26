@@ -78,34 +78,6 @@ export default async function DashboardPage() {
           patientMonthlyFiles={patientsMonthlyFiles || []}
         />
 
-        <Card className="mt-8 border-t-4 border-t-primary-500">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks and shortcuts</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="card-hover bg-primary-50 border-primary-100">
-                <CardContent className="p-6 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center mb-4">
-                    <Building className="h-6 w-6 text-primary-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900">Add Nursing Home</h3>
-                  <p className="text-sm text-gray-600 mt-2">Register a new nursing home in the system</p>
-                </CardContent>
-              </Card>
-              <Card className="card-hover bg-accent-50 border-accent-100">
-                <CardContent className="p-6 flex flex-col items-center text-center">
-                  <div className="w-12 h-12 rounded-full bg-accent-100 flex items-center justify-center mb-4">
-                    <Upload className="h-6 w-6 text-accent-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900">Bulk Upload</h3>
-                  <p className="text-sm text-gray-600 mt-2">Upload multiple patient files at once</p>
-                </CardContent>
-              </Card>
-            </div>
-          </CardContent>
-        </Card>
 
         <Tabs defaultValue="nursing-homes" className="mt-8">
           <TabsList className="bg-gray-100 p-1">

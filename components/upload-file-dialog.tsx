@@ -48,7 +48,7 @@ export default function UploadFileDialog({
   const supabase = createClientComponentClient()
   const { toast } = useToast()
 
-  const fileTypes = ["Patients", "CCM", "Non CCM", "Bamboo Report"]
+  const fileTypes = ["Bamboo Report"]
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -106,7 +106,7 @@ export default function UploadFileDialog({
       // Get the public URL
       const { data: publicUrlData } = supabase.storage.from("nursing-home-files").getPublicUrl(filePath)
 
-      console.log("Public URL:", publicUrlData)
+      console.log("Public URL:", publicUrlData.publicUrl)
 
       // Save file metadata to database
       const { data: insertData, error: dbError } = await supabase
@@ -149,6 +149,21 @@ export default function UploadFileDialog({
           },
         })
       }
+
+      // Call server-side API to process Excel and extract facilities
+      await fetch('/api/process-nursing-home-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath, month, year }),
+      })
+        .then((res) => res.json())
+        .then((result) => {
+          console.log(`✅ Created ${result.inserted} new nursing homes`)
+        })
+        .catch((err) => {
+          console.error('Facility processing error:', err)
+        })
+
 
       if (file.type === "application/pdf") {
         const { error: queueError } = await supabase.from("pdf_processing_queue").insert([
@@ -213,7 +228,7 @@ export default function UploadFileDialog({
           <div className="space-y-2">
             <Label htmlFor="file">File</Label>
             <Input id="file" type="file" onChange={handleFileChange} required />
-            <p className="text-xs text-muted-foreground">Accepted file types: Excel (.xlsx, .xls) or PDF (.pdf)</p>
+            <p className="text-xs text-muted-foreground">Accepted file types: Excel (.xlsx)</p>
           </div>
 
           {uploadProgress !== null && (

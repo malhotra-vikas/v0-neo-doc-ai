@@ -22,9 +22,6 @@ export default function DashboardStats({ nursingHomesCount, patientsCount, month
         <CardContent>
           <div className="text-3xl font-bold text-gray-900">{nursingHomesCount}</div>
           <p className="text-xs text-muted-foreground mt-1">Total nursing homes in the system</p>
-          <div className="mt-2 pt-2 border-t text-xs text-gray-500">
-            <span className="text-primary-600">100%</span> active facilities
-          </div>
         </CardContent>
       </Card>
 
@@ -36,9 +33,6 @@ export default function DashboardStats({ nursingHomesCount, patientsCount, month
         <CardContent>
           <div className="text-3xl font-bold text-gray-900">{patientsCount}</div>
           <p className="text-xs text-muted-foreground mt-1">Total patients across all nursing homes</p>
-          <div className="mt-2 pt-2 border-t text-xs text-gray-500">
-            <span className="text-secondary-600">+{Math.floor(Math.random() * 10) + 1}</span> new this month
-          </div>
         </CardContent>
       </Card>
 
@@ -50,9 +44,6 @@ export default function DashboardStats({ nursingHomesCount, patientsCount, month
         <CardContent>
           <div className="text-3xl font-bold text-gray-900">{monthlyFiles.length}</div>
           <p className="text-xs text-muted-foreground mt-1">Total files uploaded this month</p>
-          <div className="mt-2 pt-2 border-t text-xs text-gray-500">
-            <span className="text-accent-600">{Math.floor(monthlyFiles.length * 0.8)}</span> processed successfully
-          </div>
         </CardContent>
       </Card>
 
@@ -64,9 +55,6 @@ export default function DashboardStats({ nursingHomesCount, patientsCount, month
         <CardContent>
           <div className="text-3xl font-bold text-gray-900">{patientMonthlyFiles.length}</div>
           <p className="text-xs text-muted-foreground mt-1">Total files uploaded this month</p>
-          <div className="mt-2 pt-2 border-t text-xs text-gray-500">
-            <span className="text-accent-600">{Math.floor(monthlyFiles.length * 0.8)}</span> processed successfully
-          </div>
         </CardContent>
       </Card>
     </div>

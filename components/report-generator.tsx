@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { format } from "date-fns"
 import { FileDownIcon, FileIcon, FileTextIcon, Loader2 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
@@ -15,9 +15,32 @@ import { exportToPDF, exportToDOCX } from "@/lib/export-utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format as dateformat } from "date-fns"
-import { jsPDF } from "jspdf"
-import { useReactToPrint } from "react-to-print"
-import { useToast } from "@/hooks/use-toast"
+import * as XLSX from 'xlsx'
+
+import {
+    PieChart,
+    Pie,
+    Cell,
+    ResponsiveContainer,
+    Legend,
+    Tooltip,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    LabelList,
+} from "recharts"
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
+import { processPatientsWithLimit } from "@/app/actions/generate-case-study"
+
+const facilityNameMap: Record<string, { patientsName: string; readmitName: string }> = {
+    "Harborview Briarwood": {
+        patientsName: "Briarwood Health Center by Harborview, LLC.",
+        readmitName: "Harborview Briarwood"
+    },
+    // Add more mappings here as needed
+}
 
 const months = [
     "January",
@@ -44,32 +67,190 @@ interface NursingHome {
 interface CaseStudyHighlight {
     id: string
     patient_id: string
-    file_id?: string
     highlight_text: string
+    facility_summary_text: string
+    engagement_summary_text: string
+    hospital_discharge_summary_text: string
+    highlight_quotes?: { quote: string; source_file_id: string }[]
+    hospital_discharge_summary_quotes?: { quote: string; source_file_id: string }[]
+    facility_summary_quotes?: { quote: string; source_file_id: string }[]
+    engagement_summary_quotes?: { quote: string; source_file_id: string }[]
     interventions?: string[]
     outcomes?: string[]
     clinical_risks?: string[]
+    detailed_interventions?: { intervention: string; source_quote: string; source_file_id: string }[]
+    detailed_outcomes?: { outcome: string; source_quote: string; source_file_id: string }[]
+    detailed_clinical_risks?: { risk: string; source_quote: string; source_file_id: string }[]
     created_at: string
     patient_name?: string
-    file_name?: string
 }
 
 interface ReportGeneratorProps {
     nursingHomes: NursingHome[]
 }
 
+export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
+    if (!quotes || quotes.length === 0) return null
+
+    return (
+        <div className="mt-2 ml-2">
+            {quotes.map((q, index) => {
+                let fileLink = null
+
+                if (q.source_file_id) {
+                    fileLink = `/api/download-file?id=${q.source_file_id}`
+                }
+
+                return (
+                    <div key={index} className="mb-1 text-xs text-gray-600">
+                        <span className="italic">"{q.quote}"</span>
+                        {fileLink && (
+                            <span>
+                                &nbsp;(
+                                <a
+                                    href={fileLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline text-blue-600 hover:text-blue-800"
+                                >
+                                    {label}
+                                </a>
+                                )
+                            </span>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+async function getFacilityStatic(nursingHomeId: string) {
+    const supabase = createClientComponentClient()
+
+    console.log("Running getFacilityStatic for - ", nursingHomeId)
+
+
+    const { data, error } = await supabase
+        .from('nursing_homes')
+        .select('*')
+        .eq('id', nursingHomeId)
+        .single() // returns one row instead of array        
+
+    console.log("getFacilityStatic Data is - ", data)
+
+    if (error) {
+        console.error("❌ Failed to fetch facility summary:", error)
+        return null
+    }
+
+    return data
+}
+
+async function getFacilitySummary(nursingHomeId: string, month: string, year: string) {
+    const supabase = createClientComponentClient()
+
+    console.log("Running getFacilitySummary for - ", nursingHomeId)
+    console.log("Running getFacilitySummary for - ", month)
+    console.log("Running getFacilitySummary for - ", year)
+
+    const { data, error } = await supabase
+        .from('facility_readmission_summary')
+        .select('*')
+        .eq('nursing_home_id', nursingHomeId)
+        .eq('month', month)
+        .eq('year', year)
+        .single() // returns one row instead of array        
+
+    console.log("getFacilitySummary Data is - ", data)
+
+    if (error) {
+        console.error("❌ Failed to fetch facility summary:", error)
+        return null
+    }
+
+    return data
+}
+
+async function getFilePaths(nursingHomeId: string, month: string, year: string) {
+    const supabase = createClientComponentClient()
+
+    const { data, error } = await supabase
+        .from('nursing_home_files')
+        .select('file_type, file_path')
+        .eq('nursing_home_id', nursingHomeId)
+        .eq('month', month)
+        .eq('year', year)
+
+    if (error || !data) {
+        console.error("Error fetching file paths", error)
+        return { patientsPath: null, nonCcmPath: null }
+    }
+
+    const patientsPath = data.find(d => d.file_type === 'Patients')?.file_path || null
+    const nonCcmPath = data.find(d => d.file_type === 'Non CCM')?.file_path || null
+
+    return { patientsPath, nonCcmPath }
+}
+
+async function fetchAndParseExcel(path: string | null): Promise<XLSX.WorkSheet | null> {
+    if (!path) return null
+    const supabase = createClientComponentClient()
+
+    const { data, error } = await supabase.storage.from('nursing-home-files').download(path)
+    if (error || !data) {
+        console.error("Error downloading file", error)
+        return null
+    }
+
+    const arrayBuffer = await data.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: "array" })
+    return workbook.Sheets[workbook.SheetNames[0]]
+}
+
+
+
 export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [selectedNursingHomeId, setSelectedNursingHomeId] = useState<string>("")
+    const [selectedNursingHomeName, setSelectedNursingHomeName] = useState<string | null>(null)
+
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toLocaleString("default", { month: "long" }))
     const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
     const [isGenerating, setIsGenerating] = useState(false)
     const [reportGenerated, setReportGenerated] = useState(false)
     const [isExporting, setIsExporting] = useState(false)
+    const [isPrinting, setIsPrinting] = useState(false)
     const [caseStudies, setCaseStudies] = useState<CaseStudyHighlight[]>([])
     const [isLoadingCaseStudies, setIsLoadingCaseStudies] = useState(false)
     const reportRef = useRef<HTMLDivElement>(null)
+    const readmissionsChartRef = useRef<HTMLDivElement>(null)
+    const touchpointsChartRef = useRef<HTMLDivElement>(null)
+    const clinicalRisksChartRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
-    const [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
+    let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
+    const [facilityReadmissionData, setFacilityReadmissionData] = useState<any>()
+    const [facilityData, setFacilityData] = useState<any>()
+
+    // Add intervention counts state for the Touchpoints chart
+    const [interventionCounts, setInterventionCounts] = useState<Array<{ name: string; count: number }>>([
+    ])
+
+    // Add clinical risks state for the Top Clinical Risks chart
+    const [clinicalRisks, setClinicalRisks] = useState<Array<{ risk: string; count: number }>>([
+    ])
+
+    // Add patient metrics state
+    const [patientMetrics, setPatientMetrics] = useState({
+        totalPuzzlePatients: 0,
+        commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
+        commulative30Day_ReadmissionRate: 0,
+        facilityName: " ",
+        executiveSummary: " ",
+        closingStatement: " ",
+        publicLogoLink: " ",
+        nationalReadmissionsBenchmark: 0
+    })
+
+    const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null)
 
     // Add patient selection state
     const [selectedPatients, setSelectedPatients] = useState<string[]>([])
@@ -80,13 +261,59 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     // Add effect to fetch patients when nursing home changes
     useEffect(() => {
-        if (selectedNursingHomeId && selectedMonth && selectedYear) {
-            fetchAvailablePatients()
-        } else {
-            setAvailablePatients([])
-            setSelectedPatients([])
+        const run = async () => {
+            if (selectedNursingHomeId && selectedNursingHomeName && selectedMonth && selectedYear) {
+                await fetchAvailablePatients()
+            } else {
+                setAvailablePatients([])
+                setSelectedPatients([])
+                setSelectedNursingHomeName("NAN")
+            }
+
+            if (selectedNursingHomeId && selectedMonth && selectedYear) {
+                console.log("Running getFacilitySummary for - ", selectedNursingHomeId)
+                console.log("Running getFacilitySummary for - ", selectedMonth)
+                console.log("Running getFacilitySummary for - ", selectedYear)
+
+                const data = await getFacilitySummary(selectedNursingHomeId, selectedMonth, selectedYear)
+                console.log("getFacilitySummary Data is - ", data)
+                setFacilityReadmissionData(data)
+
+                const facilityStaticInfo = await getFacilityStatic(selectedNursingHomeId)
+                setFacilityData(facilityStaticInfo)
+
+                if (!data) return
+
+
+                const totalPuzzlePatients = (data.ccm_master_count || 0) +
+                    (data.ccm_master_discharged_count || 0) +
+                    (data.non_ccm_master_count || 0)
+
+
+                const commulative30DayReadmissionCount_fromSNFAdmitDate = data.h30_admit || 0
+
+                const commulative30Day_ReadmissionRate = totalPuzzlePatients > 0
+                    ? (commulative30DayReadmissionCount_fromSNFAdmitDate / totalPuzzlePatients) * 100
+                    : 0
+                const executiveSummary = `We are pleased to share this Puzzle SNF Report highlighting our collaborative work at ${facilityStaticInfo.name}. Our coordinated efforts have supported seamless transitions, identified key risks early, and driven down avoidable readmissions. This report reflects the outcomes achieved through our joint commitment to high-quality, post-acute care.`
+                const closingStatement = `Together at ${facilityStaticInfo.name}, we've made important strides in reducing avoidable hospital returns and improving resident care experiences. We value this partnership deeply and look forward to building on this foundation to deliver even more impactful care.`
+
+                setPatientMetrics({
+                    totalPuzzlePatients,
+                    commulative30DayReadmissionCount_fromSNFAdmitDate,
+                    commulative30Day_ReadmissionRate,
+                    facilityName: facilityStaticInfo.name,
+                    publicLogoLink: facilityStaticInfo.logo_url,
+                    executiveSummary: executiveSummary,
+                    closingStatement: closingStatement,
+
+                    nationalReadmissionsBenchmark: Number(process.env.NEXT_PUBLIC_NATIONAL_READMISSION_BENCHMARK)
+                })
+            }
         }
-    }, [selectedNursingHomeId, selectedMonth, selectedYear])
+
+        run()
+    }, [selectedNursingHomeId, selectedNursingHomeName, selectedMonth, selectedYear])
 
     const fetchAvailablePatients = async () => {
         if (!selectedNursingHomeId) return
@@ -100,7 +327,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Create date range for the selected month
             const startDate = `${selectedYear}-${monthNumber.toString().padStart(2, "0")}-01`
-            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0] // Last day of month
+            const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1
+            const nextYear = monthNumber === 12 ? Number(selectedYear) + 1 : Number(selectedYear)
+            const endDate = `${nextYear}-${nextMonth.toString().padStart(2, "0")}-01`
 
             const { data: patients, error } = await supabase
                 .from("patients")
@@ -225,6 +454,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     // Replace the existing fetchCaseStudies function with this updated version
     const fetchCaseStudies = async () => {
         if (!selectedNursingHomeId) return
+        console.log("selectedNursingHomeId is ", selectedNursingHomeId)
+
 
         setIsLoadingCaseStudies(true)
 
@@ -236,7 +467,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             // Create date range for the selected month
             const startDate = `${selectedYear}-${monthNumber.toString().padStart(2, "0")}-01`
-            const endDate = new Date(Number.parseInt(selectedYear), monthNumber, 0).toISOString().split("T")[0]
+            const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1
+            const nextYear = monthNumber === 12 ? Number(selectedYear) + 1 : Number(selectedYear)
+            const endDate = `${nextYear}-${nextMonth.toString().padStart(2, "0")}-01`
 
             // Use selected patients or all patients if none selected
             const patientIds = selectedPatients.length > 0 ? selectedPatients : availablePatients.map((p) => p.id)
@@ -247,17 +480,46 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 return
             }
 
+            const { data: existingHighlights } = await supabase
+                .from("patient_case_study_highlights")
+                .select("patient_id")
+                .in("patient_id", patientIds);
+
+            const existingIds = new Set(existingHighlights?.map(h => h.patient_id) || []);
+            const idsToGenerate = patientIds.filter(id => !existingIds.has(id));
+            let buildRiskAndInterventionCategories = false
+
+            console.log("Need to generate for ", idsToGenerate)
+            await processPatientsWithLimit(idsToGenerate, 20);
+
+            if (idsToGenerate && idsToGenerate.length > 0) {
+                buildRiskAndInterventionCategories = true
+            }
+
+
             // Get case studies for selected patients in the date range
             const { data, error } = await supabase
                 .from("patient_case_study_highlights")
                 .select(`
-                    id, 
-                    patient_id, 
-                    highlight_text, 
+                    id,
+                    patient_id,
+                    hospital_discharge_summary_text,
+                    highlight_text,
+                    facility_summary_text,
+                    engagement_summary_text,
+                    facility_summary_quotes,
+                    engagement_summary_quotes,
                     interventions,
                     outcomes,
                     clinical_risks,
-                    created_at
+                    highlight_quotes,
+                    hospital_discharge_summary_quotes,
+                    detailed_interventions,
+                    detailed_outcomes,
+                    detailed_clinical_risks,
+                    created_at,
+                    categorizedRisks,
+                    categorizedInterventions
                 `)
                 .in("patient_id", patientIds)
                 .gte("created_at", startDate)
@@ -274,32 +536,140 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 return {
                     id: cs.id,
                     patient_id: cs.patient_id,
+                    hospital_discharge_summary_text: cs.hospital_discharge_summary_text,
                     highlight_text: cs.highlight_text,
+                    facility_summary_text: cs.facility_summary_text,
+                    engagement_summary_text: cs.engagement_summary_text,
+                    facility_summary_quotes: cs.facility_summary_quotes,
+                    engagement_summary_quotes: cs.engagement_summary_quotes,
                     interventions: cs.interventions,
                     outcomes: cs.outcomes,
                     clinical_risks: cs.clinical_risks,
+                    highlight_quotes: cs.highlight_quotes,
+                    hospital_discharge_summary_quotes: cs.hospital_discharge_summary_quotes,
+                    detailed_interventions: cs.detailed_interventions,
+                    detailed_outcomes: cs.detailed_outcomes,
+                    detailed_clinical_risks: cs.detailed_clinical_risks,
                     created_at: cs.created_at,
                     patient_name: patient?.name || "Unknown Patient",
+                    categorizedInterventions: cs.categorizedInterventions,
+                    categorizedRisks: cs.categorizedRisks
                 }
             })
 
             setCaseStudies(formattedCaseStudies)
 
-            // Now categorize interventions
-            const allInterventions = [
-                ...new Set(
-                    formattedCaseStudies
-                        .flatMap((cs) => cs.interventions || [])
-                        .filter(Boolean)
-                ),
-            ]
+            console.log(`selectedNursingHomeId is `, selectedNursingHomeId)
 
-            if (allInterventions.length > 0) {
-                console.log("BEfore categorization - allInterventions - ", allInterventions)
-                const categorized = await categorizeInterventionsWithOpenAI(allInterventions)
-                setCategorizedInterventions(categorized)
+            const facilityMappedName = facilityNameMap[selectedNursingHomeName!] || {
+                originalName: selectedNursingHomeName,
+                mappedName: selectedNursingHomeName
             }
 
+            console.log("facilityMappedName ios ", facilityMappedName)
+
+            console.log("buildRiskAndInterventionCategories is - ", buildRiskAndInterventionCategories)
+
+            // Moving this to one
+            if (buildRiskAndInterventionCategories) {
+                console.log("buildRiskAndInterventionCategories is - ", buildRiskAndInterventionCategories)
+
+                // Now categorize interventions
+                const allInterventions = [
+                    ...new Set(
+                        formattedCaseStudies
+                            .flatMap((cs) => cs.detailed_interventions || [])
+                            .filter(Boolean)
+                    ),
+                ]
+                console.log("BEfore categorization - allInterventions - ", allInterventions)
+
+                if (allInterventions.length > 0) {
+                    const parsedInterventions = allInterventions.map((item) =>
+                        typeof item === 'string' ? JSON.parse(item) : item
+                    )
+                    console.log("BEfore categorization - Parsed Interventions - ", parsedInterventions)
+
+                    const categorized = await categorizeInterventionsWithOpenAI(parsedInterventions)
+                    console.log("After categorization - Catogorized Interventions - ", categorized)
+
+                    if (categorized && typeof categorized === "object") {
+                        const counts = Object.entries(categorized)
+                            .map(([name, count]) => ({
+                                name,
+                                count: Number(count) || 0,
+                            }))
+                            .filter(item => item.count > 0) // ⬅️ filter out 0s
+                            .sort((a, b) => b.count - a.count); // optional sorting
+                        console.log("After Intervention categorization - Counts - ", counts)
+
+                        setInterventionCounts(counts);
+
+                        const formattedCaseStudies = data.map(async (cs) => {
+                            // Update the categorized data into DB
+                            const { error: updateError } = await supabase
+                                .from("patient_case_study_highlights")
+                                .update({
+                                    categorizedInterventions: counts
+                                })
+                                .eq("patient_id", cs.patient_id)
+                        });
+                    } else {
+                        console.warn("❗ Unexpected categorization response:", categorized);
+                    }
+                }
+
+                const uniqueRisks = [
+                    ...new Set(
+                        formattedCaseStudies
+                            .flatMap(study => study.clinical_risks || [])
+                            .map((item) => {
+                                try {
+                                    const parsed = typeof item === "string" ? JSON.parse(item) : item
+                                    return parsed.risk?.trim()
+                                } catch {
+                                    return null
+                                }
+                            })
+                            .filter(Boolean)
+                    )
+                ];
+                console.log("BEfore categorization - uniqueRisks - ", uniqueRisks)
+
+                const categorizedRisks = await categorizeClinicalRisksWithOpenAI(uniqueRisks)
+                console.log("After categorization - Catogorized Risks - ", categorizedRisks)
+
+                if (categorizedRisks && typeof categorizedRisks === "object") {
+                    const counts = Object.entries(categorizedRisks)
+                        .map(([risk, count]) => ({
+                            risk,
+                            count: Number(count) || 0,
+                        }))
+                        .filter(item => item.count > 0) // ⬅️ filter out 0s
+                        .sort((a, b) => b.count - a.count); // optional sorting
+                    console.log("After RISK categorization - Counts - ", counts)
+
+                    setClinicalRisks(counts);
+
+                    const formattedCaseStudies = data.map(async (cs) => {
+                        // Update the categorized data into DB
+                        const { error: updateError } = await supabase
+                            .from("patient_case_study_highlights")
+                            .update({
+                                categorizedRisks: counts
+                            })
+                            .eq("patient_id", cs.patient_id)
+                    });
+
+                } else {
+                    console.warn("❗ Unexpected categorization response:", categorizedRisks);
+                }
+            } else {
+                const formattedCaseStudies = data.map(async (cs) => {
+                    setClinicalRisks(cs.categorizedRisks);
+                    setInterventionCounts(cs.categorizedInterventions);
+                });
+            }
         } catch (error: any) {
             console.error("Error fetching case studies:", error?.message || error || "Unknown error")
 
@@ -335,31 +705,44 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const handlePrint = useCallback(async () => {
+    const handlePrint = useCallback(async (patientMetrics: any) => {
         try {
+
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
-            
+
             if (!selectedNursingHome) {
                 throw new Error('Selected nursing home not found')
             }
 
+            setIsPrinting(true)
+
+            console.log("categorizedInterventions are ", categorizedInterventions)
+
             // Use the exportToPDF function to generate a PDF blob
-            const result = await exportToPDF({ 
+            const result = await exportToPDF({
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
-                logoPath: '/puzzle_background.png',
+                patientMetrics,
+                logoPath: "/puzzle_background.png",
                 categorizedInterventions,
-                returnBlob: true
-            });
-            
+                expandedPatientId,
+                readmissionsChartRef: readmissionsChartRef.current,
+                touchpointsChartRef: touchpointsChartRef.current,
+                clinicalRisksChartRef: clinicalRisksChartRef.current,
+                returnBlob: true,
+                interventionCounts:interventionCounts,
+                totalInterventions:totalInterventions,
+                clinicalRisks:clinicalRisks
+            })
+
             if (!result || !(result instanceof Blob)) {
                 throw new Error('Failed to generate PDF blob');
             }
 
             // Create a URL for the blob
             const pdfUrl = URL.createObjectURL(result)
-            
+
             // Open PDF in new window
             const printWindow = window.open(pdfUrl, '_blank')
             if (printWindow) {
@@ -376,25 +759,48 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 description: "Failed to prepare document for printing.",
                 variant: "destructive",
             })
+        } finally {
+            setIsPrinting(false)
         }
-    }, [nursingHomes, selectedNursingHomeId, selectedMonth, selectedYear, caseStudies, categorizedInterventions, toast])
+    }, [
+        nursingHomes,
+        selectedNursingHomeId,
+        selectedMonth,
+        selectedYear,
+        caseStudies,
+        //categorizedInterventions,
+        interventionCounts,
+        clinicalRisks,
+        patientMetrics,
+        toast,
+    ])
 
-    const handleExportPDF = async () => {
+    const handleExportPDF = async (patientMetrics: any) => {
+
         try {
             setIsExporting(true)
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId)
-            
+
             if (!selectedNursingHome) {
                 throw new Error('Selected nursing home not found')
             }
 
             // Use the exportToPDF function from export-utils
-            await exportToPDF({ 
+            await exportToPDF({
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
-                logoPath: '/puzzle_background.png',
-                categorizedInterventions
+                patientMetrics,
+                logoPath: "/puzzle_background.png",
+                categorizedInterventions,
+                expandedPatientId,
+                readmissionsChartRef: readmissionsChartRef.current,
+                touchpointsChartRef: touchpointsChartRef.current,
+                clinicalRisksChartRef: clinicalRisksChartRef.current,
+                interventionCounts:interventionCounts,
+                totalInterventions:totalInterventions,
+                clinicalRisks:clinicalRisks
+
             })
 
             toast({
@@ -413,22 +819,28 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         }
     }
 
-    const handleExportDOCX = async () => {
+    const handleExportDOCX = async (patientMetrics: any) => {
+
         try {
             setIsExporting(true);
             const selectedNursingHome = nursingHomes.find(home => home.id === selectedNursingHomeId);
-            
+
             if (!selectedNursingHome) {
                 throw new Error('Selected nursing home not found');
             }
-            await exportToDOCX({ 
+            await exportToDOCX({
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
-                logoPath: '/puzzle_background.png',
+                patientMetrics,
+                logoPath: "/puzzle_background.png",
                 categorizedInterventions,
-                returnBlob: false 
-            });
+                returnBlob: false,
+                expandedPatientId,
+                readmissionsChartRef: readmissionsChartRef.current,
+                touchpointsChartRef: touchpointsChartRef.current,
+                clinicalRisksChartRef: clinicalRisksChartRef.current
+            })
 
             toast({
                 title: "Success",
@@ -450,45 +862,89 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         return dateformat(date, "PPP")
     }
 
-    async function categorizeInterventionsWithOpenAI(interventions: string[]) {
+    async function categorizeClinicalRisksWithOpenAI(risks: string[]) {
         const prompt = `
-Given the following list of healthcare interventions, first normalize the interventions by grouping similar or redundant entries together (e.g., "Care Coordination", "Coordination of Care by dedicated manager", "Care Team coordination" should all be grouped under "Care Coordination"). 
-Preserve the source quotes and source_file_ids under each grouped entry.
+Below is a list of clinical risks observed in nursing home patients. 
+Your task is to classify them into a small number (5 to 7) of clear, medically meaningful categories (e.g. Fall Risk, Chronic Condition Complications, Readmission Risk, etc.). 
+Return the result as a JSON object with category names as keys and counts as values."
 
-Then, categorize each **normalized intervention** into one of these subcategories:
-
-- Transitional Support
-- Engagement & Education
-- Care Navigation
-- Rehabilitation & Mobility Support
-- Behavioral & Psychosocial Support
-- Nutrition & Functional Recovery
-- Clinical Risk Management
-
-Respond with structured JSON:
+Here is the Sample response: 
 {
-  "Transitional Support": [...],
-  "Clinical Risk Management": [...],
-  "Engagement & Education": [...],
-  "Care Navigation": [...],
-  "Rehabilitation & Mobility Support": [...],
-  "Behavioral & Psychosocial Support": [...],
-  "Nutrition & Functional Recovery": [...]
+  "Fall Risk (e.g., fractures)": 10,
+  "Chronic Condition Complications": 7,
+  "Readmission Risk": 5,
+  "Congestive Heart Failure: 8,
+  "Chronic Kidney Disease": 67,
+  "Cognitive Impairment": 13
 }
 
-Interventions:
-${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
-`
+DO NOT return anything else.
+
+Clinical Risks:
+${JSON.stringify(risks, null, 2)}
+`;
 
         const response = await fetch("/api/openai-categorize", {
             method: "POST",
             body: JSON.stringify({ prompt }),
             headers: { "Content-Type": "application/json" },
-        })
+        });
 
-        const json = await response.json()
-        console.log("Sub Categorization respons eis ", json)
-        return json.categories
+        const json = await response.json();
+        return json;
+    }
+
+
+    async function categorizeInterventionsWithOpenAI(interventions: string[]) {
+        // Parse stringified JSON items into objects
+        const parsed = interventions.map((item) =>
+            typeof item === "string" ? JSON.parse(item) : item
+        )
+
+        console.log("parsed interventions are ", parsed)
+
+        const prompt = `
+You are a healthcare analyst. Your job is to classify a list of healthcare intervention descriptions into a small number of standardized categories.
+Use only the following categories unless absolutely necessary:
+- Care Coordination
+- Medication Management
+- Therapy & Rehabilitation
+- Transitional Support
+- Patient Engagement & Education
+- Clinical Risk Management
+- Behavioral & Psychosocial Support
+- Nutrition & Functional Recovery
+
+Group similar interventions under the most relevant high-level category. Avoid creating new categories unless none of the above fit.
+Return the result as a JSON object with category names as keys and counts as values."
+{
+  "Medication reconciliations": 16,
+  "Transitional Support": 10,
+  "Clinical Risk Management": 2,
+  "Engagement & Education": 5,
+  "Care Navigation": 6,
+  "Rehabilitation & Mobility Support": 20,
+  "Behavioral & Psychosocial Support": 23,
+  "Nutrition & Functional Recovery": 12
+  ...
+  ...
+}
+Do NOT include quotes or file IDs.
+
+Here is the list:
+${JSON.stringify(parsed, null, 2)}
+`;
+
+        const response = await fetch("/api/openai-categorize", {
+            method: "POST",
+            body: JSON.stringify({ prompt }),
+            headers: { "Content-Type": "application/json" },
+        });
+        const json = await response.json();
+
+
+        console.log("🧠 Sub-categorization response JSON:", json);
+        return json;
     }
 
     const getPatientInitials = (name: string): string => {
@@ -496,6 +952,39 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
         const initials = nameParts.map((part) => part.charAt(0).toUpperCase()).join("")
         return initials
     }
+
+    // Prepare data for the readmissions pie chart
+    const readmissionChartData = [
+        {
+            name: "Successful Transitions",
+            value: (
+                patientMetrics.totalPuzzlePatients -
+                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate
+            ),
+            color: "#4ade80", // green
+        },
+        {
+            name: "30-Day Readmissions",
+            value: (
+                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate
+            ),
+            color: "#facc15", // yellow
+        }
+    ]
+
+    console.log("Facility Metrics ", patientMetrics)
+
+    // Calculate total interventions for the touchpoints section
+    const totalInterventions = interventionCounts.reduce((sum, item) => sum + item.count, 0)
+
+    //const COLORS = ["#4ade80", "#f87171"] // Green for success, red for readmissions
+    const COLORS = [
+        "#4ade80", // Successful
+        "#facc15" // 30-Day
+    ]
+
+    const INTERVENTION_COLORS = ["#60a5fa", "#34d399", "#a78bfa", "#fbbf24"] // Blue, green, purple, yellow
+    const RISK_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16"] // Red, orange, yellow, green
 
     return (
         <div className="space-y-4">
@@ -508,13 +997,22 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <Label htmlFor="nursing-home">Nursing Home</Label>
-                            <Select onValueChange={setSelectedNursingHomeId}>
+
+                            <Select
+                                onValueChange={(value) => {
+                                    setSelectedNursingHomeId(value);
+                                    const selected = nursingHomes.find((home) => home.id === value);
+                                    setSelectedNursingHomeName(selected?.name ?? null);
+                                }}
+                            >
                                 <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Select a nursing home" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {nursingHomes.length === 0 ? (
-                                        <div className="p-2 text-center text-sm text-muted-foreground">No nursing homes found</div>
+                                        <div className="p-2 text-center text-sm text-muted-foreground">
+                                            No nursing homes found
+                                        </div>
                                     ) : (
                                         nursingHomes.map((home) => (
                                             <SelectItem key={home.id} value={home.id}>
@@ -562,25 +1060,8 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                 <div>
                                     <h4 className="text-sm font-medium">Patient Selection</h4>
                                     <p className="text-xs text-muted-foreground">
-                                        Choose Specific Patients for this report or use AI to auto-select relevant patients.
+                                        Choose specific patients for this report or use AI to auto-select relevant patients.
                                     </p>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="checkbox"
-                                        id="useAI"
-                                        checked={useAISelection}
-                                        onChange={(e) => {
-                                            setUseAISelection(e.target.checked)
-                                            if (e.target.checked) {
-                                                handleAIPatientSelection()
-                                            }
-                                        }}
-                                        className="rounded border-gray-300"
-                                    />
-                                    <Label htmlFor="useAI" className="text-sm">
-                                        Use AI Selection
-                                    </Label>
                                 </div>
                             </div>
 
@@ -627,18 +1108,36 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                         {availablePatients.map((patient) => (
                                             <div
                                                 key={patient.id}
-                                                className="flex items-center space-x-2 p-2 rounded border bg-white hover:bg-slate-50"
+                                                className="flex flex-col p-2 rounded border bg-white hover:bg-slate-50"
                                             >
-                                                <input
-                                                    type="checkbox"
-                                                    id={`patient-${patient.id}`}
-                                                    checked={selectedPatients.includes(patient.id)}
-                                                    onChange={() => handlePatientToggle(patient.id)}
-                                                    className="rounded border-gray-300"
-                                                />
-                                                <Label htmlFor={`patient-${patient.id}`} className="text-sm cursor-pointer flex-1 truncate">
-                                                    {patient.name}
-                                                </Label>
+                                                <div className="flex items-center space-x-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`patient-${patient.id}`}
+                                                        checked={selectedPatients.includes(patient.id)}
+                                                        onChange={() => handlePatientToggle(patient.id)}
+                                                        className="rounded border-gray-300"
+                                                    />
+                                                    <Label htmlFor={`patient-${patient.id}`} className="text-sm cursor-pointer flex-1 truncate">
+                                                        {patient.name}
+                                                    </Label>
+                                                </div>
+
+                                                {selectedPatients.includes(patient.id) && (
+                                                    <div className="flex items-center pl-6 pt-1">
+                                                        <input
+                                                            type="radio"
+                                                            id={`expanded-${patient.id}`}
+                                                            name="expandedPatient"
+                                                            checked={expandedPatientId === patient.id}
+                                                            onChange={() => setExpandedPatientId(patient.id)}
+                                                            className="mr-2"
+                                                        />
+                                                        <Label htmlFor={`expanded-${patient.id}`} className="text-xs text-muted-foreground">
+                                                            Mark as Expanded Summary Patient
+                                                        </Label>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -689,9 +1188,11 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                             )}
                         </div>
                         <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={handlePrint} disabled={isGenerating}>
-                                <PrinterIcon className="h-4 w-4 mr-2" />
-                                Print
+                            <Button variant="outline" size="sm"
+                                onClick={() => handlePrint(patientMetrics)} // <- passing explicitly
+                                disabled={isGenerating || isPrinting}>
+                                <PrinterIcon className={`h-4 w-4 mr-2`} />
+                                {isPrinting ? "Preparing..." : "Print"}
                             </Button>
 
                             <DropdownMenu>
@@ -709,11 +1210,17 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                                 </DropdownMenuTrigger>
 
                                 <DropdownMenuContent align="end" className="border border-border shadow-md p-1 rounded-md">
-                                    <DropdownMenuItem onClick={handleExportPDF}>
+                                    <DropdownMenuItem
+                                        onClick={() => handleExportPDF(patientMetrics)} // <- passing explicitly
+
+                                    >
                                         <FileTextIcon className="h-4 w-4 mr-2" />
                                         Export as PDF
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={handleExportDOCX}>
+                                    <DropdownMenuItem
+                                        onClick={() => handleExportDOCX(patientMetrics)} // <- passing explicitly
+
+                                    >
                                         <FileIcon className="h-4 w-4 mr-2" />
                                         Export as DOCX
                                     </DropdownMenuItem>
@@ -724,84 +1231,350 @@ ${interventions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
                     <CardContent className="space-y-2">
                         <Tabs defaultValue="preview" className="w-full space-y-4">
                             <TabsContent value="preview" className="space-y-4">
-                                <div ref={reportRef} className="space-y-4">
+                                <div className="space-y-6" >
+                                    {/* Patient Snapshot Overview with Pie Chart */}
+                                    <div className="border rounded-lg p-6 bg-white">
+                                        <h2 className="text-xl font-semibold text-blue-800 mb-4">
+                                            Patient Snapshot Overview: 30-Day Readmissions
+                                        </h2>
 
-                                    {/* Patient Snapshot Overview: 30-Day Readmissions */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">(WORK IN PROGRESS) Patient Snapshot Overview: 30-Day Readmissions</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6" ref={readmissionsChartRef}>
+                                            {/* Pie Chart */}
+                                            <div className="h-[300px]" >
+                                                <ChartContainer
+                                                    config={{
+                                                        successful: {
+                                                            label: "Successful Transitions",
+                                                            color: "#4ade80",
+                                                        },
+                                                        readmissions: {
+                                                            label: "30-Day Readmissions (Puzzle Patients)",
+                                                            color: "#f87171",
+                                                        },
+                                                    }}
+                                                >
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <PieChart>
+                                                            <Pie
+                                                                data={readmissionChartData}
+                                                                cx="50%"
+                                                                cy="50%"
+                                                                labelLine={false}
+                                                                outerRadius={100}
+                                                                fill="#8884d8"
+                                                                dataKey="value"
+                                                                nameKey="name"
+                                                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                                                            >
+                                                                {readmissionChartData.map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                                ))}
+                                                            </Pie>
+                                                            <Tooltip content={<ChartTooltipContent />} />
+                                                            <Legend />
+                                                        </PieChart>
+                                                    </ResponsiveContainer>
+                                                </ChartContainer>
+                                            </div>
+
+                                            {/* Metrics Table */}
+                                            <div className="flex flex-col justify-center">
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead>
+                                                        <tr>
+                                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 tracking-wider">
+                                                                Metric
+                                                            </th>
+                                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 tracking-wider">
+                                                                Count
+                                                            </th>
+                                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 tracking-wider">
+                                                                Percentage
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        <tr>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">
+                                                                Total Puzzle Continuity Care Patients Tracked
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                                {patientMetrics.totalPuzzlePatients}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">-</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (Puzzle Patients)</td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                                {patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm text-gray-900">
+                                                                {patientMetrics.commulative30Day_ReadmissionRate.toFixed(1)}%
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                     </div>
+                                    {/* Puzzle's Touchpoints with Bar Chart */}
+                                    <div className="border rounded-lg p-6 bg-white">
+                                        <h2 className="text-xl font-semibold text-blue-800 mb-4">Puzzle's Touchpoints</h2>
 
-                                    {/* Interventions Section */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">🧰 Interventions Delivered</h3>
-                                        {Object.entries(categorizedInterventions)
-                                            .filter(([_, items]) => items.length > 0)
-                                            .map(([subcategory, items]) => (
-                                                <div key={subcategory} className="mb-4">
-                                                    <h4 className="text-md font-semibold">{subcategory}</h4>
-                                                    <ul className="list-disc list-inside ml-4 text-sm">
-                                                        {items.map((item, index) => (
-                                                            <li key={index}>{item}</li>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6" ref={touchpointsChartRef}>
+                                            {/* Bar Chart */}
+                                            <div className="h-[300px]" >
+                                                <ChartContainer
+                                                    config={{
+                                                        interventions: {
+                                                            label: "Interventions",
+                                                            color: "#60a5fa",
+                                                        },
+                                                    }}
+                                                >
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart
+                                                            data={interventionCounts}
+                                                            layout="vertical"
+                                                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                                        >
+                                                            <CartesianGrid strokeDasharray="3 3" />
+                                                            <XAxis type="number" />
+                                                            <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
+                                                            <Tooltip />
+                                                            <Bar dataKey="count" name="Count">
+                                                                {interventionCounts.map((entry, index) => (
+                                                                    <Cell
+                                                                        key={`cell-${index}`}
+                                                                        fill={INTERVENTION_COLORS[index % INTERVENTION_COLORS.length]}
+                                                                    />
+                                                                ))}
+                                                                <LabelList dataKey="count" position="right" />
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </ChartContainer>
+                                            </div>
+
+                                            {/* Summary */}
+                                            <div className="flex flex-col justify-center">
+                                                <div className="bg-gray-50 p-4 rounded-lg">
+                                                    <div className="text-lg font-semibold mb-3">
+                                                        Total Interventions Delivered: {totalInterventions}
+                                                    </div>
+                                                    <ul className="text-sm space-y-2">
+                                                        {interventionCounts.map((item, index) => (
+                                                            <li key={index} className="flex items-center">
+                                                                <span
+                                                                    className="w-3 h-3 rounded-full mr-2"
+                                                                    style={{ backgroundColor: INTERVENTION_COLORS[index % INTERVENTION_COLORS.length] }}
+                                                                ></span>
+                                                                {item.count} {item.name}
+                                                            </li>
                                                         ))}
                                                     </ul>
                                                 </div>
-                                            ))}
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    {/* Puzzle TouchPoint Summary Section */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">(WORK IN PROGRESS) Puzzle Touchpoints</h3>
+                                    {/* Top Clinical Risks with Horizontal Bar Chart */}
+                                    <div className="border rounded-lg p-6 bg-white">
+                                        <h2 className="text-xl font-semibold text-blue-800 mb-4">
+                                            Top Clinical Risks Identified at Discharge
+                                        </h2>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6" ref={clinicalRisksChartRef}>
+                                            {/* Horizontal Bar Chart */}
+                                            <div className="h-[300px]" >
+                                                <ChartContainer
+                                                    config={{
+                                                        patients: {
+                                                            label: "Count across Patients",
+                                                            color: "#ef4444",
+                                                        },
+                                                    }}
+                                                >
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart
+                                                            data={clinicalRisks}
+                                                            layout="vertical"
+                                                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                                        >
+                                                            <CartesianGrid strokeDasharray="3 3" />
+                                                            <XAxis type="number" />
+                                                            <YAxis dataKey="risk" type="category" width={180} tick={{ fontSize: 12 }} />
+                                                            <Tooltip />
+                                                            <Bar dataKey="count" name="Count across Patients">
+                                                                {clinicalRisks.map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={RISK_COLORS[index % RISK_COLORS.length]} />
+                                                                ))}
+                                                                <LabelList dataKey="count" position="right" />
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </ChartContainer>
+                                            </div>
+
+                                            {/* Table */}
+                                            <div className="flex flex-col justify-center">
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead>
+                                                        <tr>
+                                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 tracking-wider">
+                                                                Clinical Risk
+                                                            </th>
+                                                            <th className="px-4 py-2 text-right text-sm font-medium text-gray-500 tracking-wider">
+                                                                Count across Patients
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        {clinicalRisks.map((risk, index) => (
+                                                            <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                                                <td className="px-4 py-3 text-sm text-gray-900 flex items-center">
+                                                                    <span
+                                                                        className="w-3 h-3 rounded-full mr-2"
+                                                                        style={{ backgroundColor: RISK_COLORS[index % RISK_COLORS.length] }}
+                                                                    ></span>
+                                                                    {risk.risk}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right">{risk.count}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    {/* Outcomes Section */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">📈 Key Interventions and Outcomes</h3>
-                                        <ul className="list-disc list-inside ml-4 text-sm">
-                                            {[
-                                                ...new Set(
-                                                    caseStudies
-                                                        .flatMap((study) => study.outcomes || [])
-                                                        .filter(Boolean)
-                                                ),
-                                            ].map((item, i) => (
-                                                <li key={i}>{item}</li>
-                                            ))}
-                                        </ul>
+                                    <div className="border rounded-lg p-6 bg-white">
+                                        <h3 className="text-xl font-semibold text-blue-800 mb-4">
+                                            Puzzle's Key Interventions and Outcomes for Patients
+                                        </h3>
+
+                                        {caseStudies.map((study) => {
+                                            const [first, last] = (study.patient_name || "").split(" ");
+                                            const shortName =
+                                                first && last ? `${first[0]}.${last}` : study.patient_name || "Unknown";
+
+                                            return (
+                                                <div key={study.id} className="mb-6">
+                                                    <p className="text-sm font-semibold text-gray-800 mb-2">{shortName}</p>
+
+                                                    {/* Interventions */}
+                                                    {(study.detailed_interventions || []).length > 0 && (
+                                                        <>
+                                                            <p className="text-sm font-medium text-gray-700 mb-1">Interventions:</p>
+                                                            <ul className="list-disc list-inside pl-4 text-sm text-gray-700 space-y-1 mb-3">
+                                                                {study.detailed_interventions.map((item, idx) => (
+                                                                    <li key={`int-${idx}`}>
+                                                                        {item.intervention}
+                                                                        {item.source_quote && (
+                                                                            <p className="text-xs text-gray-500 italic mt-1 pl-2">
+                                                                                “{item.source_quote}”
+                                                                                {item.source_file_id && (
+                                                                                    <>
+                                                                                        {" — "}
+                                                                                        <a
+                                                                                            href={`/api/download-file?id=${item.source_file_id}`}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            className="text-blue-600 underline"
+                                                                                        >
+                                                                                            Download Source
+                                                                                        </a>
+                                                                                    </>
+                                                                                )}
+                                                                            </p>
+                                                                        )}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </>
+                                                    )}
+
+                                                    {/* Outcomes */}
+                                                    {(study.detailed_outcomes || []).length > 0 && (
+                                                        <>
+                                                            <p className="text-sm font-medium text-gray-700 mb-1">Outcomes:</p>
+                                                            <ul className="list-disc list-inside pl-4 text-sm text-gray-700 space-y-1">
+                                                                {study.detailed_outcomes.map((item, idx) => (
+                                                                    <li key={`out-${idx}`}>
+                                                                        {item.outcome}
+                                                                        {item.source_quote && (
+                                                                            <p className="text-xs text-gray-500 italic mt-1 pl-2">
+                                                                                “{item.source_quote}”
+                                                                                {item.source_file_id && (
+                                                                                    <>
+                                                                                        {" — "}
+                                                                                        <a
+                                                                                            href={`/api/download-file?id=${item.source_file_id}`}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            className="text-blue-600 underline"
+                                                                                        >
+                                                                                            Download Source
+                                                                                        </a>
+                                                                                    </>
+                                                                                )}
+                                                                            </p>
+                                                                        )}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
 
-                                    {/* Clinical Risks Section */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">⚠️ Top Clinical Risks Identified at Discharge</h3>
-                                        <ul className="list-disc list-inside ml-4 text-sm">
-                                            {[
-                                                ...new Set(
-                                                    caseStudies
-                                                        .flatMap((study) => study.clinical_risks || [])
-                                                        .filter(Boolean)
-                                                ),
-                                            ]
-                                                .slice(0, 30) // Optional: limit for readability
-                                                .map((item, i) => (
-                                                    <li key={i}>{item}</li>
-                                                ))}
-                                        </ul>
-                                        {caseStudies.flatMap((s) => s.clinical_risks || []).length > 30 && (
-                                            <p className="text-xs italic text-muted-foreground mt-2">Showing top 30 risks. Refine in filters for more detail.</p>
+                                    {/* Case Studies */}
+                                    {console.log("📘 Case Studies:", caseStudies)}
+
+                                    <div className="border rounded-lg p-6 bg-white">
+                                        <h3 className="text-xl font-semibold text-blue-800 mb-4">Case Study Highlights</h3>
+                                        {caseStudies.length > 0 ? (
+                                            caseStudies.map((study) => (
+
+                                                <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
+                                                    <p className="text-sm font-medium">
+                                                        {(() => {
+                                                            const [first, last] = study.patient_name.split(" ");
+                                                            return `${first[0]}.${last}`;
+                                                        })()}
+                                                    </p>
+                                                    <p className="text-sm font-medium">
+                                                        {study.hospital_discharge_summary_text
+                                                            ? study.hospital_discharge_summary_text.charAt(0).toUpperCase() + study.hospital_discharge_summary_text.slice(1)
+                                                            : ''}
+                                                    </p>
+
+                                                    <Citations label="Cited from" quotes={study.hospital_discharge_summary_quotes || []} />
+
+                                                    <p className="text-sm mt-4">
+                                                        {study.facility_summary_text
+                                                            ? study.facility_summary_text.charAt(0).toUpperCase() + study.facility_summary_text.slice(1)
+                                                            : ''}
+                                                    </p>
+                                                    <Citations label="Cited from" quotes={study.facility_summary_quotes || []} />
+
+                                                    <p className="text-sm mt-4">
+                                                        {study.engagement_summary_text
+                                                            ? study.engagement_summary_text.charAt(0).toUpperCase() + study.engagement_summary_text.slice(1)
+                                                            : ''}
+                                                    </p>
+                                                    <Citations label="Cited from" quotes={study.engagement_summary_quotes || []} />
+
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-center py-4 text-sm text-muted-foreground">
+                                                No case studies found for the selected criteria.
+                                            </div>
                                         )}
                                     </div>
-
-                                    {caseStudies.length > 0 ? (
-                                        caseStudies.map((study) => (
-                                            <div key={study.id} className="border rounded-md p-4">
-                                                <p className="text-sm font-medium">{study.patient_name}</p>
-                                                <p className="text-sm mt-2">{study.highlight_text}</p>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center py-4 text-sm text-muted-foreground">
-                                            No case studies found for the selected criteria.
-                                        </div>
-                                    )}
                                 </div>
                             </TabsContent>
                         </Tabs>

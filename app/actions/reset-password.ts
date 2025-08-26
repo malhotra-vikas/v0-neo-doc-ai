@@ -23,7 +23,7 @@ export async function initiatePasswordReset(email: string) {
       throw ("No account found with this email address")
     }
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/callback`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
     })
 
     if (resetError) {
