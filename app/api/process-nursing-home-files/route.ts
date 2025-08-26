@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         const facilitiesSet = new Set([
             ...getFacilities('CCM Master'),
             ...getFacilities('CCM Master Discharged'),
-            ...getFacilities('Non - CCM Master'),
+            ...getFacilities('PMR - Non CCM'),
         ])
 
         const uniqueFacilities = Array.from(facilitiesSet)
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
         const nameToId = new Map(homes.map(h => [normalize(h.name), h.id]))
 
         // Count patients by facility from each sheet
-        const sheetNames = ['CCM Master', 'CCM Master Discharged', 'Non - CCM Master']
+        const sheetNames = ['CCM Master', 'CCM Master Discharged', 'PMR - Non CCM']
         const sheetWiseCounts: Record<string, Record<string, number>> = {}
 
         const facilityPatientSummary: Record<
@@ -155,24 +155,47 @@ export async function POST(req: NextRequest) {
                 const summary = facilityPatientSummary[key]
 
                 if (sheetName === 'CCM Master') {
-                    summary.ccmMasterCount += 1
-                    if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
-                    //if (row['30 Day Reported Hospitalization - From SNF Discharge Date']) summary.h30Discharge += 1
-                    //if (row['60 Day Reported Hospitalization']) summary.h60 += 1
-                    //if (row['90 Day Reported Hospitalization']) summary.h90 += 1
+                    if (row['SNF Facility Name'] === raw) {
+
+                        if (key === "medilodge clare") {
+                            console.log("Summary is ", summary)
+                            console.log("Row from", sheetName, {
+                                patient: row['Patient Name'],
+                            });
+                        }
+
+                        summary.ccmMasterCount += 1
+                        if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
+
+                    }
                 }
 
                 if (sheetName === 'CCM Master Discharged') {
-                    summary.ccmMasterDischargedCount += 1
-                    if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
-                    //if (row['30 Day Reported Hospitalization - From SNF Discharge Date']) summary.h30Discharge += 1
-                    //if (row['60 Day Reported Hospitalization']) summary.h60 += 1
-                    //if (row['90 Day Reported Hospitalization']) summary.h90 += 1
+                    if (row['SNF Facility Name'] === raw) {
+
+                        if (key === "medilodge clare") {
+                            console.log("Summary is ", summary)
+                            console.log("Row from", sheetName, {
+                                patient: row['Patient Name'],
+                            });
+                        }
+                        summary.ccmMasterDischargedCount += 1
+                        if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
+                    }
                 }
 
-                if (sheetName === 'Non - CCM Master') {
-                    summary.nonCcmMasterCount += 1
-                    if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
+                if (sheetName === 'PMR - Non CCM') {
+                    if (row['SNF Facility Name'] === raw) {
+
+                        if (key === "medilodge clare") {
+                            console.log("Summary is ", summary)
+                            console.log("Row from", sheetName, {
+                                patient: row['Patient Name'],
+                            });
+                        }
+                        summary.nonCcmMasterCount += 1
+                        if (row['SNF Admit Date']) summary.h30Admit += 1
+                    }
                 }
             }
         }
@@ -221,7 +244,7 @@ export async function POST(req: NextRequest) {
         console.log(`✅ Process completed in ${Date.now() - start}ms`)
         return NextResponse.json({
             inserted: toInsert.length,
-              insertedSummaryRows: summaryRowsToInsert.length,
+            insertedSummaryRows: summaryRowsToInsert.length,
         })
     } catch (err: any) {
         console.error("💥 Unexpected error:", err)
