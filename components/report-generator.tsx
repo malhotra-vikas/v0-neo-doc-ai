@@ -1,4 +1,15 @@
 "use client"
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ChevronsUpDown, Check } from "lucide-react"
+import { cn } from "@/lib/utils" // helper for conditional classes
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -159,7 +170,7 @@ async function getFacilitySummary(nursingHomeId: string, month: string, year: st
         .eq('nursing_home_id', nursingHomeId)
         .eq('month', month)
         .eq('year', year)
-        .single() // returns one row instead of array        
+        .maybeSingle(); // safe: returns null if no row
 
     console.log("getFacilitySummary Data is - ", data)
 
@@ -229,6 +240,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
     const [facilityReadmissionData, setFacilityReadmissionData] = useState<any>()
     const [facilityData, setFacilityData] = useState<any>()
+    const [open, setOpen] = useState(false)
 
     // Add intervention counts state for the Touchpoints chart
     const [interventionCounts, setInterventionCounts] = useState<Array<{ name: string; count: number }>>([
@@ -267,7 +279,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             } else {
                 setAvailablePatients([])
                 setSelectedPatients([])
-                setSelectedNursingHomeName("NAN")
+                setSelectedNursingHomeName(null)
             }
 
             if (selectedNursingHomeId && selectedMonth && selectedYear) {
@@ -731,9 +743,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
                 returnBlob: true,
-                interventionCounts:interventionCounts,
-                totalInterventions:totalInterventions,
-                clinicalRisks:clinicalRisks
+                interventionCounts: interventionCounts,
+                totalInterventions: totalInterventions,
+                clinicalRisks: clinicalRisks
             })
 
             if (!result || !(result instanceof Blob)) {
@@ -797,9 +809,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
-                interventionCounts:interventionCounts,
-                totalInterventions:totalInterventions,
-                clinicalRisks:clinicalRisks
+                interventionCounts: interventionCounts,
+                totalInterventions: totalInterventions,
+                clinicalRisks: clinicalRisks
 
             })
 
@@ -998,30 +1010,58 @@ ${JSON.stringify(parsed, null, 2)}
                         <div>
                             <Label htmlFor="nursing-home">Nursing Home</Label>
 
-                            <Select
-                                onValueChange={(value) => {
-                                    setSelectedNursingHomeId(value);
-                                    const selected = nursingHomes.find((home) => home.id === value);
-                                    setSelectedNursingHomeName(selected?.name ?? null);
-                                }}
-                            >
-                                <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Select a nursing home" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {nursingHomes.length === 0 ? (
-                                        <div className="p-2 text-center text-sm text-muted-foreground">
-                                            No nursing homes found
-                                        </div>
-                                    ) : (
-                                        nursingHomes.map((home) => (
-                                            <SelectItem key={home.id} value={home.id}>
-                                                {home.name}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
+                            <Popover open={open} onOpenChange={setOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={open}
+                                        className="w-full justify-between"
+                                    >
+                                        {selectedNursingHomeName || "Select a nursing home"}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0">
+                                    <Command
+                                        filter={(value, search) => {
+                                            // Force strict substring match (case-insensitive)
+                                            return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+                                        }}
+
+                                    >
+                                        <CommandInput placeholder="Search nursing home..." />
+                                        <CommandList>
+                                            <CommandEmpty>No nursing homes found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {[...nursingHomes]
+                                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                                    .map((home) => (
+                                                        <CommandItem
+                                                            key={home.id}
+                                                            value={home.name}
+                                                            onSelect={() => {
+                                                                setSelectedNursingHomeId(home.id)
+                                                                setSelectedNursingHomeName(home.name)
+                                                                setOpen(false)
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    "mr-2 h-4 w-4",
+                                                                    home.id === selectedNursingHomeId
+                                                                        ? "opacity-100"
+                                                                        : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {home.name}
+                                                        </CommandItem>
+                                                    ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                         <div>
                             <Label htmlFor="month">Month</Label>
