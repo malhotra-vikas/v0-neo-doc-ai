@@ -95,7 +95,7 @@ async getFacilityIdByUserId(userId: string) {
 async getNursingHomesByFacilityId(facilityId: string) {
     return await this.supabase
       .from("nursing_homes")
-      .select("id, name")
+      .select("id, name, us_state")
       .eq("facility_id", facilityId)
       .order("name");
   }
@@ -103,7 +103,7 @@ async getNursingHomesByFacilityId(facilityId: string) {
   async getNursingHomes() {
     return await this.supabase
       .from("nursing_homes")
-      .select("id, name")
+      .select("id, name, us_state")
       .order("name");
   }
   

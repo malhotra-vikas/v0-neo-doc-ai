@@ -57,6 +57,7 @@ export interface AuditLog {
 export interface NursingHome{
 id: string;
 name: string;
+us_state?: string
 facility_id: string;
 address: string;
 } 

@@ -223,6 +223,7 @@ async function fetchAndParseExcel(path: string | null): Promise<XLSX.WorkSheet |
 export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [selectedNursingHomeId, setSelectedNursingHomeId] = useState<string>("")
     const [selectedNursingHomeName, setSelectedNursingHomeName] = useState<string | null>(null)
+    const [selectedState, setSelectedState] = useState<string>("")
 
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toLocaleString("default", { month: "long" }))
     const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
@@ -270,6 +271,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [useAISelection, setUseAISelection] = useState(false)
     const [isLoadingPatients, setIsLoadingPatients] = useState(false)
     const [isAISelecting, setIsAISelecting] = useState(false)
+
 
     // Add effect to fetch patients when nursing home changes
     useEffect(() => {
@@ -812,7 +814,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 interventionCounts: interventionCounts,
                 totalInterventions: totalInterventions,
                 clinicalRisks: clinicalRisks
-
             })
 
             toast({

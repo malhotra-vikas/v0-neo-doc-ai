@@ -24,6 +24,7 @@ interface FileRecord {
   file_name: string
   file_type: string
   month: string
+  us_state: string
   year: string
   file_path: string
   created_at: string
@@ -287,6 +288,7 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
             <TableRow>
               <TableHead>File Name</TableHead>
               <TableHead>File Type</TableHead>
+              <TableHead>State</TableHead>
               <TableHead>Uploaded On</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -314,6 +316,8 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
                     </div>
                   </TableCell>
                   <TableCell>{file.file_type}</TableCell>
+                  <TableCell>{file.us_state}</TableCell>
+
                   <TableCell>{new Date(file.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">

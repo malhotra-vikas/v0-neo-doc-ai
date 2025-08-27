@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     console.log("🔁 [process-nursing-home-files] Incoming request")
 
     try {
-        const { filePath, month, year } = await req.json()
+        const { filePath, month, year, usState } = await req.json()
 
         if (!filePath) {
             console.warn("⚠️ No filePath provided in request body")
@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
             .filter((name) => !existingNames.has(normalize(name)))
             .map((name) => ({
                 name: name.trim(),
+                us_state: usState,
                 facility_id: "6a6ed56c-4ff9-4c36-8126-b56685cc9721", // Puzzle's Facility ID
             })) // insert with clean display name
 
@@ -157,13 +158,6 @@ export async function POST(req: NextRequest) {
                 if (sheetName === 'CCM Master') {
                     if (row['SNF Facility Name'] === raw) {
 
-                        if (key === "medilodge clare") {
-                            console.log("Summary is ", summary)
-                            console.log("Row from", sheetName, {
-                                patient: row['Patient Name'],
-                            });
-                        }
-
                         summary.ccmMasterCount += 1
                         if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
 
@@ -172,13 +166,6 @@ export async function POST(req: NextRequest) {
 
                 if (sheetName === 'CCM Master Discharged') {
                     if (row['SNF Facility Name'] === raw) {
-
-                        if (key === "medilodge clare") {
-                            console.log("Summary is ", summary)
-                            console.log("Row from", sheetName, {
-                                patient: row['Patient Name'],
-                            });
-                        }
                         summary.ccmMasterDischargedCount += 1
                         if (row['30 Day Reported Hospitalization - from SNF Admit Date']) summary.h30Admit += 1
                     }
@@ -186,13 +173,6 @@ export async function POST(req: NextRequest) {
 
                 if (sheetName === 'PMR - Non CCM') {
                     if (row['SNF Facility Name'] === raw) {
-
-                        if (key === "medilodge clare") {
-                            console.log("Summary is ", summary)
-                            console.log("Row from", sheetName, {
-                                patient: row['Patient Name'],
-                            });
-                        }
                         summary.nonCcmMasterCount += 1
                         if (row['SNF Admit Date']) summary.h30Admit += 1
                     }
@@ -203,6 +183,12 @@ export async function POST(req: NextRequest) {
         const facilitySummaryArray = Object.values(facilityPatientSummary)
         console.log("✅ Final patient + hospitalization summary:")
         console.dir(facilitySummaryArray, { depth: null })
+
+        // build a Set for unique names
+        const uniqueNames = new Set(facilitySummaryArray.map(s => s.facilityName));
+
+        console.log("✅ Unique facilities in this batch:");
+        console.log([...uniqueNames]);   // spread to array for printing
 
         const summaryRowsToInsert = facilitySummaryArray
             .map(summary => {

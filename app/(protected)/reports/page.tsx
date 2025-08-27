@@ -28,7 +28,7 @@ export default async function ReportsPage() {
         nursingHomes = nursingHomeValues ?? [];
       }
     if(facility.data?.facility_id){
-        const { data: nursingHomeValues } = await supabase.from("nursing_homes").select("id, name").eq("facility_id", facility.data?.facility_id)
+        const { data: nursingHomeValues } = await supabase.from("nursing_homes").select("id, name, us_state").eq("facility_id", facility.data?.facility_id)
         nursingHomes = nursingHomeValues ?? [];
     }
 
