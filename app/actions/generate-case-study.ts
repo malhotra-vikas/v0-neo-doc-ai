@@ -387,11 +387,16 @@ ${engagementText}
             let content = completion.choices[0]?.message?.content;
             if (!content) throw new Error("No response from OpenAI");
 
+            console.log("content is ", content)
+
             // Strip markdown code block wrapping (e.g., ```json\n...\n```)
             content = content.trim();
             if (content.startsWith("```")) {
                 content = content.replace(/^```json\n?/, "").replace(/```$/, "").trim();
             }
+
+            console.log("content after trim and No JSON is ", content)
+
 
             const parsed = JSON.parse(content) // This will throw if invalid JSON
 
