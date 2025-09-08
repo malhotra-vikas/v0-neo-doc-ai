@@ -146,7 +146,6 @@ export async function generateCaseStudyHighlightForPatient(patientId: string) {
 
             fileData.forEach(file => {
                 let textBlock = ''
-                console.log(`Processing File Type ${file.file_type}. Text Block size is ${textBlock.length}`)
 
                 textBlock = `---\nFile ID: ${file.id}\nFile Type: ${file.file_type}\n\n${file.parsed_text}\n\n`;
                 if (file.file_type === 'Patient Hospital Stay Notes') hospitalText += textBlock;
@@ -161,6 +160,9 @@ export async function generateCaseStudyHighlightForPatient(patientId: string) {
                 if (file.file_type === '90 Day Unified') engagementText += textBlock;
                 if (file.file_type === '60 Day Unified') engagementText += textBlock;
                 if (file.file_type === 'SNF Unified') engagementText += textBlock;
+
+                console.log(`Processing for patient ${patientId}, File Type ${file.file_type}. Text Block size is ${textBlock.length}`)
+
             });
         } else {
             console.log("No files found for patient")

@@ -396,7 +396,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         fileId: fileQueryData.id,
       })
 
-      return { success: true, message: `Successfully processed ${file.name} for patient ${patientName}` }
+      return { success: true, message: `Successfully Uploaded ${file.name} for patient ${patientName}` }
     } catch (error: any) {
       logger.error(COMPONENT, "Error processing file", error)
       timer.end()
@@ -481,7 +481,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
     toast({
       title: errorResults.length > 0 ? "Upload Completed with Issues" : "Upload Complete",
-      description: `Successfully processed ${successResults.length} files${errorResults.length > 0 ? ` with ${errorResults.length} errors` : ""}`,
+      description: `Successfully Uploaded ${successResults.length} files${errorResults.length > 0 ? ` with ${errorResults.length} errors` : ""}`,
       variant: errorResults.length > 0 ? "default" : "success",
     })
 
