@@ -57,7 +57,7 @@ export function PDFProcessingWorker() {
 
                 // If we successfully processed an item, immediately check for more
                 logger.debug(COMPONENT, "Scheduling immediate check for more items")
-                setTimeout(processQueue, 1000)
+                setTimeout(processQueue, 5000)
             } else if (response.status === 404) {
                 // No items in queue - this is normal
                 logger.debug(COMPONENT, "No items in queue")
