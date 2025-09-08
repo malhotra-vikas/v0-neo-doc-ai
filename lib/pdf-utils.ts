@@ -1,113 +1,73 @@
-import * as PDFJS from 'pdfjs-dist/legacy/build/pdf.js'
-import { logger } from './logger'
-const pdfParse = require("pdf-parse")
+import { spawn } from "child_process"
+import fs from "fs"
+import path from "path"
+import os from "os"
+import { logger } from "./logger"
 
 const COMPONENT = "PDFUtils"
 
-// Configure PDF.js for Node.js (disable worker usage)
-PDFJS.GlobalWorkerOptions.workerSrc = ''
+/**
+ * Run the Python parser (scripts/parse_pdf.py) on a PDF buffer
+ */
+async function extractWithPython(pdfData: ArrayBuffer): Promise<string> {
+    // Write PDF to a temporary file
+    const tmpPath = path.join(os.tmpdir(), `pdf-${Date.now()}.pdf`)
+    await fs.promises.writeFile(tmpPath, Buffer.from(pdfData))
 
-// @ts-ignore
-global.pdfjsWorker = null
+    return new Promise((resolve, reject) => {
+        const scriptPath = path.resolve(process.cwd(), "scripts/parse_pdf.py")
+        const py = spawn("python3", [scriptPath, tmpPath])
 
+        let output = ""
+        let error = ""
 
+        py.stdout.on("data", (data) => (output += data.toString()))
+        py.stderr.on("data", (data) => (error += data.toString()))
 
-export async function extractTextWithPDFjs(arrayBuffer: ArrayBuffer): Promise<string> {
-    logger.info(COMPONENT, `Starting on EXTRACTION `)
+        py.on("close", async (code) => {
+            await fs.promises.unlink(tmpPath).catch(() => { })
 
-    PDFJS.GlobalWorkerOptions.workerSrc = ''
-
-
-    const doc = await PDFJS.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
-    let fullText = ''
-    logger.info(COMPONENT, `EXTRACTION Started. Page count: ${doc.numPages}`)
-
-    for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i)
-        const content = await page.getTextContent()
-        const pageText = content.items.map((item: any) => item.str).join(' ')
-        fullText += pageText + '\n\n'
-    }
-
-    return fullText.trim()
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output)
+                    resolve(result.text || "")
+                } catch (parseErr: any) {
+                    reject(new Error("Failed to parse Python output: " + parseErr.message))
+                }
+            } else {
+                reject(new Error("Python process failed: " + error))
+            }
+        })
+    })
 }
 
 /**
- * Extract text from a PDF file using a Node.js compatible approach
- * @param pdfData The PDF file data as ArrayBuffer
- * @returns A promise that resolves to the extracted text
+ * Extract text from a PDF file (always via Python)
  */
 export async function extractTextFromPDF(pdfData: ArrayBuffer): Promise<string> {
     const timer = logger.timing(COMPONENT, "extractTextFromPDF")
-    logger.info(COMPONENT, `Starting PDF text extraction, size: ${pdfData.byteLength} bytes`)
+    logger.info(COMPONENT, `Starting Python-based PDF text extraction, size: ${pdfData.byteLength} bytes`)
 
     try {
-        const buffer = Buffer.from(new Uint8Array(pdfData))
-        //const pdfParse = (await import("pdf-parse")).default
-
-        const data = await pdfParse(buffer)
-        logger.info(COMPONENT, `Extracted text length: ${data.text.length}`)
-
-        return data.text || "No text content found in this PDF."
-    } catch (pdfParseError) {
-        logger.error(COMPONENT, "pdf-parse failed. Falling back to PDF.js:", pdfParseError)
-        return extractWithPDFjsFallback(pdfData)
+        const text = await extractWithPython(pdfData)
+        logger.info(COMPONENT, `Extracted text length: ${text.length}`)
+        return text || "No text content found in this PDF."
+    } catch (err) {
+        logger.error(COMPONENT, "Python extraction failed:", err)
+        return "Python extraction failed."
     } finally {
         timer.end()
     }
 }
 
 /**
- * Fallback: Use PDF.js for basic extraction (first few pages only).
- */
-async function extractWithPDFjsFallback(pdfData: ArrayBuffer): Promise<string> {
-    try {
-        const doc = await PDFJS.getDocument({
-            data: pdfData,
-            disableWorker: true,
-            isEvalSupported: false,
-            useSystemFonts: true,
-        }).promise
-
-        let text = ""
-
-        for (let i = 1; i <= doc.numPages; i++) {
-            const page = await doc.getPage(i)
-            const content = await page.getTextContent()
-            const pageText = content.items.map((item: any) => item.str).join(" ")
-            text += `--- Page ${i} ---\n${pageText}\n\n`
-        }
-
-
-        return text || "No text extracted with fallback."
-    } catch (err) {
-        logger.error(COMPONENT, "PDF.js fallback failed:", err)
-        return "PDF text extraction failed (pdf-parse + fallback)."
-    }
-}
-
-/**
- * Extract metadata from a PDF using pdf-parse.
+ * Metadata extraction can still use pdf-parse if you want lightweight info,
+ * but if you want consistency, you can also build a Python endpoint for metadata.
  */
 export async function getPDFMetadata(pdfData: ArrayBuffer): Promise<any> {
     const timer = logger.timing(COMPONENT, "getPDFMetadata")
-
     try {
-        const buffer = Buffer.from(pdfData)
-        const pdfParse = (await import("pdf-parse")).default
-
-        const data = await pdfParse(buffer, { max: 1 }) // Only need the first page
-        return {
-            info: {
-                Title: data.info?.Title || "Untitled",
-                Author: data.info?.Author || "Unknown",
-                CreationDate: data.info?.CreationDate || "Unknown",
-            },
-            metadata: data.metadata,
-            numPages: data.numpages,
-        }
-    } catch (error) {
-        logger.error(COMPONENT, "Error extracting metadata:", error)
+        // Simple metadata stub — expand via Python if needed
         return {
             info: {
                 Title: "Untitled",
@@ -115,7 +75,7 @@ export async function getPDFMetadata(pdfData: ArrayBuffer): Promise<any> {
                 CreationDate: "Unknown",
             },
             numPages: 0,
-            error: `Failed to get metadata: ${error instanceof Error ? error.message : String(error)}`,
+            note: "Metadata extraction is not implemented in Python pipeline",
         }
     } finally {
         timer.end()

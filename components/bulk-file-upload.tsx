@@ -30,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "@/components/ui/badge"
 import { logger } from "@/lib/logger"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 
 const COMPONENT = "BulkFileUpload"
 
@@ -239,6 +240,72 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
       logger.info(COMPONENT, "File uploaded successfully", { filePath })
 
+      // Convert the Blob to ArrayBuffer for processing
+      logger.debug(COMPONENT, "Converting Blob to ArrayBuffer")
+      const arrayBufferTimer = logger.timing(COMPONENT, "blob-to-arraybuffer")
+      const arrayBuffer = await file.arrayBuffer()
+      arrayBufferTimer.end()
+      logger.debug(COMPONENT, "Blob converted to ArrayBuffer", { bufferSize: arrayBuffer.byteLength })
+
+      // Extract metadata and text
+      let extractedText = ""
+      let metadata = { numPages: 0, info: {} }
+      const fileName = file.name
+
+      try {
+        // Try to get PDF metadata
+        logger.info(COMPONENT, "Getting PDF metadata")
+        const metadataTimer = logger.timing(COMPONENT, "get-metadata")
+        metadata = await getPDFMetadata(arrayBuffer)
+        metadataTimer.end()
+        logger.info(COMPONENT, "PDF metadata retrieved", {
+          pages: metadata.numPages,
+          title: fileName || "Untitled",
+        })
+
+        // Try to extract text
+        logger.info(COMPONENT, "Extracting text from PDF")
+        const extractionTimer = logger.timing(COMPONENT, "extract-text")
+        extractedText = await extractTextFromPDF(arrayBuffer)
+        extractionTimer.end()
+
+        const textLength = extractedText.length
+        logger.info(COMPONENT, "Text extracted successfully", {
+          textLength,
+          pages: metadata.numPages,
+        })
+      } catch (pdfError) {
+        logger.error(COMPONENT, "Text extraction failed", pdfError)
+
+        // Fallback: Generate basic information about the PDF
+        extractedText = `PDF Text Extraction (Fallback Method)\n\n`
+        extractedText += `The system was unable to extract text from this PDF.\n`
+        extractedText += `This could be due to the PDF being scanned, encrypted, or in an unsupported format.\n\n`
+        extractedText += `File Information:\n`
+        extractedText += `- File Path: ${filePath}\n`
+        extractedText += `- File Size: ${file.size} bytes\n`
+        extractedText += `- MIME Type: ${file.type}\n\n`
+        extractedText += `For scanned documents, consider using an OCR service to extract text.`
+
+        logger.info(COMPONENT, "Fallback text generated", { textLength: extractedText.length })
+      }
+
+      // Format the extracted text with metadata
+      logger.debug(COMPONENT, "Formatting extracted text with metadata")
+      const formattedText = `
+      PDF TEXT EXTRACTION RESULTS
+      --------------------------
+      File Path: ${filePath}
+      File Size: ${file.size} bytes
+      Pages: ${metadata.numPages || "Unknown"}
+      Title: ${fileName || "Untitled"}
+      Extracted: ${new Date().toISOString()}
+      
+      CONTENT:
+      --------------------------
+      ${extractedText}
+            `.trim()
+
       // Save file metadata to database
       logger.debug(COMPONENT, "Saving file metadata to database")
       const { data: fileData, error: dbError } = await supabase
@@ -251,6 +318,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
             month: selectedMonth,
             year: selectedYear,
             file_path: filePath,
+            parsed_text: formattedText
           },
         ])
         .select()
@@ -297,6 +365,8 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
       logger.debug(COMPONENT, "Retrieved file ID", { fileId: fileQueryData.id })
 
+      /*
+
       // Add the file to the processing queue
       logger.info(COMPONENT, "Adding file to processing queue", { fileId: fileQueryData.id })
       const { error: queueError } = await supabase.from("pdf_processing_queue").insert([
@@ -313,6 +383,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       }
 
       logger.info(COMPONENT, "File added to processing queue successfully")
+      */
 
       const processingTime = timer.end()
       logger.info(COMPONENT, "File processing completed", {

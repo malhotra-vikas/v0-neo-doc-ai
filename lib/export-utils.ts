@@ -133,25 +133,25 @@ export const exportToPDF = async ({
 
     const logoUrl = patientMetrics?.publicLogoLink;
 
-  let interventionTableRowsHTML = '';
+    let interventionTableRowsHTML = '';
 
-interventionCounts.forEach((item, index) => {
-  const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
-  interventionTableRowsHTML += `
+    interventionCounts.forEach((item, index) => {
+        const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
+        interventionTableRowsHTML += `
     <tr>
       <td style="padding:14px; border:1px solid #eef4f9; ${background}">${item.name}</td>
       <td style="text-align:center; padding:14px; border:1px solid #eef4f9; ${background}">${item.count}</td>
     </tr>
   `;
-});
+    });
 
 
-let keyOutcomesHTML = caseStudies.map((study) => {
-    const [first, last] = (study.patient_name || "").split(" ");
-    const shortName = first && last ? `${first} ${last[0]}.` : (study.patient_name || "Unknown");
+    let keyOutcomesHTML = caseStudies.map((study) => {
+        const [first, last] = (study.patient_name || "").split(" ");
+        const shortName = first && last ? `${first} ${last[0]}.` : (study.patient_name || "Unknown");
 
-    const interventionsHTML = (study.detailed_interventions || [])
-        .map(item => `
+        const interventionsHTML = (study.detailed_interventions || [])
+            .map(item => `
             <li style="
                 list-style: none;
                 font-size: 14px;
@@ -164,10 +164,10 @@ let keyOutcomesHTML = caseStudies.map((study) => {
                 <span>${item.intervention}</span>
             </li>
         `)
-        .join("");
+            .join("");
 
-    const outcomesHTML = (study.detailed_outcomes || [])
-        .map(item => `
+        const outcomesHTML = (study.detailed_outcomes || [])
+            .map(item => `
             <li style="
                 list-style: none;
                 font-size: 14px;
@@ -180,9 +180,9 @@ let keyOutcomesHTML = caseStudies.map((study) => {
                 <span>${item.outcome}</span>
             </li>
         `)
-        .join("");
+            .join("");
 
-    return `
+        return `
         <div style="margin-bottom: 24px;">
             <p style="font-size: 14px; font-weight:bold; color: #07226c; margin-bottom: 6px;">
                 (${shortName}):
@@ -207,23 +207,23 @@ let keyOutcomesHTML = caseStudies.map((study) => {
             ` : ""}
         </div>
     `;
-}).join("");
+    }).join("");
 
     let tableRowsHTML = '';
 
     clinicalRisks.forEach((item, index) => {
-  const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
-  
-  tableRowsHTML += `
+        const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
+
+        tableRowsHTML += `
     <tr>
       <td style="padding:14px; border:1px solid #eef4f9;${background}">${item.risk}</td>
       <td style="text-align:center; padding:14px; border:1px solid #eef4f9;${background}">${item.count}</td>
     </tr>
   `;
-});
+    });
 
 
-  let cardsHTML = `
+    let cardsHTML = `
     <div style="
     display: flex;
     flex-wrap: wrap;
@@ -231,11 +231,11 @@ let keyOutcomesHTML = caseStudies.map((study) => {
     color: #07226c;
     ">
     `;
-const filteredCaseStudies = caseStudies.filter(item => item.patient_id !== expandedPatientId);
-filteredCaseStudies.forEach(item => {
-    const [first, last] = item.patient_name ? item.patient_name.split(" ") : [];
+    const filteredCaseStudies = caseStudies.filter(item => item.patient_id !== expandedPatientId);
+    filteredCaseStudies.forEach(item => {
+        const [first, last] = item.patient_name ? item.patient_name.split(" ") : [];
 
-  cardsHTML += `
+        cardsHTML += `
     <div style="
     flex: 1 1 calc((100% - 24px) / 3);
     min-width: 200px;
@@ -247,7 +247,7 @@ filteredCaseStudies.forEach(item => {
     margin-bottom: 16px;
   ">
     <span style="font-weight:bold; color:#002d74; margin-right:6px;">
-      (${first ? first[0] + "." : ""}${last ? last[0] +".": ""}):
+      (${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}):
     </span>
     <span style="font-size:13px; color: #07226c;
 ">
@@ -255,18 +255,18 @@ filteredCaseStudies.forEach(item => {
     </span>
   </div>
   `;
-});
+    });
 
-cardsHTML += `</div>`;
+    cardsHTML += `</div>`;
 
 
-let expandedStoryHTML = '';
+    let expandedStoryHTML = '';
 
-if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summary_text) {
-    const [first, last] = expandedStory.patient_name.split(" ");
-    const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
+    if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summary_text) {
+        const [first, last] = expandedStory.patient_name.split(" ");
+        const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
 
-    expandedStoryHTML = `
+        expandedStoryHTML = `
 <div style="margin-top: 36px;">
     <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
     Expanded Resident Success Story: ${initials}
@@ -278,7 +278,7 @@ if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summ
     </div>
 </div>
 `;
-}
+    }
 
 
     const htmlContentVal = `
@@ -422,8 +422,9 @@ if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summ
                 ${keyOutcomesHTML}
             </div>
             <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 0 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">Case Study
-                    Highlights: Individual Patient Successes</h2>
+                <h2 style="margin: 0 0 0 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">
+                    Case Study Highlights: Individual Patient Successes
+                </h2>
                 ${cardsHTML}
             </div>
             ${expandedStoryHTML}
@@ -575,7 +576,7 @@ if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summ
     await new Promise(r => setTimeout(r, 300));
 
     const canvas = await html2canvas(container, {
-        scale: 2.5, 
+        scale: 2.5,
         useCORS: true,
         allowTaint: true
     });
@@ -586,64 +587,64 @@ if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summ
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
 
-const marginLeft = 10;   // mm
-const marginRight = 10;  // mm
-const marginTop = 10;    // mm
-const marginBottom = 10; // mm
+    const marginLeft = 10;   // mm
+    const marginRight = 10;  // mm
+    const marginTop = 10;    // mm
+    const marginBottom = 10; // mm
 
-const usablePageWidth = pageWidth - marginLeft - marginRight;
-const usablePageHeight = pageHeight - marginTop - marginBottom;
+    const usablePageWidth = pageWidth - marginLeft - marginRight;
+    const usablePageHeight = pageHeight - marginTop - marginBottom;
 
 
-const pxPerMm = canvas.width / usablePageWidth;
+    const pxPerMm = canvas.width / usablePageWidth;
 
-const pageHeightPx = Math.floor(usablePageHeight * pxPerMm);
+    const pageHeightPx = Math.floor(usablePageHeight * pxPerMm);
 
-let yPosition = 0;
-let remainingHeight = canvas.height;
+    let yPosition = 0;
+    let remainingHeight = canvas.height;
 
-let firstPage = true;
+    let firstPage = true;
 
-while (remainingHeight > 0) {
-    const sliceHeight = Math.min(pageHeightPx, remainingHeight);
+    while (remainingHeight > 0) {
+        let sliceHeight = Math.min(pageHeightPx, remainingHeight);
 
-    if (sliceHeight < 52) break;
+        if (sliceHeight < 52) break;
 
-    const pageCanvas = document.createElement("canvas");
-    pageCanvas.width = canvas.width;
-    pageCanvas.height = sliceHeight;
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeight;
 
-    const ctx = pageCanvas.getContext("2d");
-    if(ctx){
-        ctx.drawImage(
-            canvas,
-            0,
-            yPosition,
-            canvas.width,
-            sliceHeight,
-            0,
-            0,
-            canvas.width,
-            sliceHeight
-        );
+        const ctx = pageCanvas.getContext("2d");
+        if (ctx) {
+            ctx.drawImage(
+                canvas,
+                0,
+                yPosition,
+                canvas.width,
+                sliceHeight,
+                0,
+                0,
+                canvas.width,
+                sliceHeight
+            );
 
+        }
+
+        const imgData = pageCanvas.toDataURL("image/jpeg", 1);
+
+        const imgHeight = (sliceHeight / canvas.width) * usablePageWidth;
+
+        if (firstPage) {
+            pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
+            firstPage = false;
+        } else {
+            pdf.addPage();
+            pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
+        }
+
+        yPosition += sliceHeight;
+        remainingHeight -= sliceHeight;
     }
-
-    const imgData = pageCanvas.toDataURL("image/jpeg",1);
-
-    const imgHeight = (sliceHeight / canvas.width) * usablePageWidth;
-
-    if (firstPage) {
-        pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
-        firstPage = false;
-    } else {
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
-    }
-
-    yPosition += sliceHeight;
-    remainingHeight -= sliceHeight;
-}
 
     if (returnBlob) {
         return pdf.output("blob");
@@ -1205,34 +1206,34 @@ const createCaseStudyCard = (study: any, theme: any) => {
                             verticalAlign: VerticalAlign.TOP,
                             children: [
                                 new Paragraph({
-    children: [
-        new TextRun({
-            text: (() => {
-                const safeName = study.patient_name || "Unknown Patient";
-                const [first, last] = safeName.split(" ");
-                return first && last ? `${first[0]}.${last}` : safeName;
-            })(),
-            bold: true,
-            size: 24,
-            color: hexToDocxColor(theme.TITLE),
-            font: "Helvetica",
-        }),
-    ],
-    spacing: { before: 120, after: 240 },
-    alignment: AlignmentType.LEFT,
-}),
-new Paragraph({
-    children: [
-        new TextRun({
-            text: study.highlight_text || "",
-            size: 22,
-            color: hexToDocxColor(theme.TEXT),
-            font: "Helvetica",
-        }),
-    ],
-    spacing: { before: 120, after: 120, line: 360 },
-    alignment: AlignmentType.LEFT,
-}),
+                                    children: [
+                                        new TextRun({
+                                            text: (() => {
+                                                const safeName = study.patient_name || "Unknown Patient";
+                                                const [first, last] = safeName.split(" ");
+                                                return first && last ? `${first[0]}.${last}` : safeName;
+                                            })(),
+                                            bold: true,
+                                            size: 24,
+                                            color: hexToDocxColor(theme.TITLE),
+                                            font: "Helvetica",
+                                        }),
+                                    ],
+                                    spacing: { before: 120, after: 240 },
+                                    alignment: AlignmentType.LEFT,
+                                }),
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: study.highlight_text || "",
+                                            size: 22,
+                                            color: hexToDocxColor(theme.TEXT),
+                                            font: "Helvetica",
+                                        }),
+                                    ],
+                                    spacing: { before: 120, after: 120, line: 360 },
+                                    alignment: AlignmentType.LEFT,
+                                }),
 
                             ],
                         }),
@@ -1284,6 +1285,7 @@ const renderChart = async (doc: jsPDF, chartRef: HTMLDivElement | null, yPositio
             logging: false,
             imageTimeout: 10000
         });
+
 
         document.body.removeChild(wrapper);
 
@@ -1383,6 +1385,7 @@ const convertChartToImage = async (chartRef: HTMLDivElement | null): Promise<{ d
             windowWidth: width + 40,
             windowHeight: height + 40
         });
+
 
         document.body.removeChild(wrapper);
 

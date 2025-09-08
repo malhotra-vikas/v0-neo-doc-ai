@@ -139,12 +139,28 @@ export async function generateCaseStudyHighlightForPatient(patientId: string) {
 
         let hospitalText = "", facilityText = "", engagementText = "";
 
+        console.log(`Building KB for patient ${patientId} `)
+
         if (fileData && fileData.length > 0) {
+            console.log(`File Count for patient ${patientId} is ${fileData.length}`)
+
             fileData.forEach(file => {
-                const textBlock = `---\nFile ID: ${file.id}\nFile Type: ${file.file_type}\n\n${file.parsed_text}\n\n`;
+                let textBlock = ''
+                console.log(`Processing File Type ${file.file_type}. Text Block size is ${textBlock.length}`)
+
+                textBlock = `---\nFile ID: ${file.id}\nFile Type: ${file.file_type}\n\n${file.parsed_text}\n\n`;
                 if (file.file_type === 'Patient Hospital Stay Notes') hospitalText += textBlock;
+                if (file.file_type === '90 Day Unified') hospitalText += textBlock;
+                if (file.file_type === '60 Day Unified') hospitalText += textBlock;
+                if (file.file_type === 'Patient Engagement') hospitalText += textBlock;
+                if (file.file_type === 'SNF Unified') hospitalText += textBlock;
+
                 if (file.file_type === 'Patient In Facility') facilityText += textBlock;
+
                 if (file.file_type === 'Patient Engagement') engagementText += textBlock;
+                if (file.file_type === '90 Day Unified') engagementText += textBlock;
+                if (file.file_type === '60 Day Unified') engagementText += textBlock;
+                if (file.file_type === 'SNF Unified') engagementText += textBlock;
             });
         } else {
             console.log("No files found for patient")
@@ -370,7 +386,7 @@ ${engagementText}
         `;
 
         // Common function to send a prompt
-        const getPromptedJSON = async (prompt: string) => {
+        const getPromptedJSON = async (prompt: string, type: string) => {
             const completion = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
@@ -383,9 +399,10 @@ ${engagementText}
 
             const tokensUsed = completion.usage?.total_tokens ?? 0
             console.log(`🧠 Tokens used in this prompt: ${tokensUsed}`)
+            console.log(`🧠 prompt type: ${type}`)
 
             let content = completion.choices[0]?.message?.content;
-            if (!content) throw new Error("No response from OpenAI");
+            //if (!content) throw new Error("No response from OpenAI");
 
             console.log("content is ", content)
 
@@ -403,63 +420,78 @@ ${engagementText}
             return { data: parsed, tokensUsed }
         };
 
-        let sanitizedHospitalSummary, sanitizedFacilitySummary, sanitizedEngagementSummary;
 
-        const [hospitalResp, facilityResp, engagementResp] = await Promise.all([
-            getPromptedJSON(patientHospitalStayPrompt).catch(e => { console.error("❌ Hospital", e); return null }),
-            getPromptedJSON(patientInFacilityPrompt).catch(e => { console.error("❌ Facility", e); return null }),
-            getPromptedJSON(patientEngagementPrompt).catch(e => { console.error("❌ Engagement", e); return null }),
-        ])
+        const [hospitalResult, engagementResult] =
+            await Promise.allSettled([
+                getPromptedJSON(patientHospitalStayPrompt, "Hospital Stay"),
+                //getPromptedJSON(patientInFacilityPrompt, "Facility Stay"),
+                getPromptedJSON(patientEngagementPrompt, "Patient Engagement"),
+            ]);
+
+        const hospitalResp = hospitalResult.status === "fulfilled" ? hospitalResult.value : null;
+        //const facilityResp = facilityResult.status === "fulfilled" ? facilityResult.value : null;
+        const engagementResp = engagementResult.status === "fulfilled" ? engagementResult.value : null;
 
         const hospitalData = hospitalResp?.data ?? {}
-        const facilityData = facilityResp?.data ?? {}
+        //const facilityData = facilityResp?.data ?? {}
         const engagementData = engagementResp?.data ?? {}
 
         const totalTokensUsed = (hospitalResp?.tokensUsed ?? 0) +
-            (facilityResp?.tokensUsed ?? 0) +
+            //            (facilityResp?.tokensUsed ?? 0) +
             (engagementResp?.tokensUsed ?? 0)
 
         console.log(`📊 Total tokens used for this patient: ${totalTokensUsed}`)
 
+        let sanitizedHospitalSummary = "";
+        let sanitizedFacilitySummary = "";
+        let sanitizedEngagementSummary = "";
+
+
         try {
             console.log("🏥 Hospital Summary:\n", hospitalData);
-            sanitizedHospitalSummary = hospitalData.hospital_discharge_summary?.summary
-
+            sanitizedHospitalSummary = hospitalData.hospital_discharge_summary?.summary || "";
         } catch (err) {
             console.error("❌ Failed to get hospital summary:", err);
         }
 
         try {
-            console.log("🏨 In-Facility Summary:\n", facilityData);
-            sanitizedFacilitySummary = facilityData.in_facility_summary?.summary
+            //console.log("🏨 In-Facility Summary:\n", facilityData);
+            //sanitizedFacilitySummary = facilityData.in_facility_summary?.summary || "";
         } catch (err) {
             console.error("❌ Failed to get facility summary:", err);
         }
 
         try {
             console.log("🧑‍⚕️ Engagement Summary:\n", engagementData);
-            sanitizedEngagementSummary = engagementData.assessment?.summary
+            sanitizedEngagementSummary = engagementData.assessment?.summary || "";
         } catch (err) {
             console.error("❌ Failed to get engagement summary:", err);
         }
 
         const highlightPayload = {
-            hospital_discharge_summary_text: sanitizedHospitalSummary || "",
-            hospital_discharge_summary_quotes: hospitalData.hospital_discharge_summary?.source_quotes || [],
+            hospital_discharge_summary_text: sanitizedHospitalSummary,
+            hospital_discharge_summary_quotes:
+                hospitalData.hospital_discharge_summary?.source_quotes || [],
 
-            facility_summary_text: sanitizedFacilitySummary || "",
-            facility_summary_quotes: facilityData.in_facility_summary?.source_quotes || [],
+            facility_summary_text: sanitizedFacilitySummary,
 
-            engagement_summary_text: sanitizedEngagementSummary || "",
+            //facility_summary_quotes: facilityData.in_facility_summary?.source_quotes || [],
+
+            engagement_summary_text: sanitizedEngagementSummary,
             engagement_summary_quotes: engagementData.assessment?.source_quotes || [],
 
             interventions: [],
             outcomes: [],
-            clinical_risks: hospitalData.hospital_discharge_summary.clinical_risks, // You can extract later if needed
+
+            clinical_risks:
+                hospitalData.hospital_discharge_summary?.clinical_risks || [],
+
             detailed_interventions: engagementData.interventions || [],
             detailed_outcomes: engagementData.outcomes || [],
-            detailed_clinical_risks: hospitalData.hospital_discharge_summary.clinical_risks,
-            updated_at: new Date().toISOString()
+            detailed_clinical_risks:
+                hospitalData.hospital_discharge_summary?.clinical_risks || [],
+
+            updated_at: new Date().toISOString(),
         };
         console.log("✅ Payload to save:", JSON.stringify(highlightPayload, null, 2));
         console.log("✅ Payload to save for existingHighlight:", existingHighlight?.id);
@@ -500,7 +532,7 @@ ${engagementText}
 export async function generateCaseStudyHighlight(fileId: string) {
     const supabase = createServerActionClient({ cookies })
 
-    // Get the current user for audit logging
+    // Get the current user for audit loggingnst [hospitalResp, facilityResp, enga
     const {
         data: { session },
     } = await supabase.auth.getSession()
