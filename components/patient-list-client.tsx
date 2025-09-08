@@ -1,9 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText } from "lucide-react"
+import { FileText, Trash2 } from "lucide-react"
 
 interface Patient {
   id: string
@@ -18,6 +19,31 @@ interface PatientListClientProps {
 }
 
 export function PatientListClient({ patients, nursingHomeId }: PatientListClientProps) {
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this patient?")) return
+
+    try {
+      setDeletingId(id)
+      const res = await fetch(`/api/patients/${id}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) {
+        throw new Error("Failed to delete patient")
+      }
+      // Option 1: reload page
+      window.location.reload()
+      // Option 2: if you want to optimistically remove from state, 
+      // lift patients into state and filter here instead of reload
+    } catch (err) {
+      console.error(err)
+      alert("Error deleting patient")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   return (
     <Table>
       <TableHeader>
@@ -54,6 +80,15 @@ export function PatientListClient({ patients, nursingHomeId }: PatientListClient
                   </Button>
                   <Button variant="outline" size="sm" asChild>
                     <Link href={`/patients/${patient.id}/files`}>Manage Files</Link>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDelete(patient.id)}
+                    disabled={deletingId === patient.id}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    {deletingId === patient.id ? "Deleting..." : "Delete"}
                   </Button>
                 </div>
               </TableCell>
