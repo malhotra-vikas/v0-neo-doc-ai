@@ -11,7 +11,7 @@ export function AuthHero() {
       <div className="space-y-6">
         <FeatureItem
           icon={<Shield className="h-6 w-6 mr-4 text-white" />}
-          title="HIPAA Compliant"
+          title="Data Security"
           description="Your data is secure and protected with enterprise-grade security."
         />
         <FeatureItem
