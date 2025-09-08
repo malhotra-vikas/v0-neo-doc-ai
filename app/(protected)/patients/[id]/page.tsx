@@ -53,25 +53,6 @@ export default async function PatientPage({ params }: { params: { id: string } }
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Medical Record #</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-lg">{patient.medical_record_number || "Not provided"}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Date of Birth</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-lg">
-                {patient.date_of_birth ? new Date(patient.date_of_birth).toLocaleDateString() : "Not provided"}
-              </p>
-            </CardContent>
-          </Card>
         </div>
 
         <Tabs defaultValue="files" className="mt-8">

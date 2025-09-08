@@ -63,9 +63,6 @@ export default function PatientsList({ nursingHomes }: PatientsListProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Medical Record #</TableHead>
-              <TableHead>Date of Birth</TableHead>
-              <TableHead>Files</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -86,13 +83,6 @@ export default function PatientsList({ nursingHomes }: PatientsListProps) {
               patients.map((patient) => (
                 <TableRow key={patient.id}>
                   <TableCell className="font-medium">{patient.name}</TableCell>
-                  <TableCell>{patient.medical_record_number}</TableCell>
-                  <TableCell>{new Date(patient.date_of_birth).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <FileText className="mr-2 h-4 w-4" />0
-                    </div>
-                  </TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
                       <Button variant="outline" size="sm" asChild>
