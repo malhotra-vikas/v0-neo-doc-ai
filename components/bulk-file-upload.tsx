@@ -252,9 +252,11 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       let metadata = { numPages: 0, info: {} }
       const fileName = file.name
 
+/*
       try {
         // Try to get PDF metadata
         logger.info(COMPONENT, "Getting PDF metadata")
+
         const metadataTimer = logger.timing(COMPONENT, "get-metadata")
         const { text, meta } = await extractPdfTextAction(arrayBuffer);
         metadata = meta
@@ -307,7 +309,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       --------------------------
       ${extractedText}
             `.trim()
-
+*/
       // Save file metadata to database
       logger.debug(COMPONENT, "Saving file metadata to database")
       const { data: fileData, error: dbError } = await supabase
@@ -319,8 +321,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
             file_type: fileType,
             month: selectedMonth,
             year: selectedYear,
-            file_path: filePath,
-            parsed_text: formattedText
+            file_path: filePath
           },
         ])
         .select()
@@ -367,7 +368,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
 
       logger.debug(COMPONENT, "Retrieved file ID", { fileId: fileQueryData.id })
 
-      /*
+      
 
       // Add the file to the processing queue
       logger.info(COMPONENT, "Adding file to processing queue", { fileId: fileQueryData.id })
@@ -385,7 +386,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       }
 
       logger.info(COMPONENT, "File added to processing queue successfully")
-      */
+      
 
       const processingTime = timer.end()
       logger.info(COMPONENT, "File processing completed", {
