@@ -30,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "@/components/ui/badge"
 import { logger } from "@/lib/logger"
 import { logAuditEvent } from "@/lib/audit-logger"
-import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
+import { extractPdfTextAction } from "@/app/actions/parsePDF"
 
 const COMPONENT = "BulkFileUpload"
 
@@ -256,7 +256,9 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         // Try to get PDF metadata
         logger.info(COMPONENT, "Getting PDF metadata")
         const metadataTimer = logger.timing(COMPONENT, "get-metadata")
-        metadata = await getPDFMetadata(arrayBuffer)
+        const { text, meta } = await extractPdfTextAction(arrayBuffer);
+        metadata = meta
+
         metadataTimer.end()
         logger.info(COMPONENT, "PDF metadata retrieved", {
           pages: metadata.numPages,
@@ -266,7 +268,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         // Try to extract text
         logger.info(COMPONENT, "Extracting text from PDF")
         const extractionTimer = logger.timing(COMPONENT, "extract-text")
-        extractedText = await extractTextFromPDF(arrayBuffer)
+        extractedText = text
         extractionTimer.end()
 
         const textLength = extractedText.length
