@@ -9,6 +9,14 @@ import { logger } from "./logger";
 
 const COMPONENT = "PDFUtils";
 
+function pythonBin() {
+    // Prefer project venv if present
+    const venv = path.join(process.cwd(), ".venv", "bin", "python3");
+    if (fs.existsSync(venv)) return venv;
+    // Fallback to system python3
+    return "python3";
+}
+
 function toBuffer(data: ArrayBuffer | Uint8Array | Buffer): Buffer {
     if (Buffer.isBuffer(data)) return data;
     if (data instanceof Uint8Array) return Buffer.from(data);
@@ -17,24 +25,21 @@ function toBuffer(data: ArrayBuffer | Uint8Array | Buffer): Buffer {
 
 async function extractWithPython(pdfData: ArrayBuffer | Uint8Array | Buffer): Promise<string> {
     const tmpPath = path.join(os.tmpdir(), `pdf-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
-    await fs.promises.writeFile(tmpPath, toBuffer(pdfData));
+    await fs.promises.writeFile(tmpPath, Buffer.isBuffer(pdfData) ? pdfData : Buffer.from(new Uint8Array(pdfData as ArrayBuffer)));
 
     return new Promise((resolve, reject) => {
         const scriptPath = path.resolve(process.cwd(), "scripts/parse_pdf.py");
-        const py = spawn("python3", [scriptPath, tmpPath]);
+        const py = spawn(pythonBin(), [scriptPath, tmpPath]);  // <-- use venv python
 
-        let output = "";
-        let error = "";
-
-        py.stdout.on("data", (d) => (output += d.toString()));
-        py.stderr.on("data", (d) => (error += d.toString()));
-
-        py.on("close", async (code) => {
+        let output = "", error = "";
+        py.stdout.on("data", d => (output += d.toString()));
+        py.stderr.on("data", d => (error += d.toString()));
+        py.on("close", async code => {
             await fs.promises.unlink(tmpPath).catch(() => { });
             if (code === 0) {
                 try {
-                    const result = JSON.parse(output);
-                    resolve(result.text || "");
+                    const { text } = JSON.parse(output);
+                    resolve(text || "");
                 } catch (e: any) {
                     reject(new Error("Failed to parse Python output: " + e.message));
                 }
