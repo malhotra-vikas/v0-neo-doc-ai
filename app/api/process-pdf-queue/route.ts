@@ -1,9 +1,9 @@
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
-import { extractTextFromPDF, getPDFMetadata } from "@/lib/pdf-utils"
 import { logger } from "@/lib/logger"
 import { logServerAuditEvent } from "@/lib/audit-logger"
+import { extractPdfTextAction } from "@/app/actions/parsePDF"
 
 const COMPONENT = "ProcessPDFQueue"
 
@@ -122,7 +122,9 @@ export async function GET(request: Request) {
                 // Try to get PDF metadata
                 logger.info(COMPONENT, "Getting PDF metadata")
                 const metadataTimer = logger.timing(COMPONENT, "get-metadata")
-                metadata = await getPDFMetadata(arrayBuffer)
+
+                const { text, meta } = await extractPdfTextAction(arrayBuffer);
+                metadata = meta
                 metadataTimer.end()
                 logger.info(COMPONENT, "PDF metadata retrieved", {
                     pages: metadata.numPages,
@@ -132,7 +134,7 @@ export async function GET(request: Request) {
                 // Try to extract text
                 logger.info(COMPONENT, "Extracting text from PDF")
                 const extractionTimer = logger.timing(COMPONENT, "extract-text")
-                extractedText = await extractTextFromPDF(arrayBuffer)
+                extractedText = text
                 extractionTimer.end()
 
                 const textLength = extractedText.length
