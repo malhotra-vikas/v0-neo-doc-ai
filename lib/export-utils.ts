@@ -124,76 +124,64 @@ export const exportToPDF = async ({
     interventionCounts.forEach((item, index) => {
         const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
         interventionTableRowsHTML += `
-    <tr>
-      <td style="padding:14px; border:1px solid #eef4f9; ${background}">${item.name}</td>
-      <td style="text-align:center; padding:14px; border:1px solid #eef4f9; ${background}">${item.count}</td>
+    <tr class="avoid-page-break">
+      <td  style="padding:14px; border:1px solid #eef4f9; ${background}">${item.name}</td>
+      <td  style="text-align:center; padding:14px; border:1px solid #eef4f9; ${background}">${item.count}</td>
     </tr>
   `;
     });
 
 
-    let keyOutcomesHTML = caseStudies.map((study) => {
-        const [first, last] = (study.patient_name || "").split(" ");
-        const shortName = first && last ? `${first} ${last[0]}.` : (study.patient_name || "Unknown");
+   let keyOutcomesHTML = caseStudies.map((study) => {
+    const [first, last] = (study.patient_name || "").split(" ");
+    const shortName = first && last ? `${first} ${last[0]}.` : (study.patient_name || "Unknown");
 
-        const interventionsHTML = (study.detailed_interventions || [])
-            .map(item => `
-            <li style="
-                list-style: none;
-                font-size: 14px;
-                color: #07226c;
-                line-height: 1.4;
-                display: flex;
-                align-items: center;
+    const interventionsHTML = (study.detailed_interventions || [])
+        .map(item => `
+            <div class="avoid-page-break" style="
+                display: flex; 
+                align-items: flex-start; 
+                margin-bottom: 4px;
             ">
                 <span style="display:inline-block; font-size:14px; margin-right:6px;">•</span>
-                <span>${item.intervention}</span>
-            </li>
-        `)
-            .join("");
+                <span style="font-size:14px; color:#07226c; line-height:1.4;">${item.intervention}</span>
+            </div>
+        `).join("");
 
-        const outcomesHTML = (study.detailed_outcomes || [])
-            .map(item => `
-            <li style="
-                list-style: none;
-                font-size: 14px;
-                color: #07226c;
-                line-height: 1.4;
-                display: flex;
-                align-items: center;
+    const outcomesHTML = (study.detailed_outcomes || [])
+        .map(item => `
+            <div class="avoid-page-break" style="
+                display: flex; 
+                align-items: flex-start; 
+                margin-bottom: 4px;
             ">
                 <span style="display:inline-block; font-size:14px; margin-right:6px;">•</span>
-                <span>${item.outcome}</span>
-            </li>
-        `)
-            .join("");
+                <span style="font-size:14px; color:#07226c; line-height:1.4;">${item.outcome}</span>
+            </div>
+        `).join("");
 
-        return `
+    return `
         <div style="margin-bottom: 24px;">
-            <p style="font-size: 14px; font-weight:bold; color: #07226c; margin-bottom: 6px;">
+            <p class="avoid-page-break" style="font-size:14px; font-weight:bold; color:#07226c; margin-bottom:6px;">
                 (${shortName}):
             </p>
 
             ${interventionsHTML ? `
-                <p style="font-size: 14px; font-weight: 500; color: #07226c; margin-bottom: 4px;">
+                <p class="avoid-page-break" style="font-size:14px; font-weight:500; color:#07226c; margin-bottom:4px;">
                     Interventions:
                 </p>
-                <ul style="margin: 0; padding-left: 18px;">
-                    ${interventionsHTML}
-                </ul>
+                ${interventionsHTML}
             ` : ""}
 
             ${outcomesHTML ? `
-                <p style="font-size: 14px; font-weight: 500; color: #07226c; margin-top: 10px; margin-bottom: 4px;">
+                <p class="avoid-page-break" style="font-size:14px; font-weight:500; color:#07226c; margin-top:10px; margin-bottom:4px;">
                     Outcomes:
                 </p>
-                <ul style="margin: 0; padding-left: 18px;">
-                    ${outcomesHTML}
-                </ul>
+                ${outcomesHTML}
             ` : ""}
         </div>
     `;
-    }).join("");
+}).join("");
 
     let tableRowsHTML = '';
 
@@ -201,9 +189,9 @@ export const exportToPDF = async ({
         const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
 
         tableRowsHTML += `
-    <tr>
+    <tr  class="avoid-page-break">
       <td style="padding:14px; border:1px solid #eef4f9;${background}">${item.risk}</td>
-      <td style="text-align:center; padding:14px; border:1px solid #eef4f9;${background}">${item.count}</td>
+      <td  style="text-align:center; padding:14px; border:1px solid #eef4f9;${background}">${item.count}</td>
     </tr>
   `;
     });
@@ -221,8 +209,8 @@ export const exportToPDF = async ({
     filteredCaseStudies.forEach(item => {
         const [first, last] = item.patient_name ? item.patient_name.split(" ") : [];
 
-        cardsHTML += `
-    <div style="
+       cardsHTML += `
+  <div  style="
     flex: 1 1 calc((100% - 24px) / 3);
     min-width: 200px;
     padding: 10px;
@@ -231,11 +219,11 @@ export const exportToPDF = async ({
     border-radius: 8px;
     box-sizing: border-box;
     margin-bottom: 16px;
-  ">
-    <span style="font-weight:bold; color:#002d74; margin-right:6px;">
+  " >
+    <span class="avoid-page-break" style="font-weight:bold; color:#002d74; margin-right:6px;">
       (${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}):
     </span>
-    <span style="font-size:13px; color: #07226c;
+    <span class="avoid-page-break" style="font-size:13px; color: #07226c;
 ">
       ${item.engagement_summary_text}
     </span>
@@ -254,14 +242,14 @@ export const exportToPDF = async ({
 
         expandedStoryHTML = `
 <div style="margin-top: 36px;">
-    <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
-    Expanded Resident Success Story: ${initials}
-    </h2>
-    <div style="border-left: 3px solid #D3F1FC; padding-left: 16px; margin: 16px 0; color: #07226c;">
+  <div class="avoid-page-break" >
+    <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Expanded Resident Success Story: ${initials}</h2>
+  </div>
+  <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px; margin: 16px 0;">
     <p>${expandedStory.hospital_discharge_summary_text}</p>
     <p>${expandedStory.facility_summary_text}</p>
     <p>${expandedStory.engagement_summary_text}</p>
-    </div>
+  </div>
 </div>
 `;
     }
@@ -292,7 +280,7 @@ export const exportToPDF = async ({
             <div style="width: 60%; padding-right: 20px; box-sizing: border-box;">
                 <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Executive Summary
                 </h2>
-                <p style="margin: 0; font-size: 15px; color: #07226c; line-height: 1.6;">
+                <p class="avoid-page-break" style="margin: 0; font-size: 15px; color: #07226c; line-height: 1.6;">
                     ${patientMetrics?.executiveSummary}
                 </p>
             </div>
@@ -403,25 +391,29 @@ export const exportToPDF = async ({
             </div>
     
             <div style="margin-top: 36px;">
-                <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;">Key Interventions and
-                    Outcomes</h2>
+             <div  class="avoid-page-break">
+             <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;">Key Interventions and
+                 Outcomes</h2>
+             </div>
                 ${keyOutcomesHTML}
             </div>
             <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 0 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">
-                    Case Study Highlights: Individual Patient Successes
-                </h2>
+             <div  class="avoid-page-break">
+             <h2 style="margin: 0 0 0 0; font-size: 28px;margin-bottom:16px; color: #07226c; font-weight: 700;">
+                 Case Study Highlights: Individual Patient Successes
+             </h2>
+             </div>
                 ${cardsHTML}
             </div>
             ${expandedStoryHTML}
-            <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">National Benchmark
+            <div class="avoid-page-break" style="margin-top: 36px;">
+                <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">National Benchmark
                     Comparison</h2>
                 <div>
                     <table style="width:100%; border-collapse: collapse; font-size:14px;   color: #07226c;">
                         <thead>
-                            <tr>
-                                <th
+                            <tr class="avoid-page-break">
+                                <th 
                                     style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
                                     Metric
                                 </th>
@@ -436,7 +428,7 @@ export const exportToPDF = async ({
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
+                            <tr class="avoid-page-break">
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">30-Day Readmission Rate (Puzzle
                                     Patients)</td>
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
@@ -447,16 +439,16 @@ export const exportToPDF = async ({
                         </tbody>
                     </table>
                 </div>
-                <p style="font-size:13px; margin:12px 0 0 0; color: #07226c;">Source: CMS SNF QRP 2024 National Averages.</p>
+                <p class="avoid-page-break" style="font-size:13px; margin:12px 0 0 0; color: #07226c;">Source: CMS SNF QRP 2024 National Averages.</p>
             </div>
 
 
-            <div style="margin-top: 36px;">
+            <div style="margin-top: 36px;" class="avoid-page-break">
                 <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Ongoing Focus Areas
                 </h2>
 
 
-                <div id="card-wrapper"
+                <div id="card-wrapper" 
                     style="display: flex; gap: 24px; justify-content: start; background: white;margin-top: 24px;">
                     <div style="width: 366px; text-align: center;">
                         <div
@@ -543,8 +535,8 @@ export const exportToPDF = async ({
                 </div>
             </div>
             <div style="margin-top: 36px;">
-                <h2 style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
-                <p style="color: #07226c;">${patientMetrics?.closingStatement}</p>
+                <h2 class="avoid-page-break" style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
+                <p class="avoid-page-break" style="color: #07226c;">${patientMetrics?.closingStatement}</p>
             </div>
         </div>
 </body>
@@ -552,91 +544,154 @@ export const exportToPDF = async ({
 </html>
    `;
     console.log("htmlContentVal", htmlContentVal)
-    const container = document.createElement("div");
-    container.style.position = "fixed";
-    container.style.left = "-9999px";
-    container.style.top = "0";
-    container.innerHTML = htmlContentVal;
-    document.body.appendChild(container);
+ const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-9999px";
+  container.style.top = "0";
+  container.innerHTML = htmlContentVal;
+  document.body.appendChild(container);
 
-    await new Promise(r => setTimeout(r, 300));
+  // 2. Render to tall canvas
+  const canvas = await html2canvas(container, {
+    scale: 2.5,
+    useCORS: true,
+    allowTaint: true,
+    logging: false,
+    width: container.offsetWidth,
+    height: container.scrollHeight,
+  });
 
-    const canvas = await html2canvas(container, {
-        scale: 2.5,
-        useCORS: true,
-        allowTaint: true
+  const scaleY = canvas.height / container.scrollHeight;
+  const rawEls = Array.from(container.querySelectorAll(".avoid-page-break"));
+  const groups: { top: number; bottom: number; height: number }[] = [];
+
+  if (rawEls.length > 0) {
+    let currentGroup: HTMLElement[] = [rawEls[0] as HTMLElement];
+
+    for (let i = 1; i < rawEls.length; i++) {
+      const prev = rawEls[i - 1] as HTMLElement;
+      const curr = rawEls[i] as HTMLElement;
+
+      // Check if consecutive in DOM
+      if (prev.nextElementSibling === curr) {
+        currentGroup.push(curr);
+      } else {
+        // Finalize previous group
+        groups.push(groupToBox(currentGroup, scaleY));
+        currentGroup = [curr];
+      }
+    }
+
+    // Final group
+    if (currentGroup.length > 0) {
+      groups.push(groupToBox(currentGroup, scaleY));
+    }
+  }
+
+  // Helper to convert group of elements to bounding box in canvas coords
+  function groupToBox(els: HTMLElement[], scaleY: number) {
+    const top = els[0].offsetTop * scaleY;
+    const last = els[els.length - 1];
+    const bottom = (last.offsetTop + last.offsetHeight) * scaleY;
+    return {
+      top,
+      bottom,
+      height: bottom - top,
+    };
+  }
+
+  // Safe to remove container
+  document.body.removeChild(container);
+
+  // 4. Setup PDF
+  const pdf = new jsPDF("p", "mm", "a4");
+  const pdfMargin = 10;
+  const pdfPageWidth = pdf.internal.pageSize.getWidth();
+  const pdfPageHeight = pdf.internal.pageSize.getHeight();
+  const usableWidth = pdfPageWidth - pdfMargin * 2;
+  const usableHeight = pdfPageHeight - pdfMargin * 2;
+  const pageHeightInPixels = (usableHeight * canvas.width) / usableWidth;
+
+  // 5. Slice pages
+  let yPosition = 0;
+  let remainingHeight = canvas.height;
+  let isFirstPage = true;
+
+  while (remainingHeight > 0) {
+    if (!isFirstPage) {
+      pdf.addPage();
+    }
+
+    let potentialSliceEnd = yPosition + pageHeightInPixels;
+    let actualSliceEnd = potentialSliceEnd;
+
+    // Adjust slice if a group crosses
+    groups.forEach(group => {
+      if (group.top < potentialSliceEnd && group.bottom > potentialSliceEnd) {
+        if (group.height <= pageHeightInPixels) {
+          // Fits in one page → push group fully to next page
+          if (group.top > yPosition) {
+            actualSliceEnd = Math.min(actualSliceEnd, group.top);
+
+            // If too close → skip page
+            if (actualSliceEnd <= yPosition + 50) {
+              actualSliceEnd = yPosition;
+            }
+          }
+        } else {
+          // Group taller than page → allow breaking
+          actualSliceEnd = potentialSliceEnd;
+        }
+      }
     });
 
-    document.body.removeChild(container);
+    let sliceHeight = actualSliceEnd - yPosition;
 
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-
-    const marginLeft = 10;   // mm
-    const marginRight = 10;  // mm
-    const marginTop = 10;    // mm
-    const marginBottom = 10; // mm
-
-    const usablePageWidth = pageWidth - marginLeft - marginRight;
-    const usablePageHeight = pageHeight - marginTop - marginBottom;
-
-
-    const pxPerMm = canvas.width / usablePageWidth;
-
-    const pageHeightPx = Math.floor(usablePageHeight * pxPerMm);
-
-    let yPosition = 0;
-    let remainingHeight = canvas.height;
-
-    let firstPage = true;
-
-    while (remainingHeight > 0) {
-        const sliceHeight = Math.min(pageHeightPx, remainingHeight);
-
-        if (sliceHeight < 52) break;
-
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceHeight;
-
-        const ctx = pageCanvas.getContext("2d");
-        if (ctx) {
-            ctx.drawImage(
-                canvas,
-                0,
-                yPosition,
-                canvas.width,
-                sliceHeight,
-                0,
-                0,
-                canvas.width,
-                sliceHeight
-            );
-
-        }
-
-        const imgData = pageCanvas.toDataURL("image/jpeg", 1);
-
-        const imgHeight = (sliceHeight / canvas.width) * usablePageWidth;
-
-        if (firstPage) {
-            pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
-            firstPage = false;
-        } else {
-            pdf.addPage();
-            pdf.addImage(imgData, "JPEG", marginLeft, marginTop, usablePageWidth, imgHeight);
-        }
-
-        yPosition += sliceHeight;
-        remainingHeight -= sliceHeight;
+    if (sliceHeight <= 0) {
+      // Skip page
+      yPosition = potentialSliceEnd;
+      remainingHeight -= pageHeightInPixels;
+      isFirstPage = false;
+      continue;
     }
 
-    if (returnBlob) {
-        return pdf.output("blob");
-    } else {
-        pdf.save(`${nursingHomeName}-case-studies-${monthYear}.pdf`);
+    sliceHeight = Math.min(sliceHeight, remainingHeight);
+
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeight;
+    const ctx = pageCanvas.getContext("2d");
+
+    if (ctx) {
+      ctx.drawImage(
+        canvas,
+        0,
+        yPosition,
+        canvas.width,
+        sliceHeight,
+        0,
+        0,
+        canvas.width,
+        sliceHeight
+      );
+
+      const imgData = pageCanvas.toDataURL("image/jpeg", 1);
+      const imgHeight = (sliceHeight * usableWidth) / canvas.width;
+
+      pdf.addImage(imgData, "JPEG", pdfMargin, pdfMargin, usableWidth, imgHeight);
     }
+
+    yPosition += sliceHeight;
+    remainingHeight -= sliceHeight;
+    isFirstPage = false;
+  }
+
+  // 6. Save or return
+  if (returnBlob) {
+    return pdf.output("blob");
+  } else {
+    pdf.save(`${nursingHomeName}-case-studies-${monthYear}.pdf`);
+  }
 
 };
 
