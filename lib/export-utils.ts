@@ -252,16 +252,27 @@ export const exportToPDF = async ({
         const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
 
         expandedStoryHTML = `
-<div style="margin-top: 36px;">
-  <div class="avoid-page-break" >
-    <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Expanded Resident Success Story: ${initials}</h2>
+  <div  style="
+    flex: 1 1 calc((100% - 24px) / 3);
+    min-width: 200px;
+    padding: 10px;
+    color: #07226c;
+    border: 1px solid #d7e3f4;
+    border-radius: 8px;
+    box-sizing: border-box;
+    margin-bottom: 16px;
+  " >
+    <span class="avoid-page-break" style="font-weight:bold; color:#002d74; margin-right:6px;">
+      <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Expanded Resident Success Story: ${initials}</h2>
+    </span>
+    <span class="avoid-page-break" style="font-size:13px; color: #07226c;
+">
+      ${expandedStory.hospital_discharge_summary_text}
+        ${expandedStory.facility_summary_text}
+      ${expandedStory.engagement_summary_text}
+
+    </span>
   </div>
-  <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px; margin: 16px 0;">
-    <p>${expandedStory.hospital_discharge_summary_text}</p>
-    <p>${expandedStory.facility_summary_text}</p>
-    <p>${expandedStory.engagement_summary_text}</p>
-  </div>
-</div>
 `;
     }
 
