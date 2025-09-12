@@ -117,7 +117,7 @@ export const exportToPDF = async ({
 
     const expandedStory = caseStudies.find(story => story.patient_id === expandedPatientId);
 
-    const logoUrl = patientMetrics?.publicLogoLink;
+    const logoUrl = patientMetrics?.publicLogoLink ?? null;
 
     let interventionTableRowsHTML = '';
 
@@ -138,7 +138,7 @@ export const exportToPDF = async ({
 
     const interventionsHTML = (study.detailed_interventions || [])
         .map(item => `
-            <div class="avoid-page-break" style="
+            <div style="
                 display: flex; 
                 align-items: flex-start; 
                 margin-bottom: 4px;
@@ -150,7 +150,7 @@ export const exportToPDF = async ({
 
     const outcomesHTML = (study.detailed_outcomes || [])
         .map(item => `
-            <div class="avoid-page-break" style="
+            <div style="
                 display: flex; 
                 align-items: flex-start; 
                 margin-bottom: 4px;
@@ -161,7 +161,7 @@ export const exportToPDF = async ({
         `).join("");
 
     return `
-        <div style="margin-bottom: 24px;">
+        <div style="margin-bottom: 24px; "class="avoid-page-break" >
             <p class="avoid-page-break" style="font-size:14px; font-weight:bold; color:#07226c; margin-bottom:6px;">
                 (${shortName}):
             </p>
@@ -240,18 +240,23 @@ export const exportToPDF = async ({
         const [first, last] = expandedStory.patient_name.split(" ");
         const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
 
-        expandedStoryHTML = `
-<div style="margin-top: 36px;">
-  <div class="avoid-page-break" >
-    <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Expanded Resident Success Story: ${initials}</h2>
-  </div>
-  <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px; margin: 16px 0;">
-    <p>${expandedStory.hospital_discharge_summary_text}</p>
-    <p>${expandedStory.facility_summary_text}</p>
-    <p>${expandedStory.engagement_summary_text}</p>
-  </div>
-</div>
-`;
+       expandedStoryHTML = `
+	  <div class="avoid-page-break" style="margin-top: 36px;">
+	    <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
+	      Expanded Resident Success Story: ${initials}
+	    </h2>
+	  </div>
+	  
+	    <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px;">
+	      <p style="color: #07226c">${expandedStory.hospital_discharge_summary_text}</p>
+	    </div>
+	    <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px;"">
+	      <p style="color: #07226c">${expandedStory.facility_summary_text}</p>
+	    </div>
+	    <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px;"">
+	      <p style="color: #07226c">${expandedStory.engagement_summary_text}</p>
+	    </div>
+	`;
     }
 
 
@@ -285,14 +290,18 @@ export const exportToPDF = async ({
                 </p>
             </div>
 
-            <div style="width: 40%; display: flex; align-items: center; justify-content: center;">
-                <img src="${logoUrl}" alt="Logo" style="max-width: 100%; max-height: 90px; object-fit: contain;" />
-            </div>
+            ${
+      logoUrl
+        ? `<div style="width: 40%; display: flex; align-items: center; justify-content: center;">
+            <img src="${logoUrl}" alt="Logo" style="max-width: 100%; max-height: 90px; object-fit: contain;" />
+          </div>`
+        : ''
+    }
 
         </div>
 
         <!-- Section title -->
-        <div style="margin-top: 32px;">
+        <div style="margin-top: 32px;" class="avoid-page-break">
             <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;margin-bottom: 16px;">Patient Snapshot
                 Overview: 30-Day Readmissions</h2>
 
@@ -337,7 +346,7 @@ export const exportToPDF = async ({
         <div style="margin-top: 32px;">
             <div style="height: 18px;"></div>
 
-            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;" class="avoid-page-break">
 
                 <div
                     style="flex: 1; min-width: 300px; position: relative; padding:24px; border: 1px solid #A0E4F8; border-top: 8px solid #7fdbff; border-radius: 10px;">
@@ -407,40 +416,48 @@ export const exportToPDF = async ({
             </div>
             ${expandedStoryHTML}
             <div class="avoid-page-break" style="margin-top: 36px;">
-                <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">National Benchmark
-                    Comparison</h2>
-                <div>
-                    <table style="width:100%; border-collapse: collapse; font-size:14px;   color: #07226c;">
-                        <thead>
-                            <tr class="avoid-page-break">
-                                <th 
-                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                    Metric
-                                </th>
-                                <th
-                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                    ${nursingHomeName}
-                                </th>
-                                <th
-                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                    National Benchmark*
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr class="avoid-page-break">
-                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">30-Day Readmission Rate (Puzzle
-                                    Patients)</td>
-                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                                    ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%</td>
-                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                                    ${patientMetrics?.nationalReadmissionsBenchmark}%</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <p class="avoid-page-break" style="font-size:13px; margin:12px 0 0 0; color: #07226c;">Source: CMS SNF QRP 2024 National Averages.</p>
-            </div>
+	    <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
+	      National Benchmark Comparison
+	    </h2>
+	  </div>
+
+	  <!-- Table -->
+	  <div class="avoid-page-break">
+	    <table style="width:100%; border-collapse: collapse; font-size:14px; color: #07226c;">
+	      <thead>
+		<tr>
+		  <th style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+		    Metric
+		  </th>
+		  <th style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+		    ${nursingHomeName}
+		  </th>
+		  <th style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+		    National Benchmark*
+		  </th>
+		</tr>
+	      </thead>
+	      <tbody>
+		<tr>
+		  <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+		    30-Day Readmission Rate (Puzzle Patients)
+		  </td>
+		  <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+		    ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%
+		  </td>
+		  <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+		    ${patientMetrics?.nationalReadmissionsBenchmark}%
+		  </td>
+		</tr>
+	      </tbody>
+	    </table>
+	  </div>
+
+	  <div class="avoid-page-break">
+	    <p style="font-size:13px; margin:12px 0 0 0; color: #07226c;">
+	      Source: CMS SNF QRP 2024 National Averages.
+	    </p>
+	  </div>
 
 
             <div style="margin-top: 36px;" class="avoid-page-break">
@@ -534,164 +551,207 @@ export const exportToPDF = async ({
                     </div>
                 </div>
             </div>
-            <div style="margin-top: 36px;">
-                <h2 class="avoid-page-break" style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
-                <p class="avoid-page-break" style="color: #07226c;">${patientMetrics?.closingStatement}</p>
-            </div>
+             <div style="margin-top: 36px;" class="avoid-page-break">
+		        <h2  style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
+		    </div>
+		       <div style="margin-top: 36px;margin-bottom: 20px;" class="avoid-page-break">
+		        <p  style="color: #07226c;">${patientMetrics?.closingStatement}</p>
+		    </div>
         </div>
 </body>
 
 </html>
    `;
     console.log("htmlContentVal", htmlContentVal)
- const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.left = "-9999px";
-  container.style.top = "0";
-  container.innerHTML = htmlContentVal;
-  document.body.appendChild(container);
 
-  // 2. Render to tall canvas
-  const canvas = await html2canvas(container, {
-    scale: 2.5,
-    useCORS: true,
-    allowTaint: true,
-    logging: false,
-    width: container.offsetWidth,
-    height: container.scrollHeight,
-  });
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    container.style.top = "0";
+    container.style.width = "1200px";
+      container.style.boxSizing = "border-box";
+    container.innerHTML = htmlContentVal;
+    document.body.appendChild(container);
 
-  const scaleY = canvas.height / container.scrollHeight;
-  const rawEls = Array.from(container.querySelectorAll(".avoid-page-break"));
-  const groups: { top: number; bottom: number; height: number }[] = [];
+    await new Promise((r) => setTimeout(r, 120));
 
-  if (rawEls.length > 0) {
-    let currentGroup: HTMLElement[] = [rawEls[0] as HTMLElement];
+    const captureScale = Math.max(2, window.devicePixelRatio || 1);
 
-    for (let i = 1; i < rawEls.length; i++) {
-      const prev = rawEls[i - 1] as HTMLElement;
-      const curr = rawEls[i] as HTMLElement;
-
-      // Check if consecutive in DOM
-      if (prev.nextElementSibling === curr) {
-        currentGroup.push(curr);
-      } else {
-        // Finalize previous group
-        groups.push(groupToBox(currentGroup, scaleY));
-        currentGroup = [curr];
-      }
-    }
-
-    // Final group
-    if (currentGroup.length > 0) {
-      groups.push(groupToBox(currentGroup, scaleY));
-    }
-  }
-
-  // Helper to convert group of elements to bounding box in canvas coords
-  function groupToBox(els: HTMLElement[], scaleY: number) {
-    const top = els[0].offsetTop * scaleY;
-    const last = els[els.length - 1];
-    const bottom = (last.offsetTop + last.offsetHeight) * scaleY;
-    return {
-      top,
-      bottom,
-      height: bottom - top,
-    };
-  }
-
-  // Safe to remove container
-  document.body.removeChild(container);
-
-  // 4. Setup PDF
-  const pdf = new jsPDF("p", "mm", "a4");
-  const pdfMargin = 10;
-  const pdfPageWidth = pdf.internal.pageSize.getWidth();
-  const pdfPageHeight = pdf.internal.pageSize.getHeight();
-  const usableWidth = pdfPageWidth - pdfMargin * 2;
-  const usableHeight = pdfPageHeight - pdfMargin * 2;
-  const pageHeightInPixels = (usableHeight * canvas.width) / usableWidth;
-
-  // 5. Slice pages
-  let yPosition = 0;
-  let remainingHeight = canvas.height;
-  let isFirstPage = true;
-
-  while (remainingHeight > 0) {
-    if (!isFirstPage) {
-      pdf.addPage();
-    }
-
-    let potentialSliceEnd = yPosition + pageHeightInPixels;
-    let actualSliceEnd = potentialSliceEnd;
-
-    // Adjust slice if a group crosses
-    groups.forEach(group => {
-      if (group.top < potentialSliceEnd && group.bottom > potentialSliceEnd) {
-        if (group.height <= pageHeightInPixels) {
-          // Fits in one page → push group fully to next page
-          if (group.top > yPosition) {
-            actualSliceEnd = Math.min(actualSliceEnd, group.top);
-
-            // If too close → skip page
-            if (actualSliceEnd <= yPosition + 50) {
-              actualSliceEnd = yPosition;
-            }
-          }
-        } else {
-          // Group taller than page → allow breaking
-          actualSliceEnd = potentialSliceEnd;
-        }
-      }
+    const canvas = await html2canvas(container, {
+        scale: captureScale,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        width: container.offsetWidth,
+        height: container.scrollHeight,
     });
 
-    let sliceHeight = actualSliceEnd - yPosition;
+    const scaleY = canvas.height / container.scrollHeight;
 
-    if (sliceHeight <= 0) {
-      // Skip page
-      yPosition = potentialSliceEnd;
-      remainingHeight -= pageHeightInPixels;
-      isFirstPage = false;
-      continue;
+    const rawEls = Array.from(
+        container.querySelectorAll<HTMLElement>(".avoid-page-break")
+    );
+    const containerRect = container.getBoundingClientRect();
+
+    const elBoxes = rawEls.map((el) => {
+        const r = el.getBoundingClientRect();
+        const topInContainer = r.top - containerRect.top + container.scrollTop;
+        const bottomInContainer = r.bottom - containerRect.top + container.scrollTop;
+        const topPx = topInContainer * scaleY;
+        const bottomPx = bottomInContainer * scaleY;
+        return { el, topPx, bottomPx, heightPx: bottomPx - topPx };
+    });
+
+    type GroupBox = {
+        top: number;
+        bottom: number;
+        height: number;
+        els: HTMLElement[];
+    };
+
+    const groups: GroupBox[] = [];
+    if (elBoxes.length) {
+        let current: GroupBox = {
+            top: elBoxes[0].topPx,
+            bottom: elBoxes[0].bottomPx,
+            height: elBoxes[0].heightPx,
+            els: [elBoxes[0].el],
+        };
+
+        for (let i = 1; i < elBoxes.length; i++) {
+            const prev = elBoxes[i - 1];
+            const curr = elBoxes[i];
+
+            const domAdjacent = prev.el.nextElementSibling === curr.el;
+            const visuallyAdjacent = curr.topPx - prev.bottomPx <= 10;
+
+            if (domAdjacent || visuallyAdjacent) {
+                current.bottom = Math.max(current.bottom, curr.bottomPx);
+                current.height = current.bottom - current.top;
+                current.els.push(curr.el);
+            } else {
+                groups.push({ ...current });
+                current = {
+                    top: curr.topPx,
+                    bottom: curr.bottomPx,
+                    height: curr.heightPx,
+                    els: [curr.el],
+                };
+            }
+        }
+        groups.push({ ...current });
     }
 
-    sliceHeight = Math.min(sliceHeight, remainingHeight);
+    document.body.removeChild(container);
 
-    const pageCanvas = document.createElement("canvas");
-    pageCanvas.width = canvas.width;
-    pageCanvas.height = sliceHeight;
-    const ctx = pageCanvas.getContext("2d");
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfMargin = 10;
+    const pdfPageWidth = pdf.internal.pageSize.getWidth();
+    const pdfPageHeight = pdf.internal.pageSize.getHeight();
+    const usableWidth = pdfPageWidth - pdfMargin * 2;
+    const usableHeight = pdfPageHeight - pdfMargin * 2;
 
-    if (ctx) {
-      ctx.drawImage(
-        canvas,
-        0,
-        yPosition,
-        canvas.width,
-        sliceHeight,
-        0,
-        0,
-        canvas.width,
-        sliceHeight
-      );
+    const pageHeightInPixels = (usableHeight * canvas.width) / usableWidth;
 
-      const imgData = pageCanvas.toDataURL("image/jpeg", 1);
-      const imgHeight = (sliceHeight * usableWidth) / canvas.width;
+    let yPosition = 0;
+    let remainingHeight = canvas.height;
+    let isFirstPage = true;
 
-      pdf.addImage(imgData, "JPEG", pdfMargin, pdfMargin, usableWidth, imgHeight);
+    while (remainingHeight > 0) {
+        if (!isFirstPage) pdf.addPage();
+
+        let sliceStart = yPosition;
+        let sliceEnd = yPosition + pageHeightInPixels;
+        let oversizedGroup: GroupBox | null = null;
+
+        for (const g of groups) {
+            if (g.top >= sliceEnd || g.bottom <= sliceStart) continue;
+
+            if (g.top >= sliceStart && g.top < sliceEnd) {
+                if (g.bottom > sliceEnd) {
+                    if (g.height <= pageHeightInPixels) {
+                        sliceEnd = g.top;
+                    } else {
+                        oversizedGroup = g;
+                        sliceStart = g.top;
+                        sliceEnd = g.bottom;
+                        break;
+                    }
+                }
+            }
+
+            if (g.top < sliceStart && g.bottom > sliceStart) {
+                sliceStart = Math.min(sliceStart, g.top);
+                sliceEnd = Math.max(sliceEnd, g.bottom);
+            }
+        }
+
+        if (sliceEnd <= sliceStart) {
+            sliceEnd = sliceStart + pageHeightInPixels;
+            if (sliceEnd > canvas.height) sliceEnd = canvas.height;
+        }
+
+        let sliceHeight = Math.min(sliceEnd - sliceStart, remainingHeight);
+        if (sliceHeight <= 0) {
+            yPosition += pageHeightInPixels;
+            remainingHeight -= pageHeightInPixels;
+            isFirstPage = false;
+            continue;
+        }
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = Math.ceil(sliceHeight);
+        const ctx = pageCanvas.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+        ctx.drawImage(
+            canvas,
+            0,
+            sliceStart,
+            canvas.width,
+            sliceHeight,
+            0,
+            0,
+            canvas.width,
+            sliceHeight
+        );
+
+        if (oversizedGroup) {
+            const groupHeight = oversizedGroup.height;
+            const groupWidth = canvas.width;
+            const scale = Math.min(usableWidth / groupWidth, usableHeight / groupHeight);
+            const displayWidth = groupWidth * scale;
+            const displayHeight = groupHeight * scale;
+
+            const imgData = pageCanvas.toDataURL("image/jpeg", 1.0);
+            const xOffset = pdfMargin + Math.max(0, (usableWidth - displayWidth) / 2);
+
+            pdf.addImage(imgData, "JPEG", xOffset, pdfMargin, displayWidth, displayHeight);
+
+            yPosition = sliceEnd;
+            remainingHeight = canvas.height - yPosition;
+            isFirstPage = false;
+            pageCanvas.remove();
+            continue;
+        }
+
+        const imgData = pageCanvas.toDataURL("image/jpeg", 1.0);
+        const imgHeightPdfUnits = (sliceHeight * usableWidth) / canvas.width;
+        pdf.addImage(imgData, "JPEG", pdfMargin, pdfMargin, usableWidth, imgHeightPdfUnits);
+
+        yPosition += sliceHeight;
+        remainingHeight -= sliceHeight;
+        isFirstPage = false;
+        pageCanvas.remove();
     }
 
-    yPosition += sliceHeight;
-    remainingHeight -= sliceHeight;
-    isFirstPage = false;
-  }
-
-  // 6. Save or return
-  if (returnBlob) {
-    return pdf.output("blob");
-  } else {
-    pdf.save(`${nursingHomeName}-case-studies-${monthYear}.pdf`);
-  }
+    if (returnBlob) {
+        return pdf.output("blob");
+    } else {
+        pdf.save(`${nursingHomeName}-case-studies-${monthYear}.pdf`);
+    }
 
 };
 
