@@ -138,7 +138,7 @@ export const exportToPDF = async ({
 
     let keyOutcomesHTML = outcomeFilteredCaseStudies.map((study) => {
         const [first, last] = (study.patient_name || "").split(" ");
-        const shortName = first && last ? `${first[0]} ${last[0]}.` : (study.patient_name || "Unknown");
+        const shortName = first && last ? `${first[0]}. ${last}` : (study.patient_name || "Unknown");
 
         const interventionsHTML = (study.detailed_interventions || [])
             .map(item => `
@@ -167,7 +167,7 @@ export const exportToPDF = async ({
         return `
         <div style="margin-bottom: 24px;">
             <p class="avoid-page-break" style="font-size:14px; font-weight:bold; color:#07226c; margin-bottom:6px;">
-                (${shortName}):
+                ${shortName}:
             </p>
 
             ${interventionsHTML ? `
@@ -232,7 +232,7 @@ export const exportToPDF = async ({
     margin-bottom: 16px;
   " >
     <span class="avoid-page-break" style="font-weight:bold; color:#002d74; margin-right:6px;">
-      (${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}):
+      ${first ? first[0] + "." : ""}${last ? last : ""}:
     </span>
     <span class="avoid-page-break" style="font-size:13px; color: #07226c;
 ">
@@ -249,7 +249,7 @@ export const exportToPDF = async ({
 
     if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summary_text) {
         const [first, last] = expandedStory.patient_name.split(" ");
-        const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
+        const initials = `${first ? first[0] + "." : ""}${last ? last : ""}`;
 
         expandedStoryHTML = `
   <div  style="
@@ -556,7 +556,7 @@ export const exportToPDF = async ({
                     </div>
                 </div>
             </div>
-            <div style="margin-top: 36px;">
+            <div style="margin-top: 36px; margin-bottom: 30px">
                 <h2 class="avoid-page-break" style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
                 <p class="avoid-page-break" style="color: #07226c;">${patientMetrics?.closingStatement}</p>
             </div>
