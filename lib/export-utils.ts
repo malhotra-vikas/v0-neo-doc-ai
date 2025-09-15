@@ -117,7 +117,7 @@ export const exportToPDF = async ({
 
     const expandedStory = caseStudies.find(story => story.patient_id === expandedPatientId);
 
-    const logoUrl = patientMetrics?.publicLogoLink;
+    const logoUrl = patientMetrics?.publicLogoLink ?? null;
 
     let interventionTableRowsHTML = '';
 
@@ -307,14 +307,18 @@ export const exportToPDF = async ({
                 </p>
             </div>
 
-            <div style="width: 40%; display: flex; align-items: center; justify-content: center;">
-                <img src="${logoUrl}" alt="Logo" style="max-width: 100%; max-height: 90px; object-fit: contain;" />
-            </div>
+            ${
+      logoUrl
+        ? `<div style="width: 40%; display: flex; align-items: center; justify-content: center;">
+            <img src="${logoUrl}" alt="Logo" style="max-width: 100%; max-height: 90px; object-fit: contain;" />
+          </div>`
+        : ''
+    }
 
         </div>
 
         <!-- Section title -->
-        <div style="margin-top: 32px;">
+        <div style="margin-top: 32px;" class="avoid-page-break">
             <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;margin-bottom: 16px;">Patient Snapshot
                 Overview: 30-Day Readmissions</h2>
 
@@ -359,7 +363,7 @@ export const exportToPDF = async ({
         <div style="margin-top: 32px;">
             <div style="height: 18px;"></div>
 
-            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;" class="avoid-page-break">
 
                 <div
                     style="flex: 1; min-width: 300px; position: relative; padding:24px; border: 1px solid #A0E4F8; border-top: 8px solid #7fdbff; border-radius: 10px;">
@@ -429,40 +433,48 @@ export const exportToPDF = async ({
             </div>
             ${expandedStoryHTML}
             <div class="avoid-page-break" style="margin-top: 36px;">
-                <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">National Benchmark
-                    Comparison</h2>
-                <div>
-                    <table style="width:100%; border-collapse: collapse; font-size:14px;   color: #07226c;">
-                        <thead>
-                            <tr class="avoid-page-break">
-                                <th 
-                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                    Metric
-                                </th>
-                                <th
-                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                    ${nursingHomeName}
-                                </th>
-                                <th
-                                    style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
-                                    National Benchmark*
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr class="avoid-page-break">
-                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">30-Day Readmission Rate (Puzzle
-                                    Patients)</td>
-                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                                    ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%</td>
-                                <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                                    ${patientMetrics?.nationalReadmissionsBenchmark}%</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <p class="avoid-page-break" style="font-size:13px; margin:12px 0 0 0; color: #07226c;">Source: CMS SNF QRP 2024 National Averages.</p>
-            </div>
+	    <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
+	      National Benchmark Comparison
+	    </h2>
+	  </div>
+
+	  <!-- Table -->
+	  <div class="avoid-page-break">
+	    <table style="width:100%; border-collapse: collapse; font-size:14px; color: #07226c;">
+	      <thead>
+		<tr>
+		  <th style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+		    Metric
+		  </th>
+		  <th style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+		    ${nursingHomeName}
+		  </th>
+		  <th style="width:33.33%; text-align:left; padding:14px; border:1px solid #e6edf5;font-weight:700; color:#07226c;">
+		    National Benchmark*
+		  </th>
+		</tr>
+	      </thead>
+	      <tbody>
+		<tr>
+		  <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+		    30-Day Readmission Rate (Puzzle Patients)
+		  </td>
+		  <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+		    ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%
+		  </td>
+		  <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
+		    ${patientMetrics?.nationalReadmissionsBenchmark}%
+		  </td>
+		</tr>
+	      </tbody>
+	    </table>
+	  </div>
+
+	  <div class="avoid-page-break">
+	    <p style="font-size:13px; margin:12px 0 0 0; color: #07226c;">
+	      Source: CMS SNF QRP 2024 National Averages.
+	    </p>
+	  </div>
 
 
             <div style="margin-top: 36px;" class="avoid-page-break">
