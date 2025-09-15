@@ -131,14 +131,18 @@ export const exportToPDF = async ({
   `;
     });
 
+    // 🔑 Filter out any case study with no engagement_summary_text
+    const outcomeFilteredCaseStudies = caseStudies.filter(
+        story => story.engagement_summary_text && story.engagement_summary_text.trim().length > 0
+    );
 
-   let keyOutcomesHTML = caseStudies.map((study) => {
-    const [first, last] = (study.patient_name || "").split(" ");
-    const shortName = first && last ? `${first} ${last[0]}.` : (study.patient_name || "Unknown");
+    let keyOutcomesHTML = outcomeFilteredCaseStudies.map((study) => {
+        const [first, last] = (study.patient_name || "").split(" ");
+        const shortName = first && last ? `${first[0]}. ${last}` : (study.patient_name || "Unknown");
 
-    const interventionsHTML = (study.detailed_interventions || [])
-        .map(item => `
-            <div style="
+        const interventionsHTML = (study.detailed_interventions || [])
+            .map(item => `
+            <div class="avoid-page-break" style="
                 display: flex; 
                 align-items: flex-start; 
                 margin-bottom: 4px;
@@ -148,9 +152,9 @@ export const exportToPDF = async ({
             </div>
         `).join("");
 
-    const outcomesHTML = (study.detailed_outcomes || [])
-        .map(item => `
-            <div style="
+        const outcomesHTML = (study.detailed_outcomes || [])
+            .map(item => `
+            <div class="avoid-page-break" style="
                 display: flex; 
                 align-items: flex-start; 
                 margin-bottom: 4px;
@@ -160,10 +164,10 @@ export const exportToPDF = async ({
             </div>
         `).join("");
 
-    return `
-        <div style="margin-bottom: 24px; "class="avoid-page-break" >
+        return `
+        <div style="margin-bottom: 24px;">
             <p class="avoid-page-break" style="font-size:14px; font-weight:bold; color:#07226c; margin-bottom:6px;">
-                (${shortName}):
+                ${shortName}:
             </p>
 
             ${interventionsHTML ? `
@@ -181,7 +185,7 @@ export const exportToPDF = async ({
             ` : ""}
         </div>
     `;
-}).join("");
+    }).join("");
 
     let tableRowsHTML = '';
 
@@ -205,11 +209,18 @@ export const exportToPDF = async ({
     color: #07226c;
     ">
     `;
-    const filteredCaseStudies = caseStudies.filter(item => item.patient_id !== expandedPatientId);
+
+    let filteredCaseStudies = caseStudies.filter(item => item.patient_id !== expandedPatientId);
+
+    // 🔑 Filter out any case study with no engagement_summary_text
+    filteredCaseStudies = filteredCaseStudies.filter(
+        story => story.engagement_summary_text && story.engagement_summary_text.trim().length > 0
+    );
+
     filteredCaseStudies.forEach(item => {
         const [first, last] = item.patient_name ? item.patient_name.split(" ") : [];
 
-       cardsHTML += `
+        cardsHTML += `
   <div  style="
     flex: 1 1 calc((100% - 24px) / 3);
     min-width: 200px;
@@ -221,7 +232,7 @@ export const exportToPDF = async ({
     margin-bottom: 16px;
   " >
     <span class="avoid-page-break" style="font-weight:bold; color:#002d74; margin-right:6px;">
-      (${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}):
+      ${first ? first[0] + "." : ""}${last ? last : ""}:
     </span>
     <span class="avoid-page-break" style="font-size:13px; color: #07226c;
 ">
@@ -238,25 +249,31 @@ export const exportToPDF = async ({
 
     if (expandedStory && expandedStory.patient_name && expandedStory.engagement_summary_text) {
         const [first, last] = expandedStory.patient_name.split(" ");
-        const initials = `${first ? first[0] + "." : ""}${last ? last[0] + "." : ""}`;
+        const initials = `${first ? first[0] + "." : ""}${last ? last : ""}`;
 
-       expandedStoryHTML = `
-	  <div class="avoid-page-break" style="margin-top: 36px;">
-	    <h2 style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">
-	      Expanded Resident Success Story: ${initials}
-	    </h2>
-	  </div>
-	  
-	    <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px;">
-	      <p style="color: #07226c">${expandedStory.hospital_discharge_summary_text}</p>
-	    </div>
-	    <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px;"">
-	      <p style="color: #07226c">${expandedStory.facility_summary_text}</p>
-	    </div>
-	    <div class="avoid-page-break" style="border-left: 3px solid #D3F1FC; padding-left: 16px;"">
-	      <p style="color: #07226c">${expandedStory.engagement_summary_text}</p>
-	    </div>
-	`;
+        expandedStoryHTML = `
+  <div  style="
+    flex: 1 1 calc((100% - 24px) / 3);
+    min-width: 200px;
+    padding: 10px;
+    color: #07226c;
+    border: 1px solid #d7e3f4;
+    border-radius: 8px;
+    box-sizing: border-box;
+    margin-bottom: 16px;
+  " >
+    <span class="avoid-page-break" style="font-weight:bold; color:#002d74; margin-right:6px;">
+      <h2  style="margin: 0 0 16px 0; font-size: 28px; color: #07226c; font-weight: 700;">Expanded Resident Success Story: ${initials}</h2>
+    </span>
+    <span class="avoid-page-break" style="font-size:13px; color: #07226c;
+">
+      ${expandedStory.hospital_discharge_summary_text}
+        ${expandedStory.facility_summary_text}
+      ${expandedStory.engagement_summary_text}
+
+    </span>
+  </div>
+`;
     }
 
 
@@ -551,34 +568,26 @@ export const exportToPDF = async ({
                     </div>
                 </div>
             </div>
-             <div style="margin-top: 36px;" class="avoid-page-break">
-		        <h2  style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
-		    </div>
-		       <div style="margin-top: 36px;margin-bottom: 20px;" class="avoid-page-break">
-		        <p  style="color: #07226c;">${patientMetrics?.closingStatement}</p>
-		    </div>
+            <div style="margin-top: 36px; margin-bottom: 30px">
+                <h2 class="avoid-page-break" style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
+                <p class="avoid-page-break" style="color: #07226c;">${patientMetrics?.closingStatement}</p>
+            </div>
         </div>
 </body>
 
 </html>
    `;
     console.log("htmlContentVal", htmlContentVal)
-
     const container = document.createElement("div");
     container.style.position = "fixed";
     container.style.left = "-9999px";
     container.style.top = "0";
-    container.style.width = "1200px";
-      container.style.boxSizing = "border-box";
     container.innerHTML = htmlContentVal;
     document.body.appendChild(container);
 
-    await new Promise((r) => setTimeout(r, 120));
-
-    const captureScale = Math.max(2, window.devicePixelRatio || 1);
-
+    // 2. Render to tall canvas
     const canvas = await html2canvas(container, {
-        scale: captureScale,
+        scale: 2.5,
         useCORS: true,
         allowTaint: true,
         logging: false,
@@ -587,166 +596,131 @@ export const exportToPDF = async ({
     });
 
     const scaleY = canvas.height / container.scrollHeight;
+    const rawEls = Array.from(container.querySelectorAll(".avoid-page-break"));
+    const groups: { top: number; bottom: number; height: number }[] = [];
 
-    const rawEls = Array.from(
-        container.querySelectorAll<HTMLElement>(".avoid-page-break")
-    );
-    const containerRect = container.getBoundingClientRect();
+    if (rawEls.length > 0) {
+        let currentGroup: HTMLElement[] = [rawEls[0] as HTMLElement];
 
-    const elBoxes = rawEls.map((el) => {
-        const r = el.getBoundingClientRect();
-        const topInContainer = r.top - containerRect.top + container.scrollTop;
-        const bottomInContainer = r.bottom - containerRect.top + container.scrollTop;
-        const topPx = topInContainer * scaleY;
-        const bottomPx = bottomInContainer * scaleY;
-        return { el, topPx, bottomPx, heightPx: bottomPx - topPx };
-    });
+        for (let i = 1; i < rawEls.length; i++) {
+            const prev = rawEls[i - 1] as HTMLElement;
+            const curr = rawEls[i] as HTMLElement;
 
-    type GroupBox = {
-        top: number;
-        bottom: number;
-        height: number;
-        els: HTMLElement[];
-    };
-
-    const groups: GroupBox[] = [];
-    if (elBoxes.length) {
-        let current: GroupBox = {
-            top: elBoxes[0].topPx,
-            bottom: elBoxes[0].bottomPx,
-            height: elBoxes[0].heightPx,
-            els: [elBoxes[0].el],
-        };
-
-        for (let i = 1; i < elBoxes.length; i++) {
-            const prev = elBoxes[i - 1];
-            const curr = elBoxes[i];
-
-            const domAdjacent = prev.el.nextElementSibling === curr.el;
-            const visuallyAdjacent = curr.topPx - prev.bottomPx <= 10;
-
-            if (domAdjacent || visuallyAdjacent) {
-                current.bottom = Math.max(current.bottom, curr.bottomPx);
-                current.height = current.bottom - current.top;
-                current.els.push(curr.el);
+            // Check if consecutive in DOM
+            if (prev.nextElementSibling === curr) {
+                currentGroup.push(curr);
             } else {
-                groups.push({ ...current });
-                current = {
-                    top: curr.topPx,
-                    bottom: curr.bottomPx,
-                    height: curr.heightPx,
-                    els: [curr.el],
-                };
+                // Finalize previous group
+                groups.push(groupToBox(currentGroup, scaleY));
+                currentGroup = [curr];
             }
         }
-        groups.push({ ...current });
+
+        // Final group
+        if (currentGroup.length > 0) {
+            groups.push(groupToBox(currentGroup, scaleY));
+        }
     }
 
+    // Helper to convert group of elements to bounding box in canvas coords
+    function groupToBox(els: HTMLElement[], scaleY: number) {
+        const top = els[0].offsetTop * scaleY;
+        const last = els[els.length - 1];
+        const bottom = (last.offsetTop + last.offsetHeight) * scaleY;
+        return {
+            top,
+            bottom,
+            height: bottom - top,
+        };
+    }
+
+    // Safe to remove container
     document.body.removeChild(container);
 
+    // 4. Setup PDF
     const pdf = new jsPDF("p", "mm", "a4");
     const pdfMargin = 10;
     const pdfPageWidth = pdf.internal.pageSize.getWidth();
     const pdfPageHeight = pdf.internal.pageSize.getHeight();
     const usableWidth = pdfPageWidth - pdfMargin * 2;
     const usableHeight = pdfPageHeight - pdfMargin * 2;
-
     const pageHeightInPixels = (usableHeight * canvas.width) / usableWidth;
 
+    // 5. Slice pages
     let yPosition = 0;
     let remainingHeight = canvas.height;
     let isFirstPage = true;
 
     while (remainingHeight > 0) {
-        if (!isFirstPage) pdf.addPage();
+        if (!isFirstPage) {
+            pdf.addPage();
+        }
 
-        let sliceStart = yPosition;
-        let sliceEnd = yPosition + pageHeightInPixels;
-        let oversizedGroup: GroupBox | null = null;
+        let potentialSliceEnd = yPosition + pageHeightInPixels;
+        let actualSliceEnd = potentialSliceEnd;
 
-        for (const g of groups) {
-            if (g.top >= sliceEnd || g.bottom <= sliceStart) continue;
+        // Adjust slice if a group crosses
+        groups.forEach(group => {
+            if (group.top < potentialSliceEnd && group.bottom > potentialSliceEnd) {
+                if (group.height <= pageHeightInPixels) {
+                    // Fits in one page → push group fully to next page
+                    if (group.top > yPosition) {
+                        actualSliceEnd = Math.min(actualSliceEnd, group.top);
 
-            if (g.top >= sliceStart && g.top < sliceEnd) {
-                if (g.bottom > sliceEnd) {
-                    if (g.height <= pageHeightInPixels) {
-                        sliceEnd = g.top;
-                    } else {
-                        oversizedGroup = g;
-                        sliceStart = g.top;
-                        sliceEnd = g.bottom;
-                        break;
+                        // If too close → skip page
+                        if (actualSliceEnd <= yPosition + 50) {
+                            actualSliceEnd = yPosition;
+                        }
                     }
+                } else {
+                    // Group taller than page → allow breaking
+                    actualSliceEnd = potentialSliceEnd;
                 }
             }
+        });
 
-            if (g.top < sliceStart && g.bottom > sliceStart) {
-                sliceStart = Math.min(sliceStart, g.top);
-                sliceEnd = Math.max(sliceEnd, g.bottom);
-            }
-        }
+        let sliceHeight = actualSliceEnd - yPosition;
 
-        if (sliceEnd <= sliceStart) {
-            sliceEnd = sliceStart + pageHeightInPixels;
-            if (sliceEnd > canvas.height) sliceEnd = canvas.height;
-        }
-
-        let sliceHeight = Math.min(sliceEnd - sliceStart, remainingHeight);
         if (sliceHeight <= 0) {
-            yPosition += pageHeightInPixels;
+            // Skip page
+            yPosition = potentialSliceEnd;
             remainingHeight -= pageHeightInPixels;
             isFirstPage = false;
             continue;
         }
 
+        sliceHeight = Math.min(sliceHeight, remainingHeight);
+
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
-        pageCanvas.height = Math.ceil(sliceHeight);
-        const ctx = pageCanvas.getContext("2d")!;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        pageCanvas.height = sliceHeight;
+        const ctx = pageCanvas.getContext("2d");
 
-        ctx.drawImage(
-            canvas,
-            0,
-            sliceStart,
-            canvas.width,
-            sliceHeight,
-            0,
-            0,
-            canvas.width,
-            sliceHeight
-        );
+        if (ctx) {
+            ctx.drawImage(
+                canvas,
+                0,
+                yPosition,
+                canvas.width,
+                sliceHeight,
+                0,
+                0,
+                canvas.width,
+                sliceHeight
+            );
 
-        if (oversizedGroup) {
-            const groupHeight = oversizedGroup.height;
-            const groupWidth = canvas.width;
-            const scale = Math.min(usableWidth / groupWidth, usableHeight / groupHeight);
-            const displayWidth = groupWidth * scale;
-            const displayHeight = groupHeight * scale;
+            const imgData = pageCanvas.toDataURL("image/jpeg", 1);
+            const imgHeight = (sliceHeight * usableWidth) / canvas.width;
 
-            const imgData = pageCanvas.toDataURL("image/jpeg", 1.0);
-            const xOffset = pdfMargin + Math.max(0, (usableWidth - displayWidth) / 2);
-
-            pdf.addImage(imgData, "JPEG", xOffset, pdfMargin, displayWidth, displayHeight);
-
-            yPosition = sliceEnd;
-            remainingHeight = canvas.height - yPosition;
-            isFirstPage = false;
-            pageCanvas.remove();
-            continue;
+            pdf.addImage(imgData, "JPEG", pdfMargin, pdfMargin, usableWidth, imgHeight);
         }
-
-        const imgData = pageCanvas.toDataURL("image/jpeg", 1.0);
-        const imgHeightPdfUnits = (sliceHeight * usableWidth) / canvas.width;
-        pdf.addImage(imgData, "JPEG", pdfMargin, pdfMargin, usableWidth, imgHeightPdfUnits);
 
         yPosition += sliceHeight;
         remainingHeight -= sliceHeight;
         isFirstPage = false;
-        pageCanvas.remove();
     }
 
+    // 6. Save or return
     if (returnBlob) {
         return pdf.output("blob");
     } else {
@@ -912,7 +886,7 @@ const createDocumentStyles = () => ({
             },
         },
     ],
-     tableStyles: [
+    tableStyles: [
         {
             id: "cardCell",
             name: "Card Cell",
@@ -1029,7 +1003,7 @@ interface ReportData {
         patientId: string;
         interventions: string[];
         outcomes: string[];
-        patientName:string;
+        patientName: string;
     }>;
     caseStudies: CaseStudy[]
     nationalBenchmark: string;
@@ -1110,7 +1084,7 @@ function createCard(title: string, rows: TableRow[]) {
                                 text: title,
                                 style: "cardTitle",
                                 alignment: AlignmentType.CENTER,
-                                spacing: { after: 240,before:200 },
+                                spacing: { after: 240, before: 200 },
                             }),
                         ],
                         borders: noBorder,
@@ -1168,7 +1142,7 @@ const noBorder = {
     left: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
     right: { style: BorderStyle.SINGLE, size: 1, color: "FFFFFF" },
 };
-const createCaseStudyCard = (study: CaseStudy|undefined) => {
+const createCaseStudyCard = (study: CaseStudy | undefined) => {
 
     return [
         // Spacer paragraph for top margin between cards
@@ -1219,7 +1193,7 @@ const createCaseStudyCard = (study: CaseStudy|undefined) => {
                                 new Paragraph({
                                     children: [
                                         new TextRun({
-                                            text: study?.facility_summary_text  || "",
+                                            text: study?.facility_summary_text || "",
                                             size: 20,
                                             color: "002d74",
                                             font: "Arial",
@@ -1328,62 +1302,62 @@ function createCardLayoutTable(data: CaseStudy[], expandedPatientId: string) {
         const cells: TableCell[] = [];
 
         for (let c = 0; c < itemsPerRow; c++) {
-    const study = filteredCaseStudies[startIndex + c];
+            const study = filteredCaseStudies[startIndex + c];
 
-    if (study) {
-        const nameParts = (study.patient_name || "").split(" ");
-        const shortName = nameParts.length >= 2
-            ? `${nameParts[0][0]}.${nameParts[1][0]}.`
-            : study.patient_name || "";
+            if (study) {
+                const nameParts = (study.patient_name || "").split(" ");
+                const shortName = nameParts.length >= 2
+                    ? `${nameParts[0][0]}.${nameParts[1][0]}.`
+                    : study.patient_name || "";
 
-        cells.push(
-            new TableCell({
-                width: { size: widthPerCard, type: WidthType.PERCENTAGE },
-                margins: {
-                    top: 200,
-                    bottom: 200,
-                    left: 100,
-                    right: 100,
-                },
-                borders: {
-                    top: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
-                    bottom: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
-                    left: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
-                    right: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
-                },
-                verticalAlign: VerticalAlign.TOP,
-                children: [
-                    new Paragraph({
+                cells.push(
+                    new TableCell({
+                        width: { size: widthPerCard, type: WidthType.PERCENTAGE },
+                        margins: {
+                            top: 200,
+                            bottom: 200,
+                            left: 100,
+                            right: 100,
+                        },
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
+                            bottom: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
+                            left: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
+                            right: { style: BorderStyle.SINGLE, size: 2, color: "d7e3f4" },
+                        },
+                        verticalAlign: VerticalAlign.TOP,
                         children: [
-                            new TextRun({
-                                text: `(${shortName}):`,
-                                bold: true,
-                                size: 20,
-                                font: "Arial",
-                                color: "002d74",
-                            }),
-                            new TextRun({
-                                text: study.engagement_summary_text || "",
-                                size: 20,
-                                font: "Arial",
-                                color: "07226c",
+                            new Paragraph({
+                                children: [
+                                    new TextRun({
+                                        text: `(${shortName}):`,
+                                        bold: true,
+                                        size: 20,
+                                        font: "Arial",
+                                        color: "002d74",
+                                    }),
+                                    new TextRun({
+                                        text: study.engagement_summary_text || "",
+                                        size: 20,
+                                        font: "Arial",
+                                        color: "07226c",
+                                    }),
+                                ],
                             }),
                         ],
-                    }),
-                ],
-            })
-        );
-    } else {
-        // Empty placeholder cell
-        cells.push(
-            new TableCell({
-                width: { size: widthPerCard, type: WidthType.PERCENTAGE },
-                borders: noBorder,
-                children: [],
-            })
-        );
-    }
-}
+                    })
+                );
+            } else {
+                // Empty placeholder cell
+                cells.push(
+                    new TableCell({
+                        width: { size: widthPerCard, type: WidthType.PERCENTAGE },
+                        borders: noBorder,
+                        children: [],
+                    })
+                );
+            }
+        }
 
 
         rows.push(
@@ -1411,8 +1385,8 @@ function createCardLayoutTable(data: CaseStudy[], expandedPatientId: string) {
                 ],
                 height: {
                     value: 200,
-                    rule: HeightRule.ATLEAST, 
-                }, 
+                    rule: HeightRule.ATLEAST,
+                },
             }));
         }
     }
@@ -1594,8 +1568,8 @@ const generateDocument = async (data: ReportData) => {
 
                     ...data.keyInterventions.map(study => {
                         const patientName = study.patientName.split(" ");
-                        const shortName = patientName.length >= 2 
-                            ? `${patientName[0][0]}.${patientName[1][0]}.` 
+                        const shortName = patientName.length >= 2
+                            ? `${patientName[0][0]}.${patientName[1][0]}.`
                             : study.patientName;
 
                         return [
@@ -1625,7 +1599,7 @@ const generateDocument = async (data: ReportData) => {
                                     ],
                                     spacing: { before: 120, after: 80 },
                                 }),
-                                ...study.interventions.map(intervention => 
+                                ...study.interventions.map(intervention =>
                                     new Paragraph({
                                         children: [
                                             new TextRun({
@@ -1659,7 +1633,7 @@ const generateDocument = async (data: ReportData) => {
                                     ],
                                     spacing: { before: 120, after: 80 },
                                 }),
-                                ...study.outcomes.map(outcome => 
+                                ...study.outcomes.map(outcome =>
                                     new Paragraph({
                                         children: [
                                             new TextRun({
@@ -1689,279 +1663,279 @@ const generateDocument = async (data: ReportData) => {
                         ];
                     }).flat(),
                     new Paragraph({
-                            text: "Case Study Highlights: Individual Patient Successes",
-                            style: "heading2",
-                            spacing: { before: 360, after: 150 },
-                        }),
+                        text: "Case Study Highlights: Individual Patient Successes",
+                        style: "heading2",
+                        spacing: { before: 360, after: 150 },
+                    }),
 
 
                     createCardLayoutTable(data.caseStudies, data.expandedPatientId),
-                     ...(data.expandedPatientId ? [
-                            new Paragraph({
-                                children: [
-                                    new TextRun({
-                                        text: `Expanded Resident Success Story: ${(() => {
-                                            const story = data.caseStudies.find(study => study.patient_id === data.expandedPatientId);
-                                            if (!story?.patient_name) return "";
-                                            const parts = story.patient_name.trim().split(/\s+/);
-                                            const firstInitial = parts[0]?.[0] ? parts[0][0] + "." : "";
-                                            const lastInitial = parts[1]?.[0] ? parts[1][0] + "." : "";
-                                            return `${firstInitial}${lastInitial}`;
-                                        })()}`,
-                                        bold: true,
-                                        size: 40,
-                                        font: "Arial",
-                                        color: "07226C",
-                                    }),
-                                ],
-                                spacing: { before: 720, after: 100 },
-                            }),
-                            ...createCaseStudyCard(data.caseStudies.find(study => study.patient_id === data.expandedPatientId)),
-                        ] : []),
-
-                        new Paragraph({
-                            text: "National Benchmark Comparison",
-                            style: "heading2",
-                            spacing: { before: 720, after: 320 },
-                        }),
-
-                        new Table({
-                            width: { size: 100, type: WidthType.PERCENTAGE },
-                            layout: TableLayoutType.FIXED,
-                            borders: {
-                                top: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
-                                bottom: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
-                                left: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
-                                right: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
-                            },
-                            rows: [
-                                // Header Row
-                                new TableRow({
-                                    children: [
-                                        createCell({
-                                            text: "Metric",
-                                            isHeader: true,
-                                            bold: true,
-                                            borderColor: "e6edf5",
-                                            bgColor: undefined,
-                                            isCenter: false,
-                                        }),
-                                        createCell({
-                                            text: data.facilityName,
-                                            isHeader: true,
-                                            bold: true,
-                                            borderColor: "e6edf5",
-                                            isCenter: false,
-                                        }),
-                                        createCell({
-                                            text: "National Benchmark*",
-                                            isHeader: true,
-                                            bold: true,
-                                            borderColor: "e6edf5",
-                                            isCenter: false,
-                                        }),
-                                    ],
-                                }),
-                                // Data Row
-                                new TableRow({
-                                    children: [
-                                        createCell({
-                                            text: "30-Day Readmission Rate (Puzzle Patients)",
-                                            borderColor: "eef4f9",
-                                            bgColor: "f5f5f5",
-                                            isCenter: false,
-                                        }),
-                                        createCell({
-                                            text: `${data.patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%`,
-                                            borderColor: "eef4f9",
-                                            bgColor: "f5f5f5",
-                                            isCenter: false,
-                                        }),
-                                        createCell({
-                                            text: `${data.patientMetrics?.nationalReadmissionsBenchmark}%`,
-                                            borderColor: "eef4f9",
-                                            bgColor: "f5f5f5",
-                                            isCenter: false,
-                                        }),
-                                    ],
-                                }),
-                            ],
-                        }),
-
+                    ...(data.expandedPatientId ? [
                         new Paragraph({
                             children: [
                                 new TextRun({
-                                    text: "Source: CMS SNF QRP 2024 National Averages.",
-                                    size: 20,
-                                    color: "07226c",
-                                    font: "Arial",
-                                }),
-                            ],
-                            spacing: { before: 240, after: 240 },
-                        }),
-
-                        new Paragraph({
-                            children: [
-                                new TextRun({
-                                    text: "Ongoing Focus Areas",
-                                    font: "Arial",
-                                    size: 40, // 28px
+                                    text: `Expanded Resident Success Story: ${(() => {
+                                        const story = data.caseStudies.find(study => study.patient_id === data.expandedPatientId);
+                                        if (!story?.patient_name) return "";
+                                        const parts = story.patient_name.trim().split(/\s+/);
+                                        const firstInitial = parts[0]?.[0] ? parts[0][0] + "." : "";
+                                        const lastInitial = parts[1]?.[0] ? parts[1][0] + "." : "";
+                                        return `${firstInitial}${lastInitial}`;
+                                    })()}`,
                                     bold: true,
+                                    size: 40,
+                                    font: "Arial",
                                     color: "07226C",
                                 }),
                             ],
-                            spacing: { before: 720, after: 320 },
+                            spacing: { before: 720, after: 100 },
                         }),
+                        ...createCaseStudyCard(data.caseStudies.find(study => study.patient_id === data.expandedPatientId)),
+                    ] : []),
 
-                        new Table({
-                            width: { size: 100, type: WidthType.PERCENTAGE },
-                            borders: noBorder,
-                            rows: [
-                                new TableRow({
-                                    children: [
-                                        // First card
-                                        new TableCell({
-                                            borders: noBorder,
-                                            children: [
-                                                new Paragraph({
-                                                    children: [
-                                                        new ImageRun({
-                                                            data: img1,
-                                                            transformation: { width: 218, height: 65 }, // Fits cell
-                                                            type: "png",
-                                                        }),
-                                                    ],
-                                                }),
-                                                new Paragraph({
-                                                    children: [
-                                                        new TextRun({
-                                                            text: "Reduce Readmissions",
-                                                            bold: true,
-                                                            font: "Arial",
-                                                            size: 24,
-                                                            color: "07226C",
-                                                        }),
-                                                    ],
-                                                    spacing: { before: 150, after: 150 },
-                                                }),
-                                                new Paragraph({
-                                                    children: [
-                                                        new TextRun({
-                                                            text: "Through proactive escalation and earlier detection.",
-                                                            size: 20,
-                                                            font: "Arial",
-                                                            color: "07226C",
-                                                        }),
-                                                    ],
-                                                    spacing: { before: 150, after: 150 },
-                                                }),
-                                            ],
-                                        }),
+                    new Paragraph({
+                        text: "National Benchmark Comparison",
+                        style: "heading2",
+                        spacing: { before: 720, after: 320 },
+                    }),
 
-                                        // Second card
-                                        new TableCell({
-                                            borders: noBorder,
-                                            children: [
-                                                new Paragraph({
-                                                    children: [
-                                                        new ImageRun({
-                                                            data: img2,
-                                                            transformation: { width: 218, height: 65 }, // Fits cell
-                                                            type: "png",
-                                                        }),
-                                                    ],
-                                                }),
-                                                new Paragraph({
-                                                    children: [
-                                                        new TextRun({
-                                                            text: "Strengthen Fall Prevention",
-                                                            bold: true,
-                                                            font: "Arial",
-                                                            size: 24,
-                                                            color: "07226C",
-                                                        }),
-                                                    ],
-                                                    spacing: { before: 150, after: 150 },
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        layout: TableLayoutType.FIXED,
+                        borders: {
+                            top: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                            bottom: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                            left: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                            right: { style: BorderStyle.SINGLE, size: 4, color: "e6edf5" },
+                        },
+                        rows: [
+                            // Header Row
+                            new TableRow({
+                                children: [
+                                    createCell({
+                                        text: "Metric",
+                                        isHeader: true,
+                                        bold: true,
+                                        borderColor: "e6edf5",
+                                        bgColor: undefined,
+                                        isCenter: false,
+                                    }),
+                                    createCell({
+                                        text: data.facilityName,
+                                        isHeader: true,
+                                        bold: true,
+                                        borderColor: "e6edf5",
+                                        isCenter: false,
+                                    }),
+                                    createCell({
+                                        text: "National Benchmark*",
+                                        isHeader: true,
+                                        bold: true,
+                                        borderColor: "e6edf5",
+                                        isCenter: false,
+                                    }),
+                                ],
+                            }),
+                            // Data Row
+                            new TableRow({
+                                children: [
+                                    createCell({
+                                        text: "30-Day Readmission Rate (Puzzle Patients)",
+                                        borderColor: "eef4f9",
+                                        bgColor: "f5f5f5",
+                                        isCenter: false,
+                                    }),
+                                    createCell({
+                                        text: `${data.patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%`,
+                                        borderColor: "eef4f9",
+                                        bgColor: "f5f5f5",
+                                        isCenter: false,
+                                    }),
+                                    createCell({
+                                        text: `${data.patientMetrics?.nationalReadmissionsBenchmark}%`,
+                                        borderColor: "eef4f9",
+                                        bgColor: "f5f5f5",
+                                        isCenter: false,
+                                    }),
+                                ],
+                            }),
+                        ],
+                    }),
 
-                                                }),
-                                                new Paragraph({
-                                                    children: [
-                                                        new TextRun({
-                                                            text: "With enhanced assessments and environment safety reviews.",
-                                                            size: 20,
-                                                            font: "Arial",
-                                                            color: "07226C",
-                                                        }),
-                                                    ],
-                                                    spacing: { before: 150, after: 150 },
-                                                }),
-                                            ],
-                                        }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "Source: CMS SNF QRP 2024 National Averages.",
+                                size: 20,
+                                color: "07226c",
+                                font: "Arial",
+                            }),
+                        ],
+                        spacing: { before: 240, after: 240 },
+                    }),
 
-                                        // Third card
-                                        new TableCell({
-                                            borders: noBorder,
-                                            children: [
-                                                new Paragraph({
-                                                    children: [
-                                                        new ImageRun({
-                                                            data: img3,
-                                                            transformation: { width: 218, height: 65 }, // Fits cell
-                                                            type: "png",
-                                                        }),
-                                                    ],
-                                                }),
-                                                new Paragraph({
-                                                    children: [
-                                                        new TextRun({
-                                                            text: "Advance CHF Management",
-                                                            bold: true,
-                                                            size: 24,
-                                                            font: "Arial",
-                                                            color: "07226C",
-                                                        }),
-                                                    ],
-                                                    spacing: { before: 150, after: 150 },
-                                                }),
-                                                new Paragraph({
-                                                    children: [
-                                                        new TextRun({
-                                                            text: "By prioritizing early symptom monitoring and follow-up adherence.",
-                                                            size: 20,
-                                                            color: "07226C",
-                                                            font: "Arial",
-                                                        }),
-                                                    ],
-                                                    spacing: { before: 150, after: 150 },
-                                                }),
-                                            ],
-                                        }),
-                                    ],
-                                }),
-                            ],
-                        }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "Ongoing Focus Areas",
+                                font: "Arial",
+                                size: 40, // 28px
+                                bold: true,
+                                color: "07226C",
+                            }),
+                        ],
+                        spacing: { before: 720, after: 320 },
+                    }),
 
-                        new Paragraph({
-                            children: [
-                                new TextRun({
-                                    text: "Closing Summary",
-                                }),
-                            ],
-                            style: "heading2",
-                            spacing: { before: 720, after: 200 },
-                        }),
-                        new Paragraph({
-                            children: [
-                                new TextRun({
-                                    text: data.patientMetrics.closingStatement,
-                                    color: "07226c",
-                                    font: "Arial",
-                                    size: 20,
-                                }),
-                            ],
-                            alignment: AlignmentType.LEFT,
-                            spacing: { after: 240 },
-                        }),
+                    new Table({
+                        width: { size: 100, type: WidthType.PERCENTAGE },
+                        borders: noBorder,
+                        rows: [
+                            new TableRow({
+                                children: [
+                                    // First card
+                                    new TableCell({
+                                        borders: noBorder,
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new ImageRun({
+                                                        data: img1,
+                                                        transformation: { width: 218, height: 65 }, // Fits cell
+                                                        type: "png",
+                                                    }),
+                                                ],
+                                            }),
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "Reduce Readmissions",
+                                                        bold: true,
+                                                        font: "Arial",
+                                                        size: 24,
+                                                        color: "07226C",
+                                                    }),
+                                                ],
+                                                spacing: { before: 150, after: 150 },
+                                            }),
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "Through proactive escalation and earlier detection.",
+                                                        size: 20,
+                                                        font: "Arial",
+                                                        color: "07226C",
+                                                    }),
+                                                ],
+                                                spacing: { before: 150, after: 150 },
+                                            }),
+                                        ],
+                                    }),
+
+                                    // Second card
+                                    new TableCell({
+                                        borders: noBorder,
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new ImageRun({
+                                                        data: img2,
+                                                        transformation: { width: 218, height: 65 }, // Fits cell
+                                                        type: "png",
+                                                    }),
+                                                ],
+                                            }),
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "Strengthen Fall Prevention",
+                                                        bold: true,
+                                                        font: "Arial",
+                                                        size: 24,
+                                                        color: "07226C",
+                                                    }),
+                                                ],
+                                                spacing: { before: 150, after: 150 },
+
+                                            }),
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "With enhanced assessments and environment safety reviews.",
+                                                        size: 20,
+                                                        font: "Arial",
+                                                        color: "07226C",
+                                                    }),
+                                                ],
+                                                spacing: { before: 150, after: 150 },
+                                            }),
+                                        ],
+                                    }),
+
+                                    // Third card
+                                    new TableCell({
+                                        borders: noBorder,
+                                        children: [
+                                            new Paragraph({
+                                                children: [
+                                                    new ImageRun({
+                                                        data: img3,
+                                                        transformation: { width: 218, height: 65 }, // Fits cell
+                                                        type: "png",
+                                                    }),
+                                                ],
+                                            }),
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "Advance CHF Management",
+                                                        bold: true,
+                                                        size: 24,
+                                                        font: "Arial",
+                                                        color: "07226C",
+                                                    }),
+                                                ],
+                                                spacing: { before: 150, after: 150 },
+                                            }),
+                                            new Paragraph({
+                                                children: [
+                                                    new TextRun({
+                                                        text: "By prioritizing early symptom monitoring and follow-up adherence.",
+                                                        size: 20,
+                                                        color: "07226C",
+                                                        font: "Arial",
+                                                    }),
+                                                ],
+                                                spacing: { before: 150, after: 150 },
+                                            }),
+                                        ],
+                                    }),
+                                ],
+                            }),
+                        ],
+                    }),
+
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "Closing Summary",
+                            }),
+                        ],
+                        style: "heading2",
+                        spacing: { before: 720, after: 200 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: data.patientMetrics.closingStatement,
+                                color: "07226c",
+                                font: "Arial",
+                                size: 20,
+                            }),
+                        ],
+                        alignment: AlignmentType.LEFT,
+                        spacing: { after: 240 },
+                    }),
                 ],
             },
         ],

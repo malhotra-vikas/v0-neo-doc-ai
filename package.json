@@ -5,11 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "clean": "rimraf .next",
+    "prestart": "npm run clean && npm run build",
+    "start": "next start -p 3000",
     "lint": "next lint",
-    "start-ec2": "next start -p 3000",
+    "start-ec2": "npm run clean && npm run build && next start -p 3000",
     "dev-ec2": "next dev -p 3000",
-    "deploy-ec2": "npm install && npm run build"
+    "deploy-ec2": "npm install && npm run clean && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
