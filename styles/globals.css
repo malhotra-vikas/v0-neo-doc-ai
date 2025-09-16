@@ -92,3 +92,7 @@ body {
     @apply bg-background text-foreground;
   }
 }
+.avoid-page-break {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+}
