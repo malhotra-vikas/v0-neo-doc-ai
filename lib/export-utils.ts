@@ -556,9 +556,11 @@ export const exportToPDF = async ({
                     </div>
                 </div>
             </div>
-            <div style="margin-top: 36px; margin-bottom: 30px">
-                <h2 class="avoid-page-break" style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
-                <p class="avoid-page-break" style="color: #07226c;">${patientMetrics?.closingStatement}</p>
+            <div class="avoid-page-break" style="margin-top: 36px; margin-bottom: 30px">
+            </div>
+            <div class="avoid-page-break" style="margin-top: 50px; margin-bottom: 30px">
+                <h2 style="margin: 0 0 0 0; font-size: 28px; color: #07226c; font-weight: 700;margin-bottom:16px;">Closing Summary</h2>
+                <p style="color: #07226c;">${patientMetrics?.closingStatement}</p>
             </div>
         </div>
 </body>
