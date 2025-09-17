@@ -17,8 +17,7 @@ export default function ResetPasswordPage() {
     const [pw1, setPw1] = useState("");
     const [pw2, setPw2] = useState("");
 
-    // Detect recovery token. Supabase sends: #access_token=...&type=recovery
-    // Some setups may pass ?type=recovery too — we support both.
+    // Detect recovery type from hash or query
     const recoveryType = useMemo(() => {
         const hashParams = new URLSearchParams(
             typeof window !== "undefined" ? window.location.hash.slice(1) : ""
@@ -29,15 +28,27 @@ export default function ResetPasswordPage() {
     }, [search]);
 
     useEffect(() => {
-        // If the link is a valid recovery link, there is already a session.
-        // We just show the form. Otherwise tell the user the link is invalid/expired.
         (async () => {
+            const token = search.get("token");
+            const type = search.get("type");
+
+            if (token && type === "recovery") {
+                // Exchange token (query param style link)
+                const { data, error: exchError } =
+                    await supabase.auth.exchangeCodeForSession(token);
+                if (exchError || !data.session) {
+                    setError("Reset link is invalid or has expired.");
+                    return;
+                }
+                setReady(true);
+                return;
+            }
+
+            // Fallback: hash-based link (#access_token=...)
             const { data } = await supabase.auth.getSession();
             if (recoveryType === "recovery" && data.session) {
                 setReady(true);
             } else if (recoveryType === "recovery") {
-                // Occasionally the hash may be missing by the time the page renders (rare).
-                // Force a re-check after a tick.
                 setTimeout(async () => {
                     const { data: d2 } = await supabase.auth.getSession();
                     setReady(!!d2.session);
@@ -47,7 +58,7 @@ export default function ResetPasswordPage() {
                 setError("Reset link is invalid or has expired.");
             }
         })();
-    }, [recoveryType, supabase]);
+    }, [recoveryType, search, supabase]);
 
     const onSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -68,13 +79,13 @@ export default function ResetPasswordPage() {
         setUpdating(false);
 
         if (updateErr) {
-            setError(updateErr.message || "Failed to update password.");
+            setError("Something went wrong. Please try again.");
             return;
         }
 
         setOk("Password updated. Redirecting to login…");
-        // Clear hash for cleanliness then redirect.
-        window.location.hash = "";
+        // Clean up URL hash without reload
+        history.replaceState(null, "", window.location.pathname + window.location.search);
         setTimeout(() => router.push("/login"), 1200);
     };
 
@@ -102,47 +113,51 @@ export default function ResetPasswordPage() {
                 </div>
             )}
 
-            <form onSubmit={onSubmit} className="space-y-4">
-                <div>
-                    <label className="block text-sm mb-1" htmlFor="pw1">
-                        New password
-                    </label>
-                    <input
-                        id="pw1"
-                        type="password"
-                        className="w-full rounded-md border px-3 py-2"
-                        value={pw1}
-                        onChange={(e) => setPw1(e.target.value)}
-                        autoComplete="new-password"
-                        required
-                        minLength={8}
-                    />
-                </div>
+            {ready && (
+                <form onSubmit={onSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm mb-1" htmlFor="pw1">
+                            New password
+                        </label>
+                        <input
+                            id="pw1"
+                            type="password"
+                            className="w-full rounded-md border px-3 py-2"
+                            value={pw1}
+                            onChange={(e) => setPw1(e.target.value)}
+                            autoComplete="new-password"
+                            required
+                            minLength={8}
+                            disabled={updating}
+                        />
+                    </div>
 
-                <div>
-                    <label className="block text-sm mb-1" htmlFor="pw2">
-                        Confirm new password
-                    </label>
-                    <input
-                        id="pw2"
-                        type="password"
-                        className="w-full rounded-md border px-3 py-2"
-                        value={pw2}
-                        onChange={(e) => setPw2(e.target.value)}
-                        autoComplete="new-password"
-                        required
-                        minLength={8}
-                    />
-                </div>
+                    <div>
+                        <label className="block text-sm mb-1" htmlFor="pw2">
+                            Confirm new password
+                        </label>
+                        <input
+                            id="pw2"
+                            type="password"
+                            className="w-full rounded-md border px-3 py-2"
+                            value={pw2}
+                            onChange={(e) => setPw2(e.target.value)}
+                            autoComplete="new-password"
+                            required
+                            minLength={8}
+                            disabled={updating}
+                        />
+                    </div>
 
-                <button
-                    type="submit"
-                    disabled={updating}
-                    className="w-full rounded-md border px-3 py-2 disabled:opacity-60"
-                >
-                    {updating ? "Updating…" : "Update password"}
-                </button>
-            </form>
+                    <button
+                        type="submit"
+                        disabled={updating}
+                        className="w-full rounded-md border px-3 py-2 disabled:opacity-60"
+                    >
+                        {updating ? "Updating…" : "Update password"}
+                    </button>
+                </form>
+            )}
 
             <p className="mt-4 text-sm text-gray-600">
                 If this link is expired, go back to{" "}
