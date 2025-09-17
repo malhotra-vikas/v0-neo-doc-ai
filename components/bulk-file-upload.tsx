@@ -89,6 +89,27 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
     logger.info(COMPONENT, "File removed", { index, remainingFiles: newFiles.length })
   }
 
+  const formatPatientName = (value: string) => {
+    const cleaned = value.replace(/\s+/g, " ").trim()
+    if (!cleaned) {
+      return ""
+    }
+
+    const words = cleaned.split(" ")
+    const shouldTitleCase = words.every((word) => word === word.toUpperCase())
+
+    if (!shouldTitleCase) {
+      return cleaned
+    }
+
+    const toTitleCaseWord = (word: string) =>
+      word
+        .toLowerCase()
+        .replace(/(^|[-'])[a-z]/g, (segment) => segment.toUpperCase())
+
+    return words.map(toTitleCaseWord).join(" ")
+  }
+
   // Function to extract patient name and file type from filename
   const extractFileInfo = (filename: string) => {
     logger.debug(COMPONENT, "Extracting file info", { filename })
@@ -97,10 +118,18 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
     const nameWithoutExtension = filename.replace(/\.[^/.]+$/, "")
     logger.debug(COMPONENT, "Name without extension", { nameWithoutExtension })
 
+    const normalizedName = nameWithoutExtension.replace(/[_]+/g, " ").replace(/\s+/g, " ").trim()
+
     // Define file type patterns to look for
     const fileTypePatterns = [
-      { pattern: /60 Day Unified/i, type: "60 Day Unified" },
+      { pattern: /90 Day Unified Care Plan/i, type: "90 Day Unified" },
+      { pattern: /60 Day Unified Care Plan/i, type: "60 Day Unified" },
+      { pattern: /30 Day Unified Care Plan/i, type: "30 Day Unified" },
+      { pattern: /SNF Unified Care Plan/i, type: "SNF Unified" },
+      { pattern: /Unified Care Plan/i, type: "Unified" },
+      { pattern: /Progress Notes?/i, type: "Patient Engagement" },
       { pattern: /90 Day Unified/i, type: "90 Day Unified" },
+      { pattern: /60 Day Unified/i, type: "60 Day Unified" },
       { pattern: /SNF Unified/i, type: "SNF Unified" },
       { pattern: /Unified/i, type: "Unified" },
       { pattern: /Patient Engagement\d*/i, type: "Patient Engagement" },
@@ -108,35 +137,31 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
       { pattern: /Hospital Stay Notes\d*/i, type: "Patient Hospital Stay Notes" },
     ]
 
-    // Find the first matching pattern
-    let fileType = "Patient Engagement" // Default file type
-    let patientName = nameWithoutExtension // Default to full name without extension
+    let fileType = "Patient Engagement"
+    let extractedName = normalizedName
 
     for (const { pattern, type } of fileTypePatterns) {
-      const match = nameWithoutExtension.match(pattern)
-      if (match) {
+      const match = pattern.exec(normalizedName)
+      if (match && typeof match.index === "number") {
         fileType = type
-        // Extract patient name by removing the file type from the filename
-        const matchIndex = nameWithoutExtension.indexOf(match[0])
-        if (matchIndex > 0) {
-          patientName = nameWithoutExtension.substring(0, matchIndex).trim()
-        }
-        logger.debug(COMPONENT, "Pattern matched", { pattern: pattern.toString(), type, matchIndex })
+        extractedName = normalizedName.slice(0, match.index).trim()
+        logger.debug(COMPONENT, "Pattern matched", { pattern: pattern.toString(), type, matchIndex: match.index })
         break
       }
     }
 
-    // If no specific pattern was found but there are multiple words,
-    // assume the last word(s) might be a file type indicator
-    if (fileType === "Patient Engagement" && !nameWithoutExtension.includes("Patient Engagement")) {
-      const parts = nameWithoutExtension.split(" ")
-      if (parts.length > 1) {
-        // Assume the patient name is all but the last word
-        // This is a fallback and might not be accurate for all cases
-        patientName = parts.slice(0, -1).join(" ").trim()
-        logger.debug(COMPONENT, "Using fallback name extraction", { parts, extractedName: patientName })
+    if (extractedName === normalizedName && nameWithoutExtension.includes("_")) {
+      const [firstSegment] = nameWithoutExtension.split("_").map((segment) => segment.trim()).filter(Boolean)
+      if (firstSegment) {
+        extractedName = firstSegment.replace(/[_]+/g, " ")
+        logger.debug(COMPONENT, "Using underscore-based extraction", { extractedName })
       }
     }
+
+    extractedName = extractedName.replace(/[-_,]+$/g, "").trim()
+    extractedName = extractedName.replace(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/g, "").trim()
+
+    const patientName = formatPatientName(extractedName)
 
     logger.info(COMPONENT, "File info extracted", { filename, patientName, fileType })
     return { patientName, fileType }

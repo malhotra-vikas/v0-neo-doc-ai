@@ -59,11 +59,15 @@ export default async function BulkUploadPage() {
                     "PatientName Patient Engagement.pdf" (or numbered versions like "PatientName Patient
                     Engagement1.pdf")
                   </li>
+                  <li>"PATIENT NAME_PROGRESS NOTE_7-15-2025.pdf"</li>
                   <li>"PatientName Patient In Facility.pdf"</li>
                   <li>"PatientName Hospital Stay Notes.pdf"</li>
                   <li>"PatientName 90 Day Unified.pdf"</li>
+                  <li>"PATIENT NAME_90 DAY UNIFIED CARE PLAN_7-23-2025.pdf"</li>
                   <li>"PatientName 60 Day Unified.pdf"</li>
+                  <li>"PATIENT NAME_60 DAY UNIFIED CARE PLAN_7-23-2025.pdf"</li>
                   <li>"PatientName SNF Unified.pdf"</li>
+                  <li>"PATIENT NAME_SNF UNIFIED CARE PLAN_7-28-2025.pdf"</li>
                   <li>"PatientName Unified.pdf"</li>
                 </ul>
               </div>
