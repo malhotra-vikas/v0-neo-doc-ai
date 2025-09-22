@@ -36,6 +36,11 @@ export default function ResetPasswordPage() {
             try {
                 const token = search.get("token");
                 const type = search.get("type");
+                const hashParams = new URLSearchParams(
+                    typeof window !== "undefined" ? window.location.hash.slice(1) : ""
+                );
+                const accessToken = hashParams.get("access_token");
+                const refreshToken = hashParams.get("refresh_token");
 
                 console.log("[ResetPasswordPage] useEffect start");
                 console.log("[ResetPasswordPage] token param:", token);
@@ -63,6 +68,34 @@ export default function ResetPasswordPage() {
                         return;
                     }
                     console.log("[ResetPasswordPage] Session established via exchangeCodeForSession.");
+                    setReady(true);
+                    return;
+                }
+
+                if (accessToken && refreshToken) {
+                    console.log("[ResetPasswordPage] Found hash-based tokens. Establishing session via setSession…");
+                    const { data, error: setSessError } = await supabase.auth.setSession({
+                        access_token: accessToken,
+                        refresh_token: refreshToken,
+                    });
+
+                    console.log("[ResetPasswordPage] setSession result:", {
+                        data,
+                        setSessError,
+                    });
+
+                    if (setSessError) {
+                        console.error("[ResetPasswordPage] setSession error:", setSessError);
+                        setError("Reset link is invalid or has expired.");
+                        return;
+                    }
+                    if (!data.session) {
+                        console.error("[ResetPasswordPage] No session returned after setSession.");
+                        setError("Reset link is invalid or has expired.");
+                        return;
+                    }
+
+                    console.log("[ResetPasswordPage] Session established via setSession.");
                     setReady(true);
                     return;
                 }
