@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, FileText, Download, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import UploadFileDialog from "./upload-file-dialog"
+import { NursingHomeSelect } from "./nursing-home-select"
 // Import the audit logger at the top of the file
 import { logAuditEvent } from "@/lib/audit-logger"
 
@@ -223,18 +224,13 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
           <CardDescription>Manage monthly files for nursing homes</CardDescription>
         </div>
         <div className="flex items-center space-x-2">
-          <Select value={selectedHomeId || ""} onValueChange={(value) => setSelectedHomeId(value)}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select nursing home" />
-            </SelectTrigger>
-            <SelectContent>
-              {nursingHomes.map((home) => (
-                <SelectItem key={home.id} value={home.id}>
-                  {home.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <NursingHomeSelect
+            nursingHomes={nursingHomes}
+            value={selectedHomeId}
+            onChange={(value) => setSelectedHomeId(value)}
+            triggerClassName="w-[200px]"
+            disabled={nursingHomes.length === 0}
+          />
 
 
           <Select value={selectedState} onValueChange={setSelectedState}>

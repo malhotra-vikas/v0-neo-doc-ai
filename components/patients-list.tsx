@@ -5,9 +5,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, FileText } from "lucide-react"
 import AddPatientDialog from "./add-patient-dialog"
+import { NursingHomeSelect } from "./nursing-home-select"
 
 interface Patient {
   id: string
@@ -44,18 +43,12 @@ export default function PatientsList({ nursingHomes }: PatientsListProps) {
           <CardDescription>Manage patients across nursing homes</CardDescription>
         </div>
         <div className="flex items-center space-x-2">
-          <Select value={selectedHomeId || ""} onValueChange={(value) => setSelectedHomeId(value)}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select nursing home" />
-            </SelectTrigger>
-            <SelectContent>
-              {nursingHomes.map((home) => (
-                <SelectItem key={home.id} value={home.id}>
-                  {home.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <NursingHomeSelect
+            nursingHomes={nursingHomes}
+            value={selectedHomeId}
+            onChange={(value) => setSelectedHomeId(value)}
+            triggerClassName="w-[200px]"
+          />
         </div>
       </CardHeader>
       <CardContent>
