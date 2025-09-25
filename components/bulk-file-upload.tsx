@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge"
 import { logger } from "@/lib/logger"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { extractPdfTextAction } from "@/app/actions/parsePDF"
+import { NursingHomeSelect } from "./nursing-home-select"
 
 const COMPONENT = "BulkFileUpload"
 
@@ -634,28 +635,17 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
                     </Label>
                     <span className="text-red-500 ml-1">*</span>
                   </div>
-                  <Select
-                    value={selectedNursingHomeId}
-                    onValueChange={(value) => {
+                  <NursingHomeSelect
+                    nursingHomes={nursingHomes}
+                    value={selectedNursingHomeId || null}
+                    onChange={(value) => {
                       logger.debug(COMPONENT, "Nursing home selected", { nursingHomeId: value })
                       setSelectedNursingHomeId(value)
                     }}
-                  >
-                    <SelectTrigger id="nursingHome" className="w-full">
-                      <SelectValue placeholder="Select nursing home" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {nursingHomes.length === 0 ? (
-                        <div className="p-2 text-center text-sm text-muted-foreground">No nursing homes found</div>
-                      ) : (
-                        nursingHomes.map((home) => (
-                          <SelectItem key={home.id} value={home.id}>
-                            {home.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                    triggerClassName="w-full"
+                    contentClassName="w-[340px]"
+                    disabled={nursingHomes.length === 0}
+                  />
                   <p className="text-xs text-muted-foreground">Select the nursing home these files belong to.</p>
                 </div>
 
