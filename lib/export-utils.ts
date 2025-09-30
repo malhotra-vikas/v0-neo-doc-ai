@@ -91,6 +91,56 @@ const hexToRgb = (hex: string): number[] => {
         : [255, 255, 255];
 };
 
+// Allow runtime toggling of PDF watermark via NEXT_PUBLIC_ENABLE_PDF_WATERMARK
+const ENABLE_PDF_WATERMARK = (process.env.NEXT_PUBLIC_ENABLE_PDF_WATERMARK ?? "true").toLowerCase() !== "false";
+
+// Stamp a diagonal, tiled watermark on the active PDF page
+const addPdfWatermark = (pdf: jsPDF, text: string | string[]) => {
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const { fontName, fontStyle } = pdf.getFont();
+    const previousFontSize = pdf.getFontSize();
+    const watermarkFontSize = Math.min(pageWidth, pageHeight) / 12;
+    const normalizedText = Array.isArray(text) ? text.join(" ") : text;
+    const textWidth = pdf.getTextWidth(normalizedText);
+    const tileSpacingX = Math.max(textWidth + 20, 80);
+    const tileSpacingY = Math.max(watermarkFontSize * 3, 80);
+
+    const hasGStateSupport = typeof (pdf as any).setGState === "function" && typeof (pdf as any).GState === "function";
+    let resetGState: (() => void) | null = null;
+
+    if (hasGStateSupport) {
+        const watermarkGState = (pdf as any).GState({ opacity: 0.15 });
+        (pdf as any).setGState(watermarkGState);
+        resetGState = () => {
+            (pdf as any).setGState((pdf as any).GState({ opacity: 1 }));
+        };
+    }
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(watermarkFontSize);
+    pdf.setTextColor(130, 130, 130);
+
+    let row = 0;
+    for (let y = -pageHeight; y < pageHeight * 2; y += tileSpacingY) {
+        const rowOffset = (row % 2 === 0 ? 0 : tileSpacingX / 2);
+        for (let x = -pageWidth; x < pageWidth * 2; x += tileSpacingX) {
+            pdf.text(text, x + rowOffset, y, {
+                angle: 45,
+            });
+        }
+        row += 1;
+    }
+
+    if (resetGState) {
+        resetGState();
+    }
+
+    pdf.setFont(fontName, fontStyle);
+    pdf.setFontSize(previousFontSize);
+    pdf.setTextColor(0, 0, 0);
+};
+
 export interface PatientMetrics {
     totalPuzzlePatients: number
     commulative30DayReadmissionCount_fromSNFAdmitDate: number
@@ -629,6 +679,7 @@ export const exportToPDF = async ({
 
     // 4. Setup PDF
     const pdf = new jsPDF("p", "mm", "a4");
+    const watermarkContent = "BETA - For Puzzle Internal Use Only";
     const pdfMargin = 10;
     const pdfPageWidth = pdf.internal.pageSize.getWidth();
     const pdfPageHeight = pdf.internal.pageSize.getHeight();
@@ -703,6 +754,10 @@ export const exportToPDF = async ({
             const imgHeight = (sliceHeight * usableWidth) / canvas.width;
 
             pdf.addImage(imgData, "JPEG", pdfMargin, pdfMargin, usableWidth, imgHeight);
+        }
+
+        if (ENABLE_PDF_WATERMARK) {
+            addPdfWatermark(pdf, watermarkContent);
         }
 
         yPosition += sliceHeight;
