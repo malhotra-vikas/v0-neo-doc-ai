@@ -1180,13 +1180,6 @@ ${JSON.stringify(parsed, null, 2)}
                                         <FileTextIcon className="h-4 w-4 mr-2" />
                                         Export as PDF
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => handleExportDOCX(patientMetrics)} // <- passing explicitly
-
-                                    >
-                                        <FileIcon className="h-4 w-4 mr-2" />
-                                        Export as DOCX
-                                    </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
