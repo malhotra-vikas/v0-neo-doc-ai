@@ -49,6 +49,8 @@ interface ExportPDFOptions {
     nursingHomeName: string;
     monthYear: string;
     caseStudies: CaseStudy[];
+    caseStudyHighlights?: CaseStudy[];
+    interventionStudies?: CaseStudy[];
     logoPath?: string;
     patientMetrics?: any;
     categorizedInterventions: Record<string, string[]>;
@@ -67,6 +69,8 @@ interface ExportDOCXOptions {
     nursingHomeName: string;
     monthYear: string;
     caseStudies: CaseStudy[];
+    caseStudyHighlights?: CaseStudy[];
+    interventionStudies?: CaseStudy[];
     patientMetrics?: any;
     logoPath?: string;
     categorizedInterventions: Record<string, string[]>;
@@ -156,6 +160,8 @@ export const exportToPDF = async ({
     nursingHomeName,
     monthYear,
     caseStudies,
+    caseStudyHighlights,
+    interventionStudies,
     patientMetrics,
     returnBlob = false,
     expandedPatientId,
@@ -165,7 +171,12 @@ export const exportToPDF = async ({
 }: ExportPDFOptions): Promise<void | Blob> => {
 
 
-    const expandedStory = caseStudies.find(story => story.patient_id === expandedPatientId);
+    const highlightCaseStudies =
+        caseStudyHighlights && caseStudyHighlights.length > 0 ? caseStudyHighlights : caseStudies;
+    const interventionCaseStudies =
+        interventionStudies && interventionStudies.length > 0 ? interventionStudies : caseStudies;
+
+    const expandedStory = highlightCaseStudies.find(story => story.patient_id === expandedPatientId);
 
     const logoUrl = patientMetrics?.publicLogoLink;
 
@@ -182,7 +193,7 @@ export const exportToPDF = async ({
     });
 
     // 🔑 Filter out any case study with no engagement_summary_text
-    const outcomeFilteredCaseStudies = caseStudies.filter(
+    const outcomeFilteredCaseStudies = interventionCaseStudies.filter(
         story => story.engagement_summary_text && story.engagement_summary_text.trim().length > 0
     );
 
@@ -260,7 +271,7 @@ export const exportToPDF = async ({
     ">
     `;
 
-    let filteredCaseStudies = caseStudies.filter(item => item.patient_id !== expandedPatientId);
+    let filteredCaseStudies = highlightCaseStudies.filter(item => item.patient_id !== expandedPatientId);
 
     // 🔑 Filter out any case study with no engagement_summary_text
     filteredCaseStudies = filteredCaseStudies.filter(
@@ -795,6 +806,8 @@ export const exportToDOCX = async ({
     nursingHomeName,
     monthYear,
     caseStudies,
+    caseStudyHighlights,
+    interventionStudies,
     patientMetrics,
     categorizedInterventions,
     returnBlob = false,
@@ -803,19 +816,24 @@ export const exportToDOCX = async ({
     expandedPatientId,
 }: ExportDOCXOptions): Promise<Blob | void> => {
     try {
+        const highlightCaseStudies =
+            caseStudyHighlights && caseStudyHighlights.length > 0 ? caseStudyHighlights : caseStudies;
+        const interventionCaseStudies =
+            interventionStudies && interventionStudies.length > 0 ? interventionStudies : caseStudies;
+
         const reportData: ReportData = {
             facilityName: nursingHomeName,
             totalPatients: patientMetrics?.totalPuzzlePatients || 0,
             readmissions: patientMetrics?.commulative30DayReadmissionCount_fromSNFAdmitDate || 0,
             readmissionRate: `${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%`,
             clinicalRisks: clinicalRisks || [],
-            keyInterventions: caseStudies.map(study => ({
+            keyInterventions: interventionCaseStudies.map(study => ({
                 patientId: study.patient_id,
                 interventions: study.detailed_interventions?.map(item => item.intervention) || [],
                 outcomes: study.detailed_outcomes?.map(item => item.outcome) || [],
                 patientName: study.patient_name || "Unknown",
             })),
-            caseStudies: caseStudies,
+            caseStudies: highlightCaseStudies,
             nationalBenchmark: patientMetrics?.nationalReadmissionsBenchmark ? `${patientMetrics.nationalReadmissionsBenchmark}%` : "N/A",
             executiveSummary: patientMetrics?.executiveSummary || "",
             logoUrl: patientMetrics?.publicLogoLink,
