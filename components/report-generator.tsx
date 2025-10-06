@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ChevronsUpDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils" // helper for conditional classes
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -265,12 +265,28 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null)
 
-    // Add patient selection state
-    const [selectedPatients, setSelectedPatients] = useState<string[]>([])
+    // Track per-section patient selections
+    const [selectedCaseStudyPatients, setSelectedCaseStudyPatients] = useState<string[]>([])
+    const [selectedInterventionPatients, setSelectedInterventionPatients] = useState<string[]>([])
     const [availablePatients, setAvailablePatients] = useState<{ id: string; name: string; created_at: string }[]>([])
     const [useAISelection, setUseAISelection] = useState(false)
     const [isLoadingPatients, setIsLoadingPatients] = useState(false)
     const [isAISelecting, setIsAISelecting] = useState(false)
+
+    const selectedPatientIds = useMemo(
+        () => Array.from(new Set([...selectedCaseStudyPatients, ...selectedInterventionPatients])),
+        [selectedCaseStudyPatients, selectedInterventionPatients]
+    )
+
+    const caseStudyEntries = useMemo(() => {
+        if (selectedCaseStudyPatients.length === 0) return []
+        return caseStudies.filter((study) => selectedCaseStudyPatients.includes(study.patient_id))
+    }, [caseStudies, selectedCaseStudyPatients])
+
+    const interventionEntries = useMemo(() => {
+        if (selectedInterventionPatients.length === 0) return []
+        return caseStudies.filter((study) => selectedInterventionPatients.includes(study.patient_id))
+    }, [caseStudies, selectedInterventionPatients])
 
 
     // Add effect to fetch patients when nursing home changes
@@ -280,7 +296,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 await fetchAvailablePatients()
             } else {
                 setAvailablePatients([])
-                setSelectedPatients([])
+                setSelectedCaseStudyPatients([])
+                setSelectedInterventionPatients([])
                 setSelectedNursingHomeName(null)
             }
 
@@ -357,7 +374,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             setAvailablePatients(patients || [])
             // Reset selections when nursing home changes
-            setSelectedPatients([])
+            setSelectedCaseStudyPatients([])
+            setSelectedInterventionPatients([])
+            setExpandedPatientId(null)
             setUseAISelection(false)
         } catch (error) {
             console.error("Error fetching patients:", error)
@@ -372,17 +391,44 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     }
 
     const handlePatientToggle = (patientId: string) => {
-        setSelectedPatients((prev) =>
-            prev.includes(patientId) ? prev.filter((id) => id !== patientId) : [...prev, patientId],
-        )
+        if (selectedPatientIds.includes(patientId)) {
+            setSelectedCaseStudyPatients((prev) => prev.filter((id) => id !== patientId))
+            setSelectedInterventionPatients((prev) => prev.filter((id) => id !== patientId))
+            if (expandedPatientId === patientId) {
+                setExpandedPatientId(null)
+            }
+        } else {
+            setSelectedCaseStudyPatients((prev) => [...prev, patientId])
+            setSelectedInterventionPatients((prev) => [...prev, patientId])
+        }
     }
 
     const handleSelectAllPatients = () => {
-        setSelectedPatients(availablePatients.map((p) => p.id))
+        const allIds = availablePatients.map((p) => p.id)
+        setSelectedCaseStudyPatients(allIds)
+        setSelectedInterventionPatients(allIds)
     }
 
     const handleDeselectAllPatients = () => {
-        setSelectedPatients([])
+        setSelectedCaseStudyPatients([])
+        setSelectedInterventionPatients([])
+        setExpandedPatientId(null)
+    }
+
+    const handleCaseStudyAssignmentToggle = (patientId: string) => {
+        setSelectedCaseStudyPatients((prev) => {
+            const exists = prev.includes(patientId)
+            if (exists && expandedPatientId === patientId) {
+                setExpandedPatientId(null)
+            }
+            return exists ? prev.filter((id) => id !== patientId) : [...prev, patientId]
+        })
+    }
+
+    const handleInterventionAssignmentToggle = (patientId: string) => {
+        setSelectedInterventionPatients((prev) =>
+            prev.includes(patientId) ? prev.filter((id) => id !== patientId) : [...prev, patientId],
+        )
     }
 
     // Replace the existing fetchCaseStudies function with this updated version
@@ -406,7 +452,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const endDate = `${nextYear}-${nextMonth.toString().padStart(2, "0")}-01`
 
             // Use selected patients or all patients if none selected
-            const patientIds = selectedPatients.length > 0 ? selectedPatients : availablePatients.map((p) => p.id)
+            const patientIds =
+                selectedPatientIds.length > 0 ? selectedPatientIds : availablePatients.map((p) => p.id)
 
             if (patientIds.length === 0) {
                 setCaseStudies([])
@@ -657,6 +704,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
+                caseStudyHighlights: caseStudyEntries,
+                interventionStudies: interventionEntries,
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
@@ -702,7 +751,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         selectedMonth,
         selectedYear,
         caseStudies,
-        //categorizedInterventions,
+        caseStudyEntries,
+        interventionEntries,
+        categorizedInterventions,
         interventionCounts,
         clinicalRisks,
         patientMetrics,
@@ -724,6 +775,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
+                caseStudyHighlights: caseStudyEntries,
+                interventionStudies: interventionEntries,
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
@@ -765,6 +818,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
                 caseStudies,
+                caseStudyHighlights: caseStudyEntries,
+                interventionStudies: interventionEntries,
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
@@ -1038,14 +1093,17 @@ ${JSON.stringify(parsed, null, 2)}
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-muted-foreground">
-                                            {selectedPatients.length} of {availablePatients.length} patients selected
+                                            Case Studies: {selectedCaseStudyPatients.length} • Key Interventions: {selectedInterventionPatients.length}
                                         </span>
                                         <div className="flex gap-2">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
                                                 onClick={handleSelectAllPatients}
-                                                disabled={selectedPatients.length === availablePatients.length}
+                                                disabled={
+                                                    selectedCaseStudyPatients.length === availablePatients.length &&
+                                                    selectedInterventionPatients.length === availablePatients.length
+                                                }
                                             >
                                                 Select All
                                             </Button>
@@ -1053,7 +1111,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                 variant="outline"
                                                 size="sm"
                                                 onClick={handleDeselectAllPatients}
-                                                disabled={selectedPatients.length === 0}
+                                                disabled={selectedPatientIds.length === 0}
                                             >
                                                 Deselect All
                                             </Button>
@@ -1068,41 +1126,74 @@ ${JSON.stringify(parsed, null, 2)}
                                     )}
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-                                        {availablePatients.map((patient) => (
-                                            <div
-                                                key={patient.id}
-                                                className="flex flex-col p-2 rounded border bg-white hover:bg-slate-50"
-                                            >
-                                                <div className="flex items-center space-x-2">
-                                                    <input
-                                                        type="checkbox"
-                                                        id={`patient-${patient.id}`}
-                                                        checked={selectedPatients.includes(patient.id)}
-                                                        onChange={() => handlePatientToggle(patient.id)}
-                                                        className="rounded border-gray-300"
-                                                    />
-                                                    <Label htmlFor={`patient-${patient.id}`} className="text-sm cursor-pointer flex-1 truncate">
-                                                        {patient.name}
-                                                    </Label>
-                                                </div>
+                                        {availablePatients.map((patient) => {
+                                            const isSelected = selectedPatientIds.includes(patient.id)
+                                            const inCaseStudies = selectedCaseStudyPatients.includes(patient.id)
+                                            const inInterventions = selectedInterventionPatients.includes(patient.id)
 
-                                                {selectedPatients.includes(patient.id) && (
-                                                    <div className="flex items-center pl-6 pt-1">
+                                            return (
+                                                <div
+                                                    key={patient.id}
+                                                    className="flex flex-col p-2 rounded border bg-white hover:bg-slate-50"
+                                                >
+                                                    <div className="flex items-center space-x-2">
                                                         <input
-                                                            type="radio"
-                                                            id={`expanded-${patient.id}`}
-                                                            name="expandedPatient"
-                                                            checked={expandedPatientId === patient.id}
-                                                            onChange={() => setExpandedPatientId(patient.id)}
-                                                            className="mr-2"
+                                                            type="checkbox"
+                                                            id={`patient-${patient.id}`}
+                                                            checked={isSelected}
+                                                            onChange={() => handlePatientToggle(patient.id)}
+                                                            className="rounded border-gray-300"
                                                         />
-                                                        <Label htmlFor={`expanded-${patient.id}`} className="text-xs text-muted-foreground">
-                                                            Mark as Expanded Summary Patient
+                                                        <Label htmlFor={`patient-${patient.id}`} className="text-sm cursor-pointer flex-1 truncate">
+                                                            {patient.name}
                                                         </Label>
                                                     </div>
-                                                )}
-                                            </div>
-                                        ))}
+
+                                                    {isSelected && (
+                                                        <>
+                                                            <div className="flex flex-wrap items-center gap-4 pl-6 pt-2 text-xs text-muted-foreground">
+                                                                <label className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id={`patient-${patient.id}-case`}
+                                                                        checked={inCaseStudies}
+                                                                        onChange={() => handleCaseStudyAssignmentToggle(patient.id)}
+                                                                        className="rounded border-gray-300"
+                                                                    />
+                                                                    Case Studies
+                                                                </label>
+                                                                <label className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id={`patient-${patient.id}-interventions`}
+                                                                        checked={inInterventions}
+                                                                        onChange={() => handleInterventionAssignmentToggle(patient.id)}
+                                                                        className="rounded border-gray-300"
+                                                                    />
+                                                                    Key Interventions
+                                                                </label>
+                                                            </div>
+
+                                                            {inCaseStudies && (
+                                                                <div className="flex items-center pl-6 pt-1">
+                                                                    <input
+                                                                        type="radio"
+                                                                        id={`expanded-${patient.id}`}
+                                                                        name="expandedPatient"
+                                                                        checked={expandedPatientId === patient.id}
+                                                                        onChange={() => setExpandedPatientId(patient.id)}
+                                                                        className="mr-2"
+                                                                    />
+                                                                    <Label htmlFor={`expanded-${patient.id}`} className="text-xs text-muted-foreground">
+                                                                        Mark as Expanded Summary Patient
+                                                                    </Label>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             ) : (
@@ -1122,7 +1213,7 @@ ${JSON.stringify(parsed, null, 2)}
                     <Button
                         onClick={handleGenerateReport}
                         disabled={
-                            !selectedNursingHomeId || isGenerating || (availablePatients.length > 0 && selectedPatients.length === 0)
+                            !selectedNursingHomeId || isGenerating || (availablePatients.length > 0 && selectedPatientIds.length === 0)
                         }
                         className="min-w-[150px]"
                     >
@@ -1144,9 +1235,9 @@ ${JSON.stringify(parsed, null, 2)}
                         <div>
                             <CardTitle>Report Preview</CardTitle>
                             <CardDescription>A preview of the generated report.</CardDescription>
-                            {selectedPatients.length > 0 && selectedPatients.length < availablePatients.length && (
+                            {selectedPatientIds.length > 0 && selectedPatientIds.length < availablePatients.length && (
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Report includes {selectedPatients.length} selected patients
+                                    Report includes {selectedPatientIds.length} selected patients
                                 </p>
                             )}
                         </div>
@@ -1409,7 +1500,7 @@ ${JSON.stringify(parsed, null, 2)}
                                             Puzzle's Key Interventions and Outcomes for Patients
                                         </h3>
 
-                                        {caseStudies.map((study) => {
+                                        {interventionEntries.length > 0 ? interventionEntries.map((study) => {
                                             const [first, last] = (study.patient_name || "").split(" ");
                                             const shortName =
                                                 first && last ? `${first[0]}.${last}` : study.patient_name || "Unknown";
@@ -1483,51 +1574,56 @@ ${JSON.stringify(parsed, null, 2)}
                                                     )}
                                                 </div>
                                             );
-                                        })}
+                                        }) : (
+                                            <div className="text-center py-4 text-sm text-muted-foreground">
+                                                {selectedInterventionPatients.length === 0
+                                                    ? "No patients have been assigned to the Key Interventions section."
+                                                    : "No intervention details available for the selected patients."}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Case Studies */}
-                                    {console.log("📘 Case Studies:", caseStudies)}
-
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Case Study Highlights</h3>
-                                        {caseStudies.length > 0 ? (
-                                            caseStudies.map((study) => (
+                                        {caseStudyEntries.length > 0 ? (
+                                            caseStudyEntries.map((study) => {
+                                                const [first = "", last = ""] = (study.patient_name || "").split(" ")
+                                                const shortName = first && last ? `${first[0]}.${last}` : study.patient_name || "Unknown"
 
-                                                <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
-                                                    <p className="text-sm font-medium">
-                                                        {(() => {
-                                                            const [first, last] = study.patient_name.split(" ");
-                                                            return `${first[0]}.${last}`;
-                                                        })()}
-                                                    </p>
-                                                    <p className="text-sm font-medium">
-                                                        {study.hospital_discharge_summary_text
-                                                            ? study.hospital_discharge_summary_text.charAt(0).toUpperCase() + study.hospital_discharge_summary_text.slice(1)
-                                                            : ''}
-                                                    </p>
+                                                return (
+                                                    <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
+                                                        <p className="text-sm font-medium">{shortName}</p>
+                                                        <p className="text-sm font-medium">
+                                                            {study.hospital_discharge_summary_text
+                                                                ? study.hospital_discharge_summary_text.charAt(0).toUpperCase() +
+                                                                study.hospital_discharge_summary_text.slice(1)
+                                                                : ""}
+                                                        </p>
 
-                                                    <Citations label="Cited from" quotes={study.hospital_discharge_summary_quotes || []} />
+                                                        <Citations label="Cited from" quotes={study.hospital_discharge_summary_quotes || []} />
 
-                                                    <p className="text-sm mt-4">
-                                                        {study.facility_summary_text
-                                                            ? study.facility_summary_text.charAt(0).toUpperCase() + study.facility_summary_text.slice(1)
-                                                            : ''}
-                                                    </p>
-                                                    <Citations label="Cited from" quotes={study.facility_summary_quotes || []} />
+                                                        <p className="text-sm mt-4">
+                                                            {study.facility_summary_text
+                                                                ? study.facility_summary_text.charAt(0).toUpperCase() + study.facility_summary_text.slice(1)
+                                                                : ""}
+                                                        </p>
+                                                        <Citations label="Cited from" quotes={study.facility_summary_quotes || []} />
 
-                                                    <p className="text-sm mt-4">
-                                                        {study.engagement_summary_text
-                                                            ? study.engagement_summary_text.charAt(0).toUpperCase() + study.engagement_summary_text.slice(1)
-                                                            : ''}
-                                                    </p>
-                                                    <Citations label="Cited from" quotes={study.engagement_summary_quotes || []} />
-
-                                                </div>
-                                            ))
+                                                        <p className="text-sm mt-4">
+                                                            {study.engagement_summary_text
+                                                                ? study.engagement_summary_text.charAt(0).toUpperCase() + study.engagement_summary_text.slice(1)
+                                                                : ""}
+                                                        </p>
+                                                        <Citations label="Cited from" quotes={study.engagement_summary_quotes || []} />
+                                                    </div>
+                                                )
+                                            })
                                         ) : (
                                             <div className="text-center py-4 text-sm text-muted-foreground">
-                                                No case studies found for the selected criteria.
+                                                {selectedCaseStudyPatients.length === 0
+                                                    ? "No patients have been assigned to the Case Studies section."
+                                                    : "No case studies found for the selected patients."}
                                             </div>
                                         )}
                                     </div>
