@@ -1373,6 +1373,9 @@ function createCardLayoutTable(data: CaseStudy[], expandedPatientId: string) {
                     ? `${nameParts[0][0]}.${nameParts[1][0]}.`
                     : study.patient_name || "";
 
+                console.log("shortName", shortName);
+                console.log("STUDY ", study);
+
                 cells.push(
                     new TableCell({
                         width: { size: widthPerCard, type: WidthType.PERCENTAGE },
@@ -1399,6 +1402,12 @@ function createCardLayoutTable(data: CaseStudy[], expandedPatientId: string) {
                                         font: "Arial",
                                         color: "002d74",
                                     }),
+                                    new TextRun({
+                                        text: study.hospital_discharge_summary_text || "",
+                                        size: 20,
+                                        font: "Arial",
+                                        color: "07226c",
+                                    }),                                    
                                     new TextRun({
                                         text: study.engagement_summary_text || "",
                                         size: 20,
@@ -1726,7 +1735,7 @@ const generateDocument = async (data: ReportData) => {
                         ];
                     }).flat(),
                     new Paragraph({
-                        text: "Case Study Highlights: Individual Patient Successes",
+                        text: "Case Study Highlights: Individual Patient Successes - DODO",
                         style: "heading2",
                         spacing: { before: 360, after: 150 },
                     }),
