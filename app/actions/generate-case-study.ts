@@ -12,6 +12,57 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const TOKEN_LIMIT_PER_MINUTE = Number(process.env.TOKEN_LIMIT_PER_MINUTE) || 30000
 const TOKEN_BUFFER = Number(process.env.TOKEN_BUFFER) || 10000
 
+// Global Knowledge Base - Examples of how Puzzle Healthcare helps patients
+const PUZZLE_KNOWLEDGE_BASE = `
+# Puzzle Healthcare Global Knowledge Base
+
+## Medication Reconciliation
+Care Managers verify the patient's medications, to ensure completeness and accuracy of list, as well as patient adherence. 
+Nurses may also educate patients on medication doses, side effects, and purposes. 
+As medication nonadherence is linked to adverse health outcomes and increased hospitalizations, the impact of medication reconciliation is significant in promoting patient safety. 
+
+Example Language to use on Report:
+- "Care manager completed a comprehensive medication reconciliation, confirming the patient is taking all medications as prescribed. This proactive review reinforced adherence, reduced the risk of medication-related complications, and contributed to preventing potential rehospitalization—supporting improved health stability and outcomes."
+- "Care manager verified full medication adherence, reinforcing compliance and helping avert potential rehospitalization while promoting improved health outcomes."
+- "Through proactive medication reconciliation, the care manager verified complete adherence, directly supporting medication safety, preventing potential rehospitalization, and driving sustained improvement in patient outcomes and care quality."
+- "Care manager performed a thorough medication reconciliation to enhance patient safety, reduce preventable complications, prevent avoidable hospital readmissions, and strengthen overall treatment effectiveness and long-term health outcomes."
+
+## Patient Engagement
+If this section only contains “Attempt” or “Left Voicemail”, it should be excluded from the Key Interventions and Case Study Highlights. 
+It should include interventions or highlights from another part of the document instead. 
+
+Care Managers proactively reach out to patients to discuss their medical and psychosocial needs in detail. Care Managers ensure patients have returned home safely, including: 
+- Ensuring the patient has all of their medications at home and is informed on what the purpose of each medication is, as well as the dose and frequency. In the event the patient does not have their medications, the care manager will coordinate with the SNF, pharmacy, PCP, or specialist to ensure the medications are sent to the pharmacy and available for pick-up or delivery. Nurses can provide education to the patients on the specifics of their medications.
+- Assessing patient’s conditions to prevent any avoidable rehospitalizations. The nurses will ask the patient questions specific to their conditions to assess for any exacerbations or any need for escalating the medical need to the PCP, specialist, ED, or back to the SNF for readmission.
+- Confirming patient’s providers (PCP and specialists) and ensuring patient’s are aware of their follow-up appointments. The care team can schedule the appointments on behalf of the patient, can provide appointment reminders, or can arrange/locate transportation for the patient.
+- Ensure patient has received all necessary DME. Care team will coordinate with the SNF, DME company, or PCP for additional DME needs. For DME not covered under insurance, the care team can provide information on local DME lending organizations. In the event the patient needs a ramp, Care Team will coordinate with local agency for ramp installation. 
+- Care Team will verify that the home health referral was received, and that patient was accepted, and start of care (SOC) was scheduled, and eventually performed. Care Team will coordinate with the SNF, PCP, and home health agency in the event an additional referral is needed. Care Team remains in contact with home health to discuss patient concerns and ensure patients are receiving services (and verifying which services). Care Team can also coordinate with Outpatient Therapy, if the patient is not eligible for home health, or has completed home health and is now able to participate in Outpatient Therapy. 
+- Care Team will assess for psychosocial needs, such as Meals on Wheels and caregiving needs. Care Team will locate and provide information for local Meals on Wheels organization and ensure patient is set up with services. Care Team also assesses for caregiver needs, and can locate local organizations that provide transportation, meal preparation, cleaning, running errands, or other light household work. Care Team will also verify that patient has electricity, heat, and air conditioning in their home. They will refer to local agency if these needs are not met. 
+- Care Team will assess for patient fall risk, and educate patient on fall safety in the home. Care Team can coordinate with home health agency to perform home assessment, and can locate local agencies to assist with installation of home safety equipment, such as grab bars. 
+- Ongoing assessment of clinical and social risk. Escalation to PCP, SNF, ED, based upon patient’s condition. 
+
+Example Language to use on Report:
+ - "Overview: Following the patient’s discharge from a Skilled Nursing Facility (SNF), the care manager conducted a comprehensive post-discharge assessment via phone with the patient’s son to ensure continuity of care, minimize risk for readmission, and proactively address clinical and social needs. The care manager’s approach focused on empowering both the patient and family to manage care independently while providing support for any gaps."
+- "Medication Oversight: Verified patient has all medications for 30 days and confirmed adherence through reconciliation, reducing risk of medication errors or gaps."
+- "Follow-Up Support: Confirmed PCP follow-up completed and guided family on managing specialist appointments, reinforcing continuity of care."
+- "Risk Mitigation: Identified potential fall risks and monitored environmental and functional safety, proactively addressing complications before they arise."
+- "Family Empowerment & Education: Engaged patient and family in understanding the 90-day post-discharge care plan and provided resources including appointment scheduling guidance, medication management tools, transportation coordination support, and access to the care team for questions or assistance as needed."
+- "Clinical Oversight: Assessed wound healing and overall health, confirming stability and preventing unnecessary readmissions."
+
+## Home Health Coordination
+Care Manager will contact home health to ensure the "SOC" or Start of Care has been scheduled or completed.
+
+Example Language to use on Report:
+- "Home Health: Care manager confirmed patient remains actively engaged with home health services, with Start of Care initiated on 07/25/2025, ensuring continuity of support and monitoring."
+- "Home Health Confirmation: Care manager proactively contacted the home health agency to confirm the patient’s Start of Care, ensuring timely initiation of services, uninterrupted support, and adherence to the care plan. This intervention helps prevent delays in care, reduces risk of adverse health outcomes, and supports avoidance of potential rehospitalization."
+
+## PCP and Specialist Coordination
+
+Example Language to use on Report:
+- "The care manager reached out to the patient’s PCP to verify a follow-up within 30 days of SNF discharge, facilitating timely medication refills and keeping the PCP informed of the recent hospital stay and any complications. This proactive coordination reinforces adherence to the care plan, mitigates potential adverse outcomes, and helps reduce the risk of avoidable rehospitalization."
+
+`.trim();
+
 // Helper function to abbreviate names for PII protection
 function abbreviateName(fullName: string): string {
     if (!fullName) return "Patient"
@@ -234,7 +285,7 @@ Return valid JSON in this format:
 
 {
   "hospital_discharge_summary": {
-    "summary": "150-200 word paragraph that summarizes the patient's hospital discharge. Use professional medical terminology. No superlatives.",
+    "summary": "75-100 word paragraph that summarizes the patient's hospital discharge. Use professional medical terminology. No superlatives.",
     "source_quotes": [
          { "quote": "quote 1", "source_file_id": "123" },
          { "quote": "quote 2", "source_file_id": "456" }
@@ -324,26 +375,45 @@ ${facilityText}
 
         // Engagement notes
         const patientEngagementPrompt = `
-You are a clinical AI assistant focused on medical engagement summaries.
+You are a clinical AI assistant focused on medical engagement summaries for Puzzle Healthcare.
 
-Read the extracted text from the **Patient Engagement** document and produce a medically accurate **summary of patient engagement activities**. 
-Puzzle NEVER prescribes medication, keep that in mind while building the summary.
+=== GLOBAL KNOWLEDGE BASE: HOW PUZZLE HELPS PATIENTS ===
+${PUZZLE_KNOWLEDGE_BASE}
+
+=== YOUR TASK ===
+Read the extracted text from the **Patient Engagement** document and produce a medically accurate, DETAILED, and RICH **summary of patient engagement activities** that demonstrates HOW Puzzle Healthcare helped this specific patient.
+
+Use the Global Knowledge Base above as a reference for:
+1. The types of interventions Puzzle provides
+2. Example language that shows impact and value
+3. The comprehensive nature of Puzzle's care coordination
 
 ⚠️ Important constraints – DO NOT VIOLATE:
 Puzzle NEVER prescribes or manages medications.
 Puzzle NEVER recomends or initiates any therapy.
 NEVER add any dates to the summary.
 No not add any hyperbole like "significantly", "immensely", etc. Only report facts.
-Exclude all care managed by the facility’s primary care or nursing teams.
+Exclude all care managed by the facility's primary care or nursing teams.
 Include ONLY actions, findings, or assessments that fall within the scope of physiatry.
 
 Focus on the following structure:
 
-1. **Assessment** – 75-100 word summary on what was observed or assessed about the patient (e.g., behavior, mood, understanding, adherence)?
-2. **Intervention** – What was done during engagement? Include education, motivation, care coordination, or behavioral interventions. Puzzle NEVER prescribes medication.
-3. **Outcome** – What was the result or follow-up from the engagement? Was there progress, resistance, follow-through, or a need for further support?
+1. **Assessment** – Create a DETAILED 100-150 word summary on what was observed or assessed about the patient. Include specific details from the patient documents about their condition, needs, and risks.
 
-Start the summary with "Post Discharge, ". Structure the summary clearly under the three sections above. Be specific, clinical, and concise. Avoid generic statements and focus on measurable actions or observations documented in the engagement notes.
+2. **Interventions** – List ALL specific interventions performed. Be comprehensive and detailed. Include:
+   - Medication reconciliation and education details
+   - Provider coordination specifics
+   - Home health and therapy coordination
+   - DME coordination
+   - Psychosocial support provided
+   - Fall risk assessment and safety measures
+   - Any clinical monitoring or escalations
+
+3. **Outcomes** – List specific outcomes achieved. Show the impact of Puzzle's interventions on preventing readmissions, improving safety, ensuring continuity of care, etc.
+
+IMPORTANT: Make the summary RICH and DETAILED. Use the Global Knowledge Base examples to add depth and show HOW Puzzle helped. The summary should be 200-300 words total and demonstrate real value.
+
+Start the assessment summary with "Post Discharge, ".
 
 For each section, also include 1-2 source quotes from the source text that support the content. Do not fabricate — only use actual phrases or sentences from the text.
 For each quote, include the associated File ID from the document chunks. You will find these clearly marked like:
@@ -367,21 +437,23 @@ Return valid JSON in this format:
 
 {
   "assessment": {
-    "summary": "Always start the summary with "Post Discharge, ". 75-100 word paragraph that summarizes the patient's interventions. Use professional medical terminology. No superlatives.",
+    "summary": "Always start the summary with "Post Discharge, ". 100-150 word detailed paragraph that summarizes the patient's condition, needs, and assessment. Use professional medical terminology. No superlatives but be thorough and specific.",
     "source_quotes": [
          { "quote": "quote 1", "source_file_id": "123" },
          { "quote": "quote 2", "source_file_id": "456" }
-    ] 
+    ]
   },
   "interventions": [
-    { "intervention": "Intervention A", "source_quote": "quote A", "source_file_id": "789"  },
-    { "intervention": "Intervention B", "source_quote": "quote A", "source_file_id": "789"  }
+    { "intervention": "Detailed Intervention A with specifics", "source_quote": "quote A", "source_file_id": "789"  },
+    { "intervention": "Detailed Intervention B with specifics", "source_quote": "quote B", "source_file_id": "789"  },
+    { "intervention": "Detailed Intervention C with specifics", "source_quote": "quote C", "source_file_id": "789"  }
   ],
   "outcomes": [
-    { "outcome": "Outcome A", "source_quote": "quote A", "source_file_id": "789"  }
+    { "outcome": "Specific Outcome A showing impact", "source_quote": "quote A", "source_file_id": "789"  },
+    { "outcome": "Specific Outcome B showing impact", "source_quote": "quote B", "source_file_id": "789"  }
   ],}
 
-Only return valid JSON — no commentary or explanation. Here is the patient engagemnt document text:
+Only return valid JSON — no commentary or explanation. Here is the patient engagement document text:
 
 Discharge text:
 ${engagementText}
@@ -389,6 +461,9 @@ ${engagementText}
 
         // Common function to send a prompt
         const getPromptedJSON = async (prompt: string, type: string) => {
+            // Increase max_tokens for engagement summaries with Global KB context
+            const maxTokens = type === "Patient Engagement" ? 2000 : 1300;
+
             const completion = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
@@ -396,7 +471,7 @@ ${engagementText}
                     { role: "user", content: prompt },
                 ],
                 temperature: 0.5,
-                max_tokens: 1300,
+                max_tokens: maxTokens,
             });
 
             const tokensUsed = completion.usage?.total_tokens ?? 0

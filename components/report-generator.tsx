@@ -503,8 +503,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     categorizedInterventions
                 `)
                 .in("patient_id", patientIds)
-                .gte("created_at", startDate)
-                .lte("created_at", endDate)
                 .order("created_at", { ascending: false })
 
             if (error) {
