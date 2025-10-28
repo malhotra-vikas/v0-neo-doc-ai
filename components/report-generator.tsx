@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { PrinterIcon } from "lucide-react"
 import { exportToPDF, exportToDOCX } from "@/lib/export-utils"
@@ -272,6 +273,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [useAISelection, setUseAISelection] = useState(false)
     const [isLoadingPatients, setIsLoadingPatients] = useState(false)
     const [isAISelecting, setIsAISelecting] = useState(false)
+    const [showPatientPHI, setShowPatientPHI] = useState(true)
 
     const selectedPatientIds = useMemo(
         () => Array.from(new Set([...selectedCaseStudyPatients, ...selectedInterventionPatients])),
@@ -287,6 +289,40 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         if (selectedInterventionPatients.length === 0) return []
         return caseStudies.filter((study) => selectedInterventionPatients.includes(study.patient_id))
     }, [caseStudies, selectedInterventionPatients])
+
+    const formatPatientName = useCallback(
+        (rawName?: string) => {
+            const name = (rawName || "").trim()
+            if (!name) return "Unknown"
+
+            const parts = name.split(/\s+/)
+            const first = parts[0] || ""
+            const last = parts.slice(1).join(" ")
+
+            if (showPatientPHI) {
+                if (first && last) {
+                    return `${first.charAt(0).toUpperCase()}. ${last}`
+                }
+                return name
+            }
+
+            const firstInitial = first ? `${first.charAt(0).toUpperCase()}.` : ""
+            const lastInitial = last ? last.charAt(0).toUpperCase() : ""
+            const masked = [firstInitial, lastInitial].filter(Boolean).join(" ")
+
+            return masked || "Unknown"
+        },
+        [showPatientPHI]
+    )
+
+    const applyPatientPrivacy = useCallback(
+        (entries: CaseStudyHighlight[]) =>
+            entries.map((study) => ({
+                ...study,
+                patient_name: formatPatientName(study.patient_name),
+            })),
+        [formatPatientName]
+    )
 
 
     // Add effect to fetch patients when nursing home changes
@@ -697,13 +733,17 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             console.log("categorizedInterventions are ", categorizedInterventions)
 
+            const privacySafeCaseStudies = applyPatientPrivacy(caseStudies)
+            const privacySafeCaseStudyEntries = applyPatientPrivacy(caseStudyEntries)
+            const privacySafeInterventionEntries = applyPatientPrivacy(interventionEntries)
+
             // Use the exportToPDF function to generate a PDF blob
             const result = await exportToPDF({
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
-                caseStudies,
-                caseStudyHighlights: caseStudyEntries,
-                interventionStudies: interventionEntries,
+                caseStudies: privacySafeCaseStudies,
+                caseStudyHighlights: privacySafeCaseStudyEntries,
+                interventionStudies: privacySafeInterventionEntries,
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
@@ -756,6 +796,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         clinicalRisks,
         patientMetrics,
         toast,
+        applyPatientPrivacy,
     ])
 
     const handleExportPDF = async (patientMetrics: any) => {
@@ -768,13 +809,17 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 throw new Error('Selected nursing home not found')
             }
 
+            const privacySafeCaseStudies = applyPatientPrivacy(caseStudies)
+            const privacySafeCaseStudyEntries = applyPatientPrivacy(caseStudyEntries)
+            const privacySafeInterventionEntries = applyPatientPrivacy(interventionEntries)
+
             // Use the exportToPDF function from export-utils
             await exportToPDF({
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
-                caseStudies,
-                caseStudyHighlights: caseStudyEntries,
-                interventionStudies: interventionEntries,
+                caseStudies: privacySafeCaseStudies,
+                caseStudyHighlights: privacySafeCaseStudyEntries,
+                interventionStudies: privacySafeInterventionEntries,
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
@@ -812,12 +857,17 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             if (!selectedNursingHome) {
                 throw new Error('Selected nursing home not found');
             }
+
+            const privacySafeCaseStudies = applyPatientPrivacy(caseStudies);
+            const privacySafeCaseStudyEntries = applyPatientPrivacy(caseStudyEntries);
+            const privacySafeInterventionEntries = applyPatientPrivacy(interventionEntries);
+
             await exportToDOCX({
                 nursingHomeName: selectedNursingHome.name,
                 monthYear: `${selectedMonth} ${selectedYear}`,
-                caseStudies,
-                caseStudyHighlights: caseStudyEntries,
-                interventionStudies: interventionEntries,
+                caseStudies: privacySafeCaseStudies,
+                caseStudyHighlights: privacySafeCaseStudyEntries,
+                interventionStudies: privacySafeInterventionEntries,
                 patientMetrics,
                 logoPath: "/puzzle_background.png",
                 categorizedInterventions,
@@ -1202,10 +1252,30 @@ ${JSON.stringify(parsed, null, 2)}
                         </div>
                     )}
                 </CardContent>
-                <CardFooter className="flex justify-between items-center">
-                    <div>
+                <CardFooter className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex w-full flex-col gap-3 md:w-auto">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+                            <div className="flex items-center gap-3">
+                                <Switch
+                                    id="patient-phi-toggle"
+                                    checked={showPatientPHI}
+                                    onCheckedChange={setShowPatientPHI}
+                                    aria-label="Toggle patient PHI visibility"
+                                />
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="patient-phi-toggle" className="text-sm font-medium leading-none">
+                                        Patient PHI visibility
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {showPatientPHI ? "Show" : "Hide"} patient last names in this report.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                         {caseStudies.length > 0 && (
-                            <p className="text-sm text-muted-foreground">Found {caseStudies.length} case studies</p>
+                            <p className="text-xs text-muted-foreground">
+                                Found {caseStudies.length} case studies for your selections.
+                            </p>
                         )}
                     </div>
                     <Button
@@ -1499,9 +1569,7 @@ ${JSON.stringify(parsed, null, 2)}
                                         </h3>
 
                                         {interventionEntries.length > 0 ? interventionEntries.map((study) => {
-                                            const [first, last] = (study.patient_name || "").split(" ");
-                                            const shortName =
-                                                first && last ? `${first[0]}.${last}` : study.patient_name || "Unknown";
+                                            const shortName = formatPatientName(study.patient_name)
 
                                             return (
                                                 <div key={study.id} className="mb-6">
@@ -1586,8 +1654,7 @@ ${JSON.stringify(parsed, null, 2)}
                                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Case Study Highlights</h3>
                                         {caseStudyEntries.length > 0 ? (
                                             caseStudyEntries.map((study) => {
-                                                const [first = "", last = ""] = (study.patient_name || "").split(" ")
-                                                const shortName = first && last ? `${first[0]}.${last}` : study.patient_name || "Unknown"
+                                                const shortName = formatPatientName(study.patient_name)
 
                                                 return (
                                                     <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
