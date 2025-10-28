@@ -61,7 +61,8 @@ export default function LoginForm() {
   }
 
   return (
-    <Card className="shadow-lg border-gray-200">
+    <div className="relative">
+      <Card className="shadow-lg border-gray-200">
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl">Sign In</CardTitle>
         <CardDescription>Enter your credentials to access your account</CardDescription>
@@ -83,6 +84,7 @@ export default function LoginForm() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
               className="focus:border-primary-500 focus:ring-primary-500"
+              disabled={loading}
               required
             />
           </div>
@@ -94,6 +96,7 @@ export default function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               className="focus:border-primary-500 focus:ring-primary-500"
+              disabled={loading}
               required
             />
           </div>
@@ -119,6 +122,16 @@ export default function LoginForm() {
       </CardContent>
       <CardFooter className="flex flex-col space-y-4 border-t bg-gray-50 p-6 text-center text-sm text-gray-600 rounded-b-lg">
       </CardFooter>
-    </Card>
+      </Card>
+
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/75 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-sm text-slate-700">
+            <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
+            Authenticating…
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

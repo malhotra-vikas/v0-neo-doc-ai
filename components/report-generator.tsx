@@ -21,6 +21,15 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { PrinterIcon } from "lucide-react"
 import { exportToPDF, exportToDOCX } from "@/lib/export-utils"
@@ -274,6 +283,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const [isLoadingPatients, setIsLoadingPatients] = useState(false)
     const [isAISelecting, setIsAISelecting] = useState(false)
     const [showPatientPHI, setShowPatientPHI] = useState(true)
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [editingStudyId, setEditingStudyId] = useState<string | null>(null)
+    const [editedStudy, setEditedStudy] = useState<CaseStudyHighlight | null>(null)
+    const [isSavingStudy, setIsSavingStudy] = useState(false)
 
     const selectedPatientIds = useMemo(
         () => Array.from(new Set([...selectedCaseStudyPatients, ...selectedInterventionPatients])),
@@ -324,6 +337,156 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         [formatPatientName]
     )
 
+    const normalizeDetailedEntries = useCallback(
+        (entries: any[] | undefined, key: "intervention" | "outcome") => {
+            if (!Array.isArray(entries)) return []
+            return entries.map((item) => {
+                if (!item) {
+                    return { [key]: "" }
+                }
+                if (typeof item === "string") {
+                    try {
+                        const parsed = JSON.parse(item)
+                        if (parsed && typeof parsed === "object") {
+                            return parsed
+                        }
+                        return { [key]: parsed ?? "" }
+                    } catch {
+                        return { [key]: item }
+                    }
+                }
+                return item
+            })
+        },
+        []
+    )
+
+    const handleOpenEditDialog = useCallback(
+        (study: CaseStudyHighlight) => {
+            const cloned = JSON.parse(JSON.stringify(study)) as CaseStudyHighlight
+            cloned.detailed_interventions = normalizeDetailedEntries(cloned.detailed_interventions, "intervention")
+            cloned.detailed_outcomes = normalizeDetailedEntries(cloned.detailed_outcomes, "outcome")
+            setEditingStudyId(study.id)
+            setEditedStudy(cloned)
+            setIsEditDialogOpen(true)
+        },
+        [normalizeDetailedEntries]
+    )
+
+    const handleCloseEditDialog = useCallback(() => {
+        setIsEditDialogOpen(false)
+        setEditingStudyId(null)
+        setEditedStudy(null)
+        setIsSavingStudy(false)
+    }, [])
+
+    const handleEditedFieldChange = useCallback((field: keyof CaseStudyHighlight, value: string) => {
+        setEditedStudy((prev) => {
+            if (!prev) return prev
+            return {
+                ...prev,
+                [field]: value,
+            }
+        })
+    }, [])
+
+    const handleDetailedEntryChange = useCallback(
+        (field: "detailed_interventions" | "detailed_outcomes", index: number, key: "intervention" | "outcome", value: string) => {
+            setEditedStudy((prev) => {
+                if (!prev) return prev
+                const existingEntries = Array.isArray(prev[field]) ? [...(prev[field] as any[])] : []
+                const entry = { ...(existingEntries[index] || {}) }
+                entry[key] = value
+                existingEntries[index] = entry
+                return {
+                    ...prev,
+                    [field]: existingEntries,
+                } as CaseStudyHighlight
+            })
+        },
+        []
+    )
+
+    const handleSaveEditedStudy = useCallback(async () => {
+        if (!editedStudy || !editingStudyId) return
+        try {
+            setIsSavingStudy(true)
+            const supabase = createClientComponentClient()
+
+            const sanitizeText = (value?: string | null) => (value ? value.trim() : "")
+
+            const cleanedInterventions = (Array.isArray(editedStudy.detailed_interventions) ? editedStudy.detailed_interventions : []).map(
+                (item: any) => ({
+                    ...item,
+                    intervention: sanitizeText(item?.intervention),
+                })
+            )
+
+            const cleanedOutcomes = (Array.isArray(editedStudy.detailed_outcomes) ? editedStudy.detailed_outcomes : []).map(
+                (item: any) => ({
+                    ...item,
+                    outcome: sanitizeText(item?.outcome),
+                })
+            )
+
+            const payload: Record<string, any> = {
+                highlight_text: sanitizeText(editedStudy.highlight_text),
+                hospital_discharge_summary_text: sanitizeText(editedStudy.hospital_discharge_summary_text),
+                facility_summary_text: sanitizeText(editedStudy.facility_summary_text),
+                engagement_summary_text: sanitizeText(editedStudy.engagement_summary_text),
+                detailed_interventions: cleanedInterventions,
+                detailed_outcomes: cleanedOutcomes,
+            }
+
+            const { error } = await supabase
+                .from("patient_case_study_highlights")
+                .update(payload)
+                .eq("id", editingStudyId)
+
+            if (error) {
+                throw error
+            }
+
+            setCaseStudies((prev) =>
+                prev.map((study) =>
+                    study.id === editingStudyId
+                        ? {
+                              ...study,
+                              ...payload,
+                          }
+                        : study
+                )
+            )
+
+            toast({
+                title: "Saved",
+                description: "Updates saved successfully.",
+            })
+            handleCloseEditDialog()
+        } catch (error) {
+            console.error("Error saving study:", error)
+            toast({
+                title: "Error",
+                description: "Failed to save changes. Please try again.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsSavingStudy(false)
+        }
+    }, [editedStudy, editingStudyId, toast, handleCloseEditDialog])
+
+    const phiPreviewExample = useMemo(() => formatPatientName("Casey Carrier"), [formatPatientName])
+
+    const safeInterventionCounts = useMemo(
+        () =>
+            Array.isArray(interventionCounts)
+                ? interventionCounts.filter(
+                    (item): item is { name: string; count: number } =>
+                        !!item && typeof item.name === "string" && typeof item.count === "number"
+                )
+                : [],
+        [interventionCounts]
+    )
 
     // Add effect to fetch patients when nursing home changes
     useEffect(() => {
@@ -681,8 +844,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 }
             } else {
                 const formattedCaseStudies = data.map(async (cs) => {
-                    setClinicalRisks(cs.categorizedRisks);
-                    setInterventionCounts(cs.categorizedInterventions);
+                    setClinicalRisks(Array.isArray(cs.categorizedRisks) ? cs.categorizedRisks : []);
+                    setInterventionCounts(Array.isArray(cs.categorizedInterventions) ? cs.categorizedInterventions : []);
                 });
             }
         } catch (error: any) {
@@ -752,7 +915,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
                 returnBlob: true,
-                interventionCounts: interventionCounts,
+                interventionCounts: safeInterventionCounts,
                 totalInterventions: totalInterventions,
                 clinicalRisks: clinicalRisks
             })
@@ -792,7 +955,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         caseStudyEntries,
         interventionEntries,
         categorizedInterventions,
-        interventionCounts,
+        safeInterventionCounts,
         clinicalRisks,
         patientMetrics,
         toast,
@@ -827,7 +990,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
-                interventionCounts: interventionCounts,
+                interventionCounts: safeInterventionCounts,
                 totalInterventions: totalInterventions,
                 clinicalRisks: clinicalRisks
             })
@@ -873,7 +1036,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 categorizedInterventions,
                 returnBlob: false,
                 expandedPatientId,
-                interventionCounts:interventionCounts,
+                interventionCounts: safeInterventionCounts,
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
@@ -1013,7 +1176,7 @@ ${JSON.stringify(parsed, null, 2)}
     console.log("Facility Metrics ", patientMetrics)
 
     // Calculate total interventions for the touchpoints section
-    const totalInterventions = interventionCounts.reduce((sum, item) => sum + item.count, 0)
+    const totalInterventions = safeInterventionCounts.reduce((sum, item) => sum + item.count, 0)
 
     //const COLORS = ["#4ade80", "#f87171"] // Green for success, red for readmissions
     const COLORS = [
@@ -1449,7 +1612,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                 >
                                                     <ResponsiveContainer width="100%" height="100%">
                                                         <BarChart
-                                                            data={interventionCounts}
+                                            data={safeInterventionCounts}
                                                             layout="vertical"
                                                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                                                         >
@@ -1458,7 +1621,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                             <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
                                                             <Tooltip />
                                                             <Bar dataKey="count" name="Count">
-                                                                {interventionCounts.map((entry, index) => (
+                                                        {safeInterventionCounts.map((entry, index) => (
                                                                     <Cell
                                                                         key={`cell-${index}`}
                                                                         fill={INTERVENTION_COLORS[index % INTERVENTION_COLORS.length]}
@@ -1478,7 +1641,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                         Total Interventions Delivered: {totalInterventions}
                                                     </div>
                                                     <ul className="text-sm space-y-2">
-                                                        {interventionCounts.map((item, index) => (
+                                                        {safeInterventionCounts.map((item, index) => (
                                                             <li key={index} className="flex items-center">
                                                                 <span
                                                                     className="w-3 h-3 rounded-full mr-2"
@@ -1573,7 +1736,12 @@ ${JSON.stringify(parsed, null, 2)}
 
                                             return (
                                                 <div key={study.id} className="mb-6">
-                                                    <p className="text-sm font-semibold text-gray-800 mb-2">{shortName}</p>
+                                                    <div className="mb-2 flex items-start justify-between gap-3">
+                                                        <p className="text-sm font-semibold text-gray-800">{shortName}</p>
+                                                        <Button variant="ghost" size="sm" onClick={() => handleOpenEditDialog(study)}>
+                                                            Edit
+                                                        </Button>
+                                                    </div>
 
                                                     {/* Interventions */}
                                                     {(study.detailed_interventions || []).length > 0 && (
@@ -1658,7 +1826,12 @@ ${JSON.stringify(parsed, null, 2)}
 
                                                 return (
                                                     <div key={study.id} className="border-l-4 border-blue-500 pl-4 py-2 mb-4">
-                                                        <p className="text-sm font-medium">{shortName}</p>
+                                                        <div className="mb-2 flex items-start justify-between gap-3">
+                                                            <p className="text-sm font-medium">{shortName}</p>
+                                                            <Button variant="ghost" size="sm" onClick={() => handleOpenEditDialog(study)}>
+                                                                Edit
+                                                            </Button>
+                                                        </div>
                                                         <p className="text-sm font-medium">
                                                             {study.hospital_discharge_summary_text
                                                                 ? study.hospital_discharge_summary_text.charAt(0).toUpperCase() +
@@ -1698,6 +1871,157 @@ ${JSON.stringify(parsed, null, 2)}
                     </CardContent>
                 </Card>
             )}
+
+            <Dialog
+                open={isEditDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open && !isSavingStudy) {
+                        handleCloseEditDialog()
+                    }
+                }}
+            >
+                <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>Edit report content</DialogTitle>
+                        <DialogDescription>
+                            Adjust AI-generated summaries and interventions. Saved changes persist for future reports.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {editedStudy ? (
+                        <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
+                            <div>
+                                <Label className="text-xs font-semibold text-muted-foreground">Patient</Label>
+                                <p className="text-sm font-medium text-slate-800">
+                                    {formatPatientName(editedStudy.patient_name)}
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="highlight-text" className="text-sm font-medium">
+                                    Key Highlight
+                                </Label>
+                                <Textarea
+                                    id="highlight-text"
+                                    value={editedStudy.highlight_text || ""}
+                                    onChange={(event) => handleEditedFieldChange("highlight_text", event.target.value)}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="discharge-summary" className="text-sm font-medium">
+                                    Hospital Discharge Summary
+                                </Label>
+                                <Textarea
+                                    id="discharge-summary"
+                                    value={editedStudy.hospital_discharge_summary_text || ""}
+                                    onChange={(event) =>
+                                        handleEditedFieldChange("hospital_discharge_summary_text", event.target.value)
+                                    }
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="facility-summary" className="text-sm font-medium">
+                                    Facility Summary
+                                </Label>
+                                <Textarea
+                                    id="facility-summary"
+                                    value={editedStudy.facility_summary_text || ""}
+                                    onChange={(event) =>
+                                        handleEditedFieldChange("facility_summary_text", event.target.value)
+                                    }
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="engagement-summary" className="text-sm font-medium">
+                                    Engagement Summary
+                                </Label>
+                                <Textarea
+                                    id="engagement-summary"
+                                    value={editedStudy.engagement_summary_text || ""}
+                                    onChange={(event) =>
+                                        handleEditedFieldChange("engagement_summary_text", event.target.value)
+                                    }
+                                />
+                            </div>
+
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-semibold text-slate-700">Interventions</h4>
+                                {Array.isArray(editedStudy.detailed_interventions) &&
+                                editedStudy.detailed_interventions.length > 0 ? (
+                                    editedStudy.detailed_interventions.map((item: any, index: number) => (
+                                        <div key={`edit-int-${index}`} className="space-y-2 rounded-md border border-slate-200 p-3">
+                                            <Label className="text-xs font-medium uppercase text-muted-foreground">
+                                                Intervention {index + 1}
+                                            </Label>
+                                            <Textarea
+                                                value={item?.intervention || ""}
+                                                onChange={(event) =>
+                                                    handleDetailedEntryChange(
+                                                        "detailed_interventions",
+                                                        index,
+                                                        "intervention",
+                                                        event.target.value
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">No intervention details available.</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-semibold text-slate-700">Outcomes</h4>
+                                {Array.isArray(editedStudy.detailed_outcomes) &&
+                                editedStudy.detailed_outcomes.length > 0 ? (
+                                    editedStudy.detailed_outcomes.map((item: any, index: number) => (
+                                        <div key={`edit-out-${index}`} className="space-y-2 rounded-md border border-slate-200 p-3">
+                                            <Label className="text-xs font-medium uppercase text-muted-foreground">
+                                                Outcome {index + 1}
+                                            </Label>
+                                            <Textarea
+                                                value={item?.outcome || ""}
+                                                onChange={(event) =>
+                                                    handleDetailedEntryChange(
+                                                        "detailed_outcomes",
+                                                        index,
+                                                        "outcome",
+                                                        event.target.value
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">No outcome details available.</p>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">Select a patient case to edit.</p>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={handleCloseEditDialog} disabled={isSavingStudy}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSaveEditedStudy} disabled={isSavingStudy}>
+                            {isSavingStudy ? (
+                                <>
+                                    Saving
+                                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                                </>
+                            ) : (
+                                "Save changes"
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
