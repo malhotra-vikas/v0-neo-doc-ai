@@ -288,7 +288,7 @@ async function parseReadmittedPatientsFromExcel(
     const sheetConfigs = [
         { name: 'CCM Master', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' },
         { name: 'CCM Master Discharged', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' },
-        { name: 'PMR - Non CCM', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' }
+        { name: 'PMR - Non CCM', readmissionField: 'SNF Admit Date' }
     ]
 
     const formatDate = (dateValue: any): string => {
