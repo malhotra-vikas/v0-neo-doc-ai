@@ -204,13 +204,36 @@ async function getFilePaths(nursingHomeId: string, month: string, year: string) 
 
     if (error || !data) {
         console.error("Error fetching file paths", error)
-        return { patientsPath: null, nonCcmPath: null }
+        return { patientsPath: null, nonCcmPath: null, bambooReportPath: null }
     }
 
     const patientsPath = data.find(d => d.file_type === 'Patients')?.file_path || null
     const nonCcmPath = data.find(d => d.file_type === 'Non CCM')?.file_path || null
+    const bambooReportPath = data.find(d => d.file_type === 'Bamboo Report')?.file_path || null
 
-    return { patientsPath, nonCcmPath }
+    return { patientsPath, nonCcmPath, bambooReportPath }
+}
+
+async function getBambooReportPath(month: string, year: string, state: string) {
+    const supabase = createClientComponentClient()
+    const PUZZLE_FACILITY_ID = "1688ba99-e4d3-4543-a0ba-7caa37e33a1c"
+
+    const { data, error } = await supabase
+        .from('nursing_home_files')
+        .select('file_type, file_path, us_state')
+        .eq('nursing_home_id', PUZZLE_FACILITY_ID)
+        .eq('month', month)
+        .eq('year', year)
+        .eq('us_state', state)
+        .eq('file_type', 'Bamboo Report')
+
+
+    if (error || !data) {
+        console.error("Error fetching Bamboo Report file path", error)
+        return null
+    }
+
+    return data[0]?.file_path || null
 }
 
 async function fetchAndParseExcel(path: string | null): Promise<XLSX.WorkSheet | null> {
@@ -226,6 +249,143 @@ async function fetchAndParseExcel(path: string | null): Promise<XLSX.WorkSheet |
     const arrayBuffer = await data.arrayBuffer()
     const workbook = XLSX.read(arrayBuffer, { type: "array" })
     return workbook.Sheets[workbook.SheetNames[0]]
+}
+
+async function parseReadmittedPatientsFromExcel(
+    filePath: string | null,
+    facilityName: string
+): Promise<Array<{
+    name: string;
+    hospitalDischargeDate: string;
+    snfDischargeDate: string;
+    hospitalReadmitDate: string;
+    hospitalName: string;
+    readmissionReason: string;
+}>> {
+    if (!filePath) return []
+
+    const supabase = createClientComponentClient()
+    const { data, error } = await supabase.storage.from('nursing-home-files').download(filePath)
+
+    if (error || !data) {
+        console.error("Error downloading file for readmitted patients", error)
+        return []
+    }
+
+    const arrayBuffer = await data.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: "array" })
+
+    const readmittedPatients: Array<{
+        name: string;
+        hospitalDischargeDate: string;
+        snfDischargeDate: string;
+        hospitalReadmitDate: string;
+        hospitalName: string;
+        readmissionReason: string;
+    }> = []
+
+    // Check all three sheets: CCM Master, CCM Master Discharged, and PMR - Non CCM
+    const sheetConfigs = [
+        { name: 'CCM Master', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' },
+        { name: 'CCM Master Discharged', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' },
+        { name: 'PMR - Non CCM', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' }
+    ]
+
+    const formatDate = (dateValue: any): string => {
+        if (!dateValue) return 'N/A'
+        try {
+            // Handle Excel date numbers
+            if (typeof dateValue === 'number') {
+                const excelEpoch = new Date(1899, 11, 30)
+                const date = new Date(excelEpoch.getTime() + dateValue * 86400000)
+                return date.toLocaleDateString()
+            }
+            // Handle date strings
+            const date = new Date(dateValue)
+            return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString()
+        } catch {
+            return 'N/A'
+        }
+    }
+
+    const parseDateRange = (dateRangeStr: any): { readmitDate: string; reDischargeDate: string } => {
+        // Parse format like "04/18/2025 - 04/25/2025" where first date is readmit, second is re-discharge
+        if (!dateRangeStr) return { readmitDate: 'N/A', reDischargeDate: 'N/A' }
+
+        const str = dateRangeStr.toString().trim()
+        const parts = str.split('-').map((p: string) => p.trim())
+
+        if (parts.length === 2) {
+            return {
+                readmitDate: parts[0] || 'N/A',
+                reDischargeDate: parts[1] || 'N/A'
+            }
+        }
+
+        // If not in range format, might be a single date
+        return { readmitDate: str, reDischargeDate: 'N/A' }
+    }
+
+    for (const config of sheetConfigs) {
+        const sheet = workbook.Sheets[config.name]
+        if (!sheet) {
+            console.log(`Sheet "${config.name}" not found in workbook`)
+            continue
+        }
+
+        const data = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' })
+        console.log(`Processing sheet "${config.name}" with ${data.length} rows`)
+
+        for (const row of data) {
+            const snfFacility = row['SNF Facility Name']?.toString().trim()
+            const patientName = row['Patient Name']?.toString().trim()
+
+            // Different logic based on sheet type
+            let hasReadmission = false
+            let parsedReadmitDate = 'N/A'
+
+            if (config.name === 'PMR - Non CCM') {
+                // For PMR - Non CCM, check if SNF Admit Date has data
+                hasReadmission = !!row['SNF Admit Date']
+                console.log(`PMR - Non CCM: Patient ${patientName}, SNF Admit Date: ${row['SNF Admit Date']}, hasReadmission: ${hasReadmission}, facility name: ${snfFacility} vs target: ${facilityName}`)
+            } else {
+                // For CCM Master and CCM Master Discharged, check the readmission field
+                const readmissionField = row[config.readmissionField]
+                if (readmissionField) {
+                    hasReadmission = true
+                    // Parse the date range format "04/18/2025 - 04/25/2025"
+                    const dateRange = parseDateRange(readmissionField)
+                    parsedReadmitDate = dateRange.readmitDate  // Hospital readmit date (first date in range)
+                    console.log(`${config.name}: Patient ${patientName}, Readmission field: ${readmissionField}, Parsed readmit date: ${parsedReadmitDate}, facility name: ${snfFacility} vs target: ${facilityName}`)
+                }
+            }
+
+            // Only process if there's a readmission for this facility
+            if (!snfFacility || snfFacility.toLowerCase() !== facilityName.toLowerCase() || !hasReadmission || !patientName) {
+                continue
+            }
+
+            // Extract all required fields
+            const hospitalDischargeDate = row['Hospital Discharge Date']
+            const snfDischargeDate = row['SNF Discharge Date']
+            const hospitalReadmitDate = row['Hospital Readmit Date'] || parsedReadmitDate
+            const hospitalName = row['Hospital Name']?.toString().trim() || 'N/A'
+            const readmissionReason = row['Readmission Reason']?.toString().trim() || 'N/A'
+
+            readmittedPatients.push({
+                name: patientName,
+                hospitalDischargeDate: formatDate(hospitalDischargeDate),
+                snfDischargeDate: formatDate(snfDischargeDate),
+                hospitalReadmitDate: typeof hospitalReadmitDate === 'string' ? hospitalReadmitDate : formatDate(hospitalReadmitDate),
+                hospitalName: hospitalName,
+                readmissionReason: readmissionReason
+            })
+        }
+    }
+
+    console.log(`Found ${readmittedPatients.length} readmitted patients for facility "${facilityName}"`)
+    console.log(readmittedPatients)
+    return readmittedPatients
 }
 
 
@@ -259,6 +419,17 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     // Add clinical risks state for the Top Clinical Risks chart
     const [clinicalRisks, setClinicalRisks] = useState<Array<{ risk: string; count: number }>>([
+    ])
+
+    // Add readmitted patients state
+    const [readmittedPatients, setReadmittedPatients] = useState<Array<{
+        name: string;
+        hospitalDischargeDate: string;
+        snfDischargeDate: string;
+        hospitalReadmitDate: string;
+        hospitalName: string;
+        readmissionReason: string;
+    }>>([
     ])
 
     // Add patient metrics state
@@ -511,6 +682,25 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
                 const facilityStaticInfo = await getFacilityStatic(selectedNursingHomeId)
                 setFacilityData(facilityStaticInfo)
+
+                // Fetch readmitted patients from AllPuzzleFacility Bamboo Report
+                if (facilityStaticInfo && facilityStaticInfo.us_state) {
+                    const bambooReportPath = await getBambooReportPath(selectedMonth, selectedYear, facilityStaticInfo.us_state)
+                    console.log("Bamboo Report Path is - ", bambooReportPath)
+
+                    if (bambooReportPath && selectedNursingHomeName) {
+                        console.log(`Fetching readmitted patients from Bamboo Report: ${bambooReportPath}`)
+                        const readmitted = await parseReadmittedPatientsFromExcel(bambooReportPath, selectedNursingHomeName)
+                        console.log(`Setting ${readmitted.length} readmitted patients in state`)
+                        setReadmittedPatients(readmitted)
+                    } else {
+                        console.log('No Bamboo Report found for the selected month/year/state')
+                        setReadmittedPatients([])
+                    }
+                } else {
+                    console.log('Facility state not available')
+                    setReadmittedPatients([])
+                }
 
                 if (!data) return
 
@@ -899,6 +1089,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const privacySafeCaseStudies = applyPatientPrivacy(caseStudies)
             const privacySafeCaseStudyEntries = applyPatientPrivacy(caseStudyEntries)
             const privacySafeInterventionEntries = applyPatientPrivacy(interventionEntries)
+            const privacySafeReadmittedPatients = readmittedPatients.map(patient => ({
+                ...patient,
+                name: formatPatientName(patient.name)
+            }))
 
             // Use the exportToPDF function to generate a PDF blob
             const result = await exportToPDF({
@@ -917,7 +1111,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 returnBlob: true,
                 interventionCounts: safeInterventionCounts,
                 totalInterventions: totalInterventions,
-                clinicalRisks: clinicalRisks
+                clinicalRisks: clinicalRisks,
+                readmittedPatients: privacySafeReadmittedPatients
             })
 
             if (!result || !(result instanceof Blob)) {
@@ -975,6 +1170,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const privacySafeCaseStudies = applyPatientPrivacy(caseStudies)
             const privacySafeCaseStudyEntries = applyPatientPrivacy(caseStudyEntries)
             const privacySafeInterventionEntries = applyPatientPrivacy(interventionEntries)
+            const privacySafeReadmittedPatients = readmittedPatients.map(patient => ({
+                ...patient,
+                name: formatPatientName(patient.name)
+            }))
 
             // Use the exportToPDF function from export-utils
             await exportToPDF({
@@ -992,7 +1191,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
                 interventionCounts: safeInterventionCounts,
                 totalInterventions: totalInterventions,
-                clinicalRisks: clinicalRisks
+                clinicalRisks: clinicalRisks,
+                readmittedPatients: privacySafeReadmittedPatients
             })
 
             toast({
@@ -1595,6 +1795,65 @@ ${JSON.stringify(parsed, null, 2)}
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Re-Admitted Patients Table - Separate Section */}
+                                    {readmittedPatients.length > 0 && (
+                                        <div className="border rounded-lg p-6 bg-white">
+                                            <h2 className="text-xl font-semibold text-blue-800 mb-4">
+                                                30-Day Re-Admitted Patients
+                                            </h2>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
+                                                    <thead className="bg-gray-50">
+                                                        <tr>
+                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                                Patient Name
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                                Hospital Discharge Date
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                                SNF Discharge Date
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                                Hospital Readmission Date
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                                Hospital Name
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                                Readmission Reason
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        {readmittedPatients.map((patient, index) => (
+                                                            <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                                                                <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                                                                    {formatPatientName(patient.name)}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                                                                    {patient.hospitalDischargeDate}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                                                                    {patient.snfDischargeDate}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                                                                    {patient.hospitalReadmitDate}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-sm text-gray-900">
+                                                                    {patient.hospitalName}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-sm text-gray-900">
+                                                                    {patient.readmissionReason}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
                                     {/* Puzzle's Touchpoints with Bar Chart */}
                                     <div className="border rounded-lg p-6 bg-white">
                                         <h2 className="text-xl font-semibold text-blue-800 mb-4">Puzzle's Touchpoints</h2>
