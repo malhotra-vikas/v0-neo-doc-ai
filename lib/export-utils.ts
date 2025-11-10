@@ -63,6 +63,14 @@ interface ExportPDFOptions {
     interventionCounts: { name: string; count: number }[];
     totalInterventions: number;
     clinicalRisks: { risk: string; count: number }[];
+    readmittedPatients?: Array<{
+        name: string;
+        hospitalDischargeDate: string;
+        snfDischargeDate: string;
+        hospitalReadmitDate: string;
+        hospitalName: string;
+        readmissionReason: string;
+    }>;
 }
 
 interface ExportDOCXOptions {
@@ -167,7 +175,8 @@ export const exportToPDF = async ({
     expandedPatientId,
     interventionCounts,
     totalInterventions,
-    clinicalRisks
+    clinicalRisks,
+    readmittedPatients = []
 }: ExportPDFOptions): Promise<void | Blob> => {
 
 
@@ -344,7 +353,7 @@ export const exportToPDF = async ({
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Puzzle SNF Report for ${nursingHomeName}</title>
+    <title>Puzzle SNF Report for ${nursingHomeName} - ${monthYear}</title>
 </head>
 
 <body style="margin:0 20px; padding:0; background:#f6f7fb; font-family: Arial, Helvetica, sans-serif;">
@@ -356,6 +365,7 @@ export const exportToPDF = async ({
         <div style="position: relative; width: 100%; ">
             <h1 style="margin: 0; font-size: 40px; color: #07226c; font-weight: 700; line-height: 1;">Puzzle SNF Report
                 for ${nursingHomeName}</h1>
+            <p style="margin: 8px 0 0 0; font-size: 18px; color: #6b789a; font-weight: 500;">${monthYear}</p>
         </div>
 
         <div style="margin-top: 50px; display: flex; align-items: center; width: 100%;">
@@ -416,6 +426,69 @@ export const exportToPDF = async ({
                     supported by Puzzle Continuity Care.</p>
             </div>
         </div>
+
+        <!-- 30-Day Re-Admitted Patients Table -->
+        ${readmittedPatients && readmittedPatients.length > 0 ? `
+        <div style="margin-top: 32px;">
+            <h2 style="font-size: 26px; color: #07226c; font-weight: 800; margin: 0 0 14px 0;margin-bottom: 16px;">
+                30-Day Re-Admitted Patients
+            </h2>
+
+            <div style="width: 100%;margin-top:16px">
+                <table style="width:100%; border-collapse: collapse; font-size:14px;color: #07226c;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Patient Name
+                            </th>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Hospital Discharge Date
+                            </th>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                SNF Discharge Date
+                            </th>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Hospital Readmission Date
+                            </th>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Hospital Name
+                            </th>
+                            <th style="text-align:left; padding:14px; border:1px solid #e6edf5; font-weight:700; color:#07226c;">
+                                Readmission Reason
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${readmittedPatients.map((patient, index) => {
+                            const background = index % 2 === 0 ? 'background: #f5f5f5;' : '';
+                            return `
+                            <tr class="avoid-page-break">
+                                <td style="padding:14px; border:1px solid #eef4f9; ${background}">
+                                    ${patient.name}
+                                </td>
+                                <td style="padding:14px; border:1px solid #eef4f9; ${background}">
+                                    ${patient.hospitalDischargeDate}
+                                </td>
+                                <td style="padding:14px; border:1px solid #eef4f9; ${background}">
+                                    ${patient.snfDischargeDate}
+                                </td>
+                                <td style="padding:14px; border:1px solid #eef4f9; ${background}">
+                                    ${patient.hospitalReadmitDate}
+                                </td>
+                                <td style="padding:14px; border:1px solid #eef4f9; ${background}">
+                                    ${patient.hospitalName}
+                                </td>
+                                <td style="padding:14px; border:1px solid #eef4f9; ${background}">
+                                    ${patient.readmissionReason}
+                                </td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        ` : ''}
 
         <div style="margin-top: 32px;">
             <div style="height: 18px;"></div>
