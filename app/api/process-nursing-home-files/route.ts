@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
                 if (sheetName === 'PMR - Non CCM') {
                     if (row['SNF Facility Name'] === raw) {
                         summary.nonCcmMasterCount += 1
-                        if (row['SNF Admit Date']) summary.h30Admit += 1
+                        summary.h30Admit += 1
                     }
                 }
             }

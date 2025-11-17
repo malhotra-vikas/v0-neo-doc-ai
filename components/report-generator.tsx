@@ -285,10 +285,10 @@ async function parseReadmittedPatientsFromExcel(
     }> = []
 
     // Check all three sheets: CCM Master, CCM Master Discharged, and PMR - Non CCM
-    const sheetConfigs = [
-        { name: 'CCM Master', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' },
-        { name: 'CCM Master Discharged', readmissionField: '30 Day Reported Hospitalization - from SNF Admit Date' },
-        { name: 'PMR - Non CCM', readmissionField: 'SNF Admit Date' }
+    const sheetConfigsReadmissionData = [
+        { name: 'CCM Master', hospitalName: '', readmissionCaseField: '30 Day Reported Hospitalization - from SNF Admit Date', hospitalReadmitDateField: '30 Day Reported Hospitalization - from SNF Discharge Date', hospitalReadmitReasonField: '30 Day Hospitalization Information - from SNF Discharge Date' },
+        { name: 'CCM Master Discharged', hospitalName: '', readmissionCaseField: '30 Day Reported Hospitalization - from SNF Admit Date', hospitalReadmitDateField: '30 Day Reported Hospitalization - from SNF Discharge Date', hospitalReadmitReasonField: '30 Day Hospitalization Information - from SNF Discharge Date' },
+        { name: 'PMR - Non CCM', hospitalName: 'Hospital System', readmissionCaseField: 'Patient Name', hospitalReadmitDateField: 'Reported Hospitalization', hospitalReadmitReasonField: 'Reason for Hospitalization' },
     ]
 
     const formatDate = (dateValue: any): string => {
@@ -308,25 +308,58 @@ async function parseReadmittedPatientsFromExcel(
         }
     }
 
-    const parseDateRange = (dateRangeStr: any): { readmitDate: string; reDischargeDate: string } => {
+    const parseAdmitReason = (reasonStr: any): { hospitalName: string; readmitReason: string } => {
         // Parse format like "04/18/2025 - 04/25/2025" where first date is readmit, second is re-discharge
-        if (!dateRangeStr) return { readmitDate: 'N/A', reDischargeDate: 'N/A' }
+        if (!reasonStr) return { hospitalName: 'N/A', readmitReason: 'N/A' }
 
-        const str = dateRangeStr.toString().trim()
+        const str = reasonStr.toString().trim()
         const parts = str.split('-').map((p: string) => p.trim())
 
         if (parts.length === 2) {
             return {
-                readmitDate: parts[0] || 'N/A',
-                reDischargeDate: parts[1] || 'N/A'
+                hospitalName: parts[0] || 'N/A',
+                readmitReason: parts[1] || 'N/A'
             }
         }
 
         // If not in range format, might be a single date
-        return { readmitDate: str, reDischargeDate: 'N/A' }
+        return { hospitalName: str, readmitReason: 'N/A' }
     }
 
-    for (const config of sheetConfigs) {
+
+    const parseDateRange = (
+        dateRangeStr: any
+    ): { readmitDate: string | number; reDischargeDate: string | number } => {
+        // Normalize values so numeric Excel serials remain numbers and can be converted later
+        const normalizeValue = (value: any): string | number => {
+            if (typeof value === 'number') return value
+            const str = value?.toString().trim()
+            if (!str) return 'N/A'
+
+            const numericVal = Number(str)
+            if (!Number.isNaN(numericVal)) return numericVal
+            return str
+        }
+
+        if (dateRangeStr === null || dateRangeStr === undefined || dateRangeStr === '') {
+            return { readmitDate: 'N/A', reDischargeDate: 'N/A' }
+        }
+
+        const str = dateRangeStr.toString().trim()
+        const parts = str.split('-').map((p: string) => p.trim()).filter(Boolean)
+
+        if (parts.length === 2) {
+            return {
+                readmitDate: normalizeValue(parts[0]),
+                reDischargeDate: normalizeValue(parts[1])
+            }
+        }
+
+        // If not in range format, might be a single date
+        return { readmitDate: normalizeValue(str), reDischargeDate: 'N/A' }
+    }
+
+    for (const config of sheetConfigsReadmissionData) {
         const sheet = workbook.Sheets[config.name]
         if (!sheet) {
             console.log(`Sheet "${config.name}" not found in workbook`)
@@ -342,44 +375,58 @@ async function parseReadmittedPatientsFromExcel(
 
             // Different logic based on sheet type
             let hasReadmission = false
-            let parsedReadmitDate = 'N/A'
+            let parsedReadmitDate: string | number = 'N/A'
+            let readmissionReason = 'N/A'
+            let hospitalName = 'N/A'
 
-            if (config.name === 'PMR - Non CCM') {
-                // For PMR - Non CCM, check if SNF Admit Date has data
-                hasReadmission = !!row['SNF Admit Date']
-                console.log(`PMR - Non CCM: Patient ${patientName}, SNF Admit Date: ${row['SNF Admit Date']}, hasReadmission: ${hasReadmission}, facility name: ${snfFacility} vs target: ${facilityName}`)
-            } else {
-                // For CCM Master and CCM Master Discharged, check the readmission field
-                const readmissionField = row[config.readmissionField]
-                if (readmissionField) {
-                    hasReadmission = true
-                    // Parse the date range format "04/18/2025 - 04/25/2025"
-                    const dateRange = parseDateRange(readmissionField)
-                    parsedReadmitDate = dateRange.readmitDate  // Hospital readmit date (first date in range)
-                    console.log(`${config.name}: Patient ${patientName}, Readmission field: ${readmissionField}, Parsed readmit date: ${parsedReadmitDate}, facility name: ${snfFacility} vs target: ${facilityName}`)
+            let readmissionDateField = ''
+            let readmissionReasonField = ''
+            const hospitalDischargeDate = row['Hospital Discharge Date']
+            const snfDischargeDate = row['SNF Discharge Date']
+
+            hasReadmission = row[config.readmissionCaseField] ? true : false
+            if (hasReadmission && (snfFacility && snfFacility.toLowerCase() === facilityName.toLowerCase())) {
+                readmissionDateField = row[config.hospitalReadmitDateField]
+                readmissionReasonField = row[config.hospitalReadmitReasonField]
+
+                if (config.name === 'PMR - Non CCM') {
+
+                    readmissionReason = row['Reason for Hospitalization'].toString().trim()
+                    hospitalName = row['Readmit Hospital System'].toString().trim()
+                } else {
+                    readmissionReason = parseAdmitReason(readmissionReasonField).readmitReason
+                    hospitalName = parseAdmitReason(readmissionReasonField).hospitalName
+
                 }
+                console.log(`Hospital Name from ${config.name} is - ${hospitalName}`)
+                console.log(`Readmission Reason from ${config.name} is - ${readmissionReason}`)
+
+                console.log("date range field is - ", readmissionDateField)
+                // Parse the date range format "04/18/2025 - 04/25/2025"
+                const dateRange = parseDateRange(readmissionDateField)
+                console.log("date range parsed is - ", dateRange)
+
+                parsedReadmitDate = dateRange.readmitDate  // Hospital readmit date (first date in range)
+                console.log("1st date read is  - ", parsedReadmitDate)
+
+                console.log(`${config.name}: Patient ${patientName}, Parsed readmit date: ${parsedReadmitDate}, hospital Name: ${hospitalName}, readmissionReason: ${readmissionReason}`)
+
+                readmittedPatients.push({
+                    name: patientName,
+                    hospitalDischargeDate: formatDate(hospitalDischargeDate),
+                    snfDischargeDate: formatDate(snfDischargeDate),
+                    hospitalReadmitDate: formatDate(parsedReadmitDate),
+                    hospitalName: hospitalName,
+                    readmissionReason: readmissionReason
+                })
+
             }
+
 
             // Only process if there's a readmission for this facility
             if (!snfFacility || snfFacility.toLowerCase() !== facilityName.toLowerCase() || !hasReadmission || !patientName) {
                 continue
             }
-
-            // Extract all required fields
-            const hospitalDischargeDate = row['Hospital Discharge Date']
-            const snfDischargeDate = row['SNF Discharge Date']
-            const hospitalReadmitDate = row['Hospital Readmit Date'] || parsedReadmitDate
-            const hospitalName = row['Hospital Name']?.toString().trim() || 'N/A'
-            const readmissionReason = row['Readmission Reason']?.toString().trim() || 'N/A'
-
-            readmittedPatients.push({
-                name: patientName,
-                hospitalDischargeDate: formatDate(hospitalDischargeDate),
-                snfDischargeDate: formatDate(snfDischargeDate),
-                hospitalReadmitDate: typeof hospitalReadmitDate === 'string' ? hospitalReadmitDate : formatDate(hospitalReadmitDate),
-                hospitalName: hospitalName,
-                readmissionReason: readmissionReason
-            })
         }
     }
 
@@ -491,7 +538,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             }
 
             const firstInitial = first ? `${first.charAt(0).toUpperCase()}.` : ""
-            const lastInitial = last ? last.charAt(0).toUpperCase() : ""
+            const lastInitial = last ? `${last.charAt(0).toUpperCase()}.` : ""
             const masked = [firstInitial, lastInitial].filter(Boolean).join(" ")
 
             return masked || "Unknown"
@@ -622,9 +669,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 prev.map((study) =>
                     study.id === editingStudyId
                         ? {
-                              ...study,
-                              ...payload,
-                          }
+                            ...study,
+                            ...payload,
+                        }
                         : study
                 )
             )
@@ -1240,7 +1287,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 readmissionsChartRef: readmissionsChartRef.current,
                 touchpointsChartRef: touchpointsChartRef.current,
                 clinicalRisksChartRef: clinicalRisksChartRef.current,
-                clinicalRisks:clinicalRisks
+                clinicalRisks: clinicalRisks
             })
 
             toast({
@@ -1373,7 +1420,6 @@ ${JSON.stringify(parsed, null, 2)}
         }
     ]
 
-    console.log("Facility Metrics ", patientMetrics)
 
     // Calculate total interventions for the touchpoints section
     const totalInterventions = safeInterventionCounts.reduce((sum, item) => sum + item.count, 0)
@@ -1871,7 +1917,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                 >
                                                     <ResponsiveContainer width="100%" height="100%">
                                                         <BarChart
-                                            data={safeInterventionCounts}
+                                                            data={safeInterventionCounts}
                                                             layout="vertical"
                                                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                                                         >
@@ -1880,7 +1926,7 @@ ${JSON.stringify(parsed, null, 2)}
                                                             <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
                                                             <Tooltip />
                                                             <Bar dataKey="count" name="Count">
-                                                        {safeInterventionCounts.map((entry, index) => (
+                                                                {safeInterventionCounts.map((entry, index) => (
                                                                     <Cell
                                                                         key={`cell-${index}`}
                                                                         fill={INTERVENTION_COLORS[index % INTERVENTION_COLORS.length]}
@@ -2209,7 +2255,7 @@ ${JSON.stringify(parsed, null, 2)}
                             <div className="space-y-3">
                                 <h4 className="text-sm font-semibold text-slate-700">Interventions</h4>
                                 {Array.isArray(editedStudy.detailed_interventions) &&
-                                editedStudy.detailed_interventions.length > 0 ? (
+                                    editedStudy.detailed_interventions.length > 0 ? (
                                     editedStudy.detailed_interventions.map((item: any, index: number) => (
                                         <div key={`edit-int-${index}`} className="space-y-2 rounded-md border border-slate-200 p-3">
                                             <Label className="text-xs font-medium uppercase text-muted-foreground">
@@ -2236,7 +2282,7 @@ ${JSON.stringify(parsed, null, 2)}
                             <div className="space-y-3">
                                 <h4 className="text-sm font-semibold text-slate-700">Outcomes</h4>
                                 {Array.isArray(editedStudy.detailed_outcomes) &&
-                                editedStudy.detailed_outcomes.length > 0 ? (
+                                    editedStudy.detailed_outcomes.length > 0 ? (
                                     editedStudy.detailed_outcomes.map((item: any, index: number) => (
                                         <div key={`edit-out-${index}`} className="space-y-2 rounded-md border border-slate-200 p-3">
                                             <Label className="text-xs font-medium uppercase text-muted-foreground">
