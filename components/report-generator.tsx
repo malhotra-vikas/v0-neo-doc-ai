@@ -526,15 +526,26 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const name = (rawName || "").trim()
             if (!name) return "Unknown"
 
+            const toTitleCase = (value: string) =>
+                value
+                    .split(/\s+/)
+                    .map((part) =>
+                        part
+                            .split("-")
+                            .map((p) => (p ? `${p[0].toUpperCase()}${p.slice(1).toLowerCase()}` : ""))
+                            .join("-")
+                    )
+                    .join(" ")
+
             const parts = name.split(/\s+/)
             const first = parts[0] || ""
             const last = parts.slice(1).join(" ")
 
             if (showPatientPHI) {
                 if (first && last) {
-                    return `${first.charAt(0).toUpperCase()}. ${last}`
+                    return `${first.charAt(0).toUpperCase()}. ${toTitleCase(last)}`
                 }
-                return name
+                return toTitleCase(name)
             }
 
             const firstInitial = first ? `${first.charAt(0).toUpperCase()}.` : ""
