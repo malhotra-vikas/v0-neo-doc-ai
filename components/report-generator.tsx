@@ -491,7 +491,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             }
 
             const firstInitial = first ? `${first.charAt(0).toUpperCase()}.` : ""
-            const lastInitial = last ? last.charAt(0).toUpperCase() : ""
+            const lastInitial = last ? `${last.charAt(0).toUpperCase()}.` : ""
             const masked = [firstInitial, lastInitial].filter(Boolean).join(" ")
 
             return masked || "Unknown"
