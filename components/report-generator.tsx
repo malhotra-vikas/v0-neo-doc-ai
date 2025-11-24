@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/dialog"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { PrinterIcon } from "lucide-react"
-import { exportToPDF, exportToDOCX } from "@/lib/export-utils"
+import { exportToPDF } from "@/lib/export-utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format as dateformat } from "date-fns"
@@ -180,7 +180,9 @@ async function getFacilitySummary(nursingHomeId: string, month: string, year: st
         .eq('nursing_home_id', nursingHomeId)
         .eq('month', month)
         .eq('year', year)
-        .maybeSingle(); // safe: returns null if no row
+        .order('created_at', { ascending: false })     // sort newest first
+        .limit(1)                                       // take only the latest
+
 
     console.log("getFacilitySummary Data is - ", data)
 
@@ -189,7 +191,7 @@ async function getFacilitySummary(nursingHomeId: string, month: string, year: st
         return null
     }
 
-    return data
+    return data?.[0] || null
 }
 
 async function getFilePaths(nursingHomeId: string, month: string, year: string) {
@@ -813,8 +815,10 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 .from("patients")
                 .select("id, name, created_at")
                 .eq("nursing_home_id", selectedNursingHomeId)
-                .gte("created_at", startDate)
-                .lte("created_at", endDate)
+                .eq("month", selectedMonth)
+                .eq("year", selectedYear)
+                //.gte("created_at", startDate)
+                //.lte("created_at", endDate)
                 .order("name")
 
             if (error) throw error
