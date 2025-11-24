@@ -110,6 +110,17 @@ interface ReportGeneratorProps {
     nursingHomes: NursingHome[]
 }
 
+const initialPatientMetrics = {
+    totalPuzzlePatients: 0,
+    commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
+    commulative30Day_ReadmissionRate: 0,
+    facilityName: " ",
+    executiveSummary: " ",
+    closingStatement: " ",
+    publicLogoLink: " ",
+    nationalReadmissionsBenchmark: 0
+}
+
 export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
     if (!quotes || quotes.length === 0) return null
 
@@ -482,16 +493,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     ])
 
     // Add patient metrics state
-    const [patientMetrics, setPatientMetrics] = useState({
-        totalPuzzlePatients: 0,
-        commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
-        commulative30Day_ReadmissionRate: 0,
-        facilityName: " ",
-        executiveSummary: " ",
-        closingStatement: " ",
-        publicLogoLink: " ",
-        nationalReadmissionsBenchmark: 0
-    })
+    const [patientMetrics, setPatientMetrics] = useState(initialPatientMetrics)
 
     const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null)
 
@@ -718,6 +720,23 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 : [],
         [interventionCounts]
     )
+
+    // Clear report data when the selection changes
+    useEffect(() => {
+        setReportGenerated(false)
+        setCaseStudies([])
+        setSelectedCaseStudyPatients([])
+        setSelectedInterventionPatients([])
+        setExpandedPatientId(null)
+        setAvailablePatients([])
+        setCategorizedInterventions({})
+        setInterventionCounts([])
+        setClinicalRisks([])
+        setReadmittedPatients([])
+        setPatientMetrics(initialPatientMetrics)
+        setFacilityReadmissionData(undefined)
+        setFacilityData(undefined)
+    }, [selectedNursingHomeId, selectedMonth, selectedYear])
 
     // Add effect to fetch patients when nursing home changes
     useEffect(() => {
