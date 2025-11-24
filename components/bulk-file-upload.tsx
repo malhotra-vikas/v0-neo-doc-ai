@@ -168,7 +168,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
     return { patientName, fileType }
   }
 
-  const processFile = async (file: File) => {
+  const processFile = async (file: File, month: String, year: String) => {
     const timer = logger.timing(COMPONENT, `processFile-${file.name}`)
     logger.info(COMPONENT, "Processing file", {
       fileName: file.name,
@@ -196,6 +196,8 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         .select("id")
         .eq("name", patientName)
         .eq("nursing_home_id", selectedNursingHomeId)
+        .eq("month", month)
+        .eq("year", year)
 
       if (searchError) {
         logger.error(COMPONENT, "Error searching for patient", searchError)
@@ -215,6 +217,8 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
             {
               name: patientName,
               nursing_home_id: selectedNursingHomeId,
+              month: month,
+              year: year,
             },
           ])
           .select()
@@ -478,7 +482,7 @@ export function BulkFileUpload({ nursingHomes }: BulkFileUploadProps) {
         progress: `${progressPercent}%`,
       })
 
-      const result = await processFile(files[i])
+      const result = await processFile(files[i], selectedMonth, selectedYear)
 
       if (result.success) {
         successResults.push(result.message)
