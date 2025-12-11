@@ -401,9 +401,9 @@ export const exportToPDF = async ({
                         <td style="padding:14px; border:1px solid #eef4f9;">30-Day Readmissions (Puzzle Patients)
                         </td>
                         <td style="text-align:center; padding:14px; border:1px solid #eef4f9;">
-                            ${patientMetrics?.rollingPuzzleReadmissions}</td>
+                            ${patientMetrics?.rollingBambooReadmissions}</td>
                         <td style="text-align:center; padding:14px; border:1px solid #eef4f9;">
-                            ${patientMetrics?.rollingPuzzleReadmissions.toFixed(1)}%</td>
+                            ${patientMetrics?.rollingRate.toFixed(1)}%</td>
                         </tr>
                     </tbody>
                 </table>
@@ -573,7 +573,7 @@ export const exportToPDF = async ({
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">30-Day Readmission Rate (Puzzle
                                     Patients)</td>
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                                    ${patientMetrics?.rollingPuzzleReadmissions.toFixed(1)}%</td>
+                                    ${patientMetrics?.rollingRate.toFixed(1)}%</td>
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
                                     ${patientMetrics?.nationalReadmissionsBenchmark}%</td>
                             </tr>
@@ -1034,12 +1034,12 @@ const createStyledTable = (data: ReportData) => {
                         isCenter: false,
                     }),
                     createCell({
-                        text: data.patientMetrics?.rollingPuzzleReadmissions,
+                        text: data.patientMetrics?.rollingBambooReadmissions,
                         borderColor: bodyBorderColor,
                         isCenter: true,
                     }),
                     createCell({
-                        text: data.patientMetrics?.rollingPuzzleReadmissions.toFixed(1),
+                        text: data.patientMetrics?.rollingRate.toFixed(1),
                         borderColor: bodyBorderColor,
                         isCenter: true,
                     }),
