@@ -135,14 +135,18 @@ const addPdfWatermark = (pdf: jsPDF, text: string | string[]) => {
 };
 
 export interface PatientMetrics {
-    totalPuzzlePatients: number
-    commulative30DayReadmissionCount_fromSNFAdmitDate: number
-    commulative30Day_ReadmissionRate: number
     facilityName: string
     executiveSummary: string
     closingStatement: string
     publicLogoLink: string
     nationalReadmissionsBenchmark: number
+
+    // Rolling (3-month) metrics
+    rollingPuzzlePatients: number,
+    rollingPuzzleReadmissions: number,
+    rollingBambooReadmissions: number,
+    totalReadmissions3mo: number,
+    rollingRate: number,
 }
 
 export const exportToPDF = async ({
@@ -390,16 +394,16 @@ export const exportToPDF = async ({
                         <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">Total Puzzle Continuity Care Patients
                             Tracked</td>
                         <td style="text-align:center; padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                            ${patientMetrics?.totalPuzzlePatients}</td>
+                            ${patientMetrics?.rollingPuzzlePatients}</td>
                         <td style="text-align:center; padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">-</td>
                         </tr>
                         <tr>
                         <td style="padding:14px; border:1px solid #eef4f9;">30-Day Readmissions (Puzzle Patients)
                         </td>
                         <td style="text-align:center; padding:14px; border:1px solid #eef4f9;">
-                            ${patientMetrics?.commulative30DayReadmissionCount_fromSNFAdmitDate}</td>
+                            ${patientMetrics?.rollingPuzzleReadmissions}</td>
                         <td style="text-align:center; padding:14px; border:1px solid #eef4f9;">
-                            ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%</td>
+                            ${patientMetrics?.rollingPuzzleReadmissions.toFixed(1)}%</td>
                         </tr>
                     </tbody>
                 </table>
@@ -569,7 +573,7 @@ export const exportToPDF = async ({
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">30-Day Readmission Rate (Puzzle
                                     Patients)</td>
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
-                                    ${patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1)}%</td>
+                                    ${patientMetrics?.rollingPuzzleReadmissions.toFixed(1)}%</td>
                                 <td style="padding:14px; border:1px solid #eef4f9;background: #f5f5f5;">
                                     ${patientMetrics?.nationalReadmissionsBenchmark}%</td>
                             </tr>
@@ -1008,7 +1012,7 @@ const createStyledTable = (data: ReportData) => {
                         isCenter: false,
                     }),
                     createCell({
-                        text: data.patientMetrics?.totalPuzzlePatients,
+                        text: data.patientMetrics?.rollingPuzzlePatients,
                         borderColor: bodyBorderColor,
                         bgColor: lightGrayBg,
                         isCenter: true,
@@ -1030,12 +1034,12 @@ const createStyledTable = (data: ReportData) => {
                         isCenter: false,
                     }),
                     createCell({
-                        text: data.patientMetrics?.commulative30DayReadmissionCount_fromSNFAdmitDate,
+                        text: data.patientMetrics?.rollingPuzzleReadmissions,
                         borderColor: bodyBorderColor,
                         isCenter: true,
                     }),
                     createCell({
-                        text: data.patientMetrics?.commulative30Day_ReadmissionRate.toFixed(1),
+                        text: data.patientMetrics?.rollingPuzzleReadmissions.toFixed(1),
                         borderColor: bodyBorderColor,
                         isCenter: true,
                     }),

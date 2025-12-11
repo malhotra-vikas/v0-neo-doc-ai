@@ -111,15 +111,21 @@ interface ReportGeneratorProps {
 }
 
 const initialPatientMetrics = {
-    totalPuzzlePatients: 0,
-    commulative30DayReadmissionCount_fromSNFAdmitDate: 0,
-    commulative30Day_ReadmissionRate: 0,
-    facilityName: " ",
-    executiveSummary: " ",
-    closingStatement: " ",
-    publicLogoLink: " ",
+    // Rolling (3-month) metrics
+    rollingPuzzlePatients: 0,
+    rollingPuzzleReadmissions: 0,
+    rollingBambooReadmissions: 0,
+    totalReadmissions3mo: 0,
+    rollingRate: 0,
+
+    // Display fields (exist in both old and new)
+    facilityName: "",
+    executiveSummary: "",
+    closingStatement: "",
+    publicLogoLink: "",
     nationalReadmissionsBenchmark: 0
-}
+};
+
 
 export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
     if (!quotes || quotes.length === 0) return null
@@ -156,6 +162,25 @@ export function Citations({ label, quotes }: { label: string; quotes: any[] }) {
         </div>
     )
 }
+
+function lastThreeMonths(month: string, year: string) {
+    const index = new Date(`${month} 1, ${year}`).getMonth(); // 0–11
+    const yr = Number(year);
+
+    const dates = [];
+
+    for (let i = 0; i < 3; i++) {
+        const d = new Date(yr, index - i, 1);
+
+        dates.push({
+            month: d.toLocaleString("en-US", { month: "long" }),
+            year: String(d.getFullYear())
+        });
+    }
+
+    return dates;
+}
+
 async function getFacilityStatic(nursingHomeId: string) {
     const supabase = createClientComponentClient()
 
@@ -738,81 +763,157 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         setFacilityData(undefined)
     }, [selectedNursingHomeId, selectedMonth, selectedYear])
 
-    // Add effect to fetch patients when nursing home changes
     useEffect(() => {
         const run = async () => {
+            console.log("=== useEffect triggered ===");
+            console.log("Inputs:", {
+                selectedNursingHomeId,
+                selectedNursingHomeName,
+                selectedMonth,
+                selectedYear
+            });
+
+            // Reset patient lists if required inputs are missing
             if (selectedNursingHomeId && selectedNursingHomeName && selectedMonth && selectedYear) {
-                await fetchAvailablePatients()
+                console.log("Fetching available patients...");
+                await fetchAvailablePatients();
             } else {
-                setAvailablePatients([])
-                setSelectedCaseStudyPatients([])
-                setSelectedInterventionPatients([])
-                setSelectedNursingHomeName(null)
+                console.log("Missing inputs — clearing patient-related state.");
+                setAvailablePatients([]);
+                setSelectedCaseStudyPatients([]);
+                setSelectedInterventionPatients([]);
+                setSelectedNursingHomeName(null);
             }
 
-            if (selectedNursingHomeId && selectedMonth && selectedYear) {
-                console.log("Running getFacilitySummary for - ", selectedNursingHomeId)
-                console.log("Running getFacilitySummary for - ", selectedMonth)
-                console.log("Running getFacilitySummary for - ", selectedYear)
+            if (!(selectedNursingHomeId && selectedMonth && selectedYear)) {
+                console.log("Early return — missing required parameters.");
+                return;
+            }
 
-                const data = await getFacilitySummary(selectedNursingHomeId, selectedMonth, selectedYear)
-                console.log("getFacilitySummary Data is - ", data)
-                setFacilityReadmissionData(data)
+            console.log("Running getFacilityStatic for:", selectedNursingHomeId);
+            const facilityStaticInfo = await getFacilityStatic(selectedNursingHomeId);
+            console.log("facilityStaticInfo Data is - ", facilityStaticInfo);
+            setFacilityData(facilityStaticInfo);
 
-                const facilityStaticInfo = await getFacilityStatic(selectedNursingHomeId)
-                setFacilityData(facilityStaticInfo)
+            let allReadmitted: any[] = [];
+            let allData: any[] = [];
 
-                // Fetch readmitted patients from AllPuzzleFacility Bamboo Report
-                if (facilityStaticInfo && facilityStaticInfo.us_state) {
-                    const bambooReportPath = await getBambooReportPath(selectedMonth, selectedYear, facilityStaticInfo.us_state)
-                    console.log("Bamboo Report Path is - ", bambooReportPath)
+            // Rolling 3-month logic
+            if (facilityStaticInfo?.us_state) {
+                const monthsToCheck = lastThreeMonths(selectedMonth, selectedYear);
+                console.log("Months to check (3-month rolling):", monthsToCheck);
+
+                for (const { month, year } of monthsToCheck) {
+                    console.log("---------");
+                    console.log(`Processing Month: ${month} ${year}`);
+
+                    // Facility summary
+                    const summary = await getFacilitySummary(selectedNursingHomeId, month, year);
+                    console.log(`Facility Summary for ${month} ${year}:`, summary);
+
+                    if (summary) {
+                        allData.push(summary);
+                    } else {
+                        console.log(`No facility summary data found for ${month} ${year}`);
+                    }
+
+                    // Bamboo readmissions
+                    const bambooReportPath = await getBambooReportPath(
+                        month,
+                        year,
+                        facilityStaticInfo.us_state
+                    );
+
+                    console.log(`Checking Bamboo Report for ${month} ${year}:`, bambooReportPath);
 
                     if (bambooReportPath && selectedNursingHomeName) {
-                        console.log(`Fetching readmitted patients from Bamboo Report: ${bambooReportPath}`)
-                        const readmitted = await parseReadmittedPatientsFromExcel(bambooReportPath, selectedNursingHomeName)
-                        console.log(`Setting ${readmitted.length} readmitted patients in state`)
-                        setReadmittedPatients(readmitted)
+                        const readmitted = await parseReadmittedPatientsFromExcel(
+                            bambooReportPath,
+                            selectedNursingHomeName
+                        );
+
+                        console.log(
+                            `Found ${readmitted.length} readmitted patients in Bamboo for ${month} ${year}`
+                        );
+
+                        allReadmitted.push(...readmitted);
                     } else {
-                        console.log('No Bamboo Report found for the selected month/year/state')
-                        setReadmittedPatients([])
+                        console.log(`No Bamboo Report for ${month} ${year}`);
                     }
-                } else {
-                    console.log('Facility state not available')
-                    setReadmittedPatients([])
                 }
 
-                if (!data) return
-
-
-                const totalPuzzlePatients = (data.ccm_master_count || 0) +
-                    (data.ccm_master_discharged_count || 0) +
-                    (data.non_ccm_master_count || 0)
-
-
-                const commulative30DayReadmissionCount_fromSNFAdmitDate = data.h30_admit || 0
-
-                const commulative30Day_ReadmissionRate = totalPuzzlePatients > 0
-                    ? (commulative30DayReadmissionCount_fromSNFAdmitDate / totalPuzzlePatients) * 100
-                    : 0
-                const executiveSummary = `We are pleased to share this Puzzle SNF Report highlighting our collaborative work at ${facilityStaticInfo.name}. Our coordinated efforts have supported seamless transitions, identified key risks early, and driven down avoidable readmissions. This report reflects the outcomes achieved through our joint commitment to high-quality, post-acute care.`
-                const closingStatement = `Together at ${facilityStaticInfo.name}, we've made important strides in reducing avoidable hospital returns and improving resident care experiences. We value this partnership deeply and look forward to building on this foundation to deliver even more impactful care.`
-
-                setPatientMetrics({
-                    totalPuzzlePatients,
-                    commulative30DayReadmissionCount_fromSNFAdmitDate,
-                    commulative30Day_ReadmissionRate,
-                    facilityName: facilityStaticInfo.name,
-                    publicLogoLink: facilityStaticInfo.logo_url,
-                    executiveSummary: executiveSummary,
-                    closingStatement: closingStatement,
-
-                    nationalReadmissionsBenchmark: Number(process.env.NEXT_PUBLIC_NATIONAL_READMISSION_BENCHMARK)
-                })
+                console.log("---------");
+                console.log("Total readmitted across last 3 months:", allReadmitted.length);
+                console.log("All facility summaries collected:", allData);
+            } else {
+                console.log("Facility state not available — skipping Bamboo report logic.");
             }
-        }
 
-        run()
-    }, [selectedNursingHomeId, selectedNursingHomeName, selectedMonth, selectedYear])
+            // Update readmitted patients (Bamboo)
+            setReadmittedPatients(allReadmitted);
+
+            // Update facility summaries for display
+            setFacilityReadmissionData(allData);
+
+            if (allData.length === 0) {
+                console.log("No facility summary data found across all 3 months. Exiting.");
+                return;
+            }
+
+            // Rolling 3-month Puzzle totals
+            const rollingPuzzlePatients = allData.reduce((sum, row) => {
+                const count =
+                    (row.ccm_master_count || 0) +
+                    (row.ccm_master_discharged_count || 0) +
+                    (row.non_ccm_master_count || 0);
+                console.log(`Patients in month summary row:`, count);
+                return sum + count;
+            }, 0);
+
+            const rollingPuzzleReadmissions = allData.reduce((sum, row) => {
+                console.log(`Puzzle readmissions this row:`, row.h30_admit || 0);
+                return sum + (row.h30_admit || 0);
+            }, 0);
+
+            const rollingBambooReadmissions = allReadmitted.length;
+
+            const totalReadmissions3mo =
+                rollingPuzzleReadmissions + rollingBambooReadmissions;
+
+            const rollingRate =
+                rollingPuzzlePatients > 0
+                    ? (totalReadmissions3mo / rollingPuzzlePatients) * 100
+                    : 0;
+
+            console.log("=== Final Rolling 3-Month Metrics ===");
+            console.log("Rolling Puzzle Patients:", rollingPuzzlePatients);
+            console.log("Rolling Puzzle Readmissions:", rollingPuzzleReadmissions);
+            console.log("Rolling Bamboo Readmissions:", rollingBambooReadmissions);
+            console.log("Total Readmissions (Puzzle + Bamboo):", totalReadmissions3mo);
+            console.log("Rolling Readmission Rate:", rollingRate);
+
+            // Set metrics for UI
+            setPatientMetrics({
+                rollingPuzzlePatients,
+                rollingPuzzleReadmissions,
+                rollingBambooReadmissions,
+                totalReadmissions3mo,
+                rollingRate,
+                facilityName: facilityStaticInfo?.name,
+                publicLogoLink: facilityStaticInfo?.logo_url,
+
+                executiveSummary: `This three-month performance review highlights Puzzle’s sustained impact at ${facilityStaticInfo?.name}. Despite natural fluctuations in census, our coordinated clinical pathways continued to drive low avoidable hospital returns.`,
+
+                closingStatement: `We appreciate the strong collaboration with ${facilityStaticInfo?.name}. Together, we have built consistency in processes that prevent unnecessary hospitalizations and improve resident outcomes.`,
+
+                nationalReadmissionsBenchmark: Number(
+                    process.env.NEXT_PUBLIC_NATIONAL_READMISSION_BENCHMARK
+                )
+            });
+        };
+
+        run();
+    }, [selectedNursingHomeId, selectedNursingHomeName, selectedMonth, selectedYear]);
 
     const fetchAvailablePatients = async () => {
         if (!selectedNursingHomeId) return
@@ -1440,15 +1541,15 @@ ${JSON.stringify(parsed, null, 2)}
         {
             name: "Successful Transitions",
             value: (
-                patientMetrics.totalPuzzlePatients -
-                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate
+                patientMetrics.rollingPuzzlePatients -
+                patientMetrics.rollingBambooReadmissions
             ),
             color: "#4ade80", // green
         },
         {
             name: "30-Day Readmissions",
             value: (
-                patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate
+                patientMetrics.rollingBambooReadmissions
             ),
             color: "#facc15", // yellow
         }
@@ -1857,17 +1958,18 @@ ${JSON.stringify(parsed, null, 2)}
                                                                 Total Puzzle Continuity Care Patients Tracked
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.totalPuzzlePatients}
+                                                                {patientMetrics.rollingPuzzlePatients}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">-</td>
                                                         </tr>
+
                                                         <tr>
                                                             <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (Puzzle Patients)</td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.commulative30DayReadmissionCount_fromSNFAdmitDate}
+                                                                {patientMetrics.rollingPuzzleReadmissions}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.commulative30Day_ReadmissionRate.toFixed(1)}%
+                                                                {patientMetrics.rollingPuzzleReadmissions.toFixed(1)}%
                                                             </td>
                                                         </tr>
                                                     </tbody>
