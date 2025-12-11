@@ -877,8 +877,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             const rollingBambooReadmissions = allReadmitted.length;
 
-            const totalReadmissions3mo =
-                rollingPuzzleReadmissions + rollingBambooReadmissions;
+            const totalReadmissions3mo = rollingBambooReadmissions;
 
             const rollingRate =
                 rollingPuzzlePatients > 0
@@ -1406,24 +1405,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             const privacySafeCaseStudies = applyPatientPrivacy(caseStudies);
             const privacySafeCaseStudyEntries = applyPatientPrivacy(caseStudyEntries);
             const privacySafeInterventionEntries = applyPatientPrivacy(interventionEntries);
-
-            await exportToDOCX({
-                nursingHomeName: selectedNursingHome.name,
-                monthYear: `${selectedMonth} ${selectedYear}`,
-                caseStudies: privacySafeCaseStudies,
-                caseStudyHighlights: privacySafeCaseStudyEntries,
-                interventionStudies: privacySafeInterventionEntries,
-                patientMetrics,
-                logoPath: "/puzzle_background.png",
-                categorizedInterventions,
-                returnBlob: false,
-                expandedPatientId,
-                interventionCounts: safeInterventionCounts,
-                readmissionsChartRef: readmissionsChartRef.current,
-                touchpointsChartRef: touchpointsChartRef.current,
-                clinicalRisksChartRef: clinicalRisksChartRef.current,
-                clinicalRisks: clinicalRisks
-            })
 
             toast({
                 title: "Success",
@@ -1966,10 +1947,10 @@ ${JSON.stringify(parsed, null, 2)}
                                                         <tr>
                                                             <td className="px-4 py-3 text-sm text-gray-900">30-Day Readmissions (Puzzle Patients)</td>
                                                             <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                                {patientMetrics.rollingPuzzleReadmissions}
+                                                                {patientMetrics.rollingBambooReadmissions}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-gray-900">
-                                                                {patientMetrics.rollingPuzzleReadmissions.toFixed(1)}%
+                                                                {patientMetrics.rollingRate.toFixed(1)}%
                                                             </td>
                                                         </tr>
                                                     </tbody>
