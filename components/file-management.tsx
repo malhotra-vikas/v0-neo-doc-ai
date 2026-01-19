@@ -50,9 +50,9 @@ export default function FileManagement({ nursingHomes, files }: FileManagementPr
   const supabase = createClientComponentClient()
   const { toast } = useToast()
 
-  const filteredFiles = files.filter(
-    (file) => file.nursing_home_id === selectedHomeId && file.month === selectedMonth && file.year === selectedYear,
-  )
+  const filteredFiles = files.filter((file) => {
+    return file.nursing_home_id === selectedHomeId && file.month === selectedMonth && file.year === selectedYear
+  })
 
   const selectedHome = nursingHomes.find((home) => home.id === selectedHomeId)
 
