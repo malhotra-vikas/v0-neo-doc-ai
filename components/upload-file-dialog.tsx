@@ -50,7 +50,7 @@ export default function UploadFileDialog({
   const supabase = createClientComponentClient()
   const { toast } = useToast()
 
-  const fileTypes = ["Bamboo Report"]
+  const fileTypes = ["Bamboo Report", "Month ADT Report"]
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -154,19 +154,21 @@ export default function UploadFileDialog({
         })
       }
 
-      // Call server-side API to process Excel and extract facilities
-      await fetch('/api/process-nursing-home-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath, month, year, usState }),
-      })
-        .then((res) => res.json())
-        .then((result) => {
-          console.log(`✅ Created ${result.inserted} new nursing homes`)
+      // Call server-side API to process Excel and extract facilities (only for Bamboo Report)
+      if (fileType === "Bamboo Report") {
+        await fetch('/api/process-nursing-home-files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath, month, year, usState }),
         })
-        .catch((err) => {
-          console.error('Facility processing error:', err)
-        })
+          .then((res) => res.json())
+          .then((result) => {
+            console.log(`✅ Created ${result.inserted} new nursing homes`)
+          })
+          .catch((err) => {
+            console.error('Facility processing error:', err)
+          })
+      }
 
 
       if (file.type === "application/pdf") {
