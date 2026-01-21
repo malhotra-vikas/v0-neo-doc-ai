@@ -26,6 +26,7 @@ import {
   Building2,
   Users2Icon,
   User2,
+  AlertTriangle,
 } from "lucide-react"
 import { Logo } from "./logo"
 import { cn } from "@/lib/utils"
@@ -106,6 +107,11 @@ export default function DashboardHeader() {
       name: "PDF Queue",
       href: "/admin/pdf-queue",
       icon: FileText,
+    },
+    {
+      name: "Failed Files",
+      href: "/admin/failed-files",
+      icon: AlertTriangle,
     },
     {
       name: "Reports",
