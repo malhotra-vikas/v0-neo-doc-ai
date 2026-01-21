@@ -44,6 +44,8 @@ interface FailedFilesTableProps {
     files: FailedFile[]
 }
 
+const MAX_SELECTION = 100
+
 export function FailedFilesTable({ files }: FailedFilesTableProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [isReprocessing, setIsReprocessing] = useState(false)
@@ -54,10 +56,19 @@ export function FailedFilesTable({ files }: FailedFilesTableProps) {
     const supabase = createClientComponentClient()
 
     const toggleSelectAll = () => {
-        if (selectedIds.size === files.length) {
+        if (selectedIds.size > 0) {
+            // If any files are selected, deselect all
             setSelectedIds(new Set())
         } else {
-            setSelectedIds(new Set(files.map((f) => f.id)))
+            // Select up to MAX_SELECTION files
+            const filesToSelect = files.slice(0, MAX_SELECTION).map((f) => f.id)
+            setSelectedIds(new Set(filesToSelect))
+            if (files.length > MAX_SELECTION) {
+                toast({
+                    title: "Selection limited",
+                    description: `Selected first ${MAX_SELECTION} files. Maximum selection is ${MAX_SELECTION} files at a time.`,
+                })
+            }
         }
     }
 
@@ -66,6 +77,14 @@ export function FailedFilesTable({ files }: FailedFilesTableProps) {
         if (newSelected.has(id)) {
             newSelected.delete(id)
         } else {
+            if (newSelected.size >= MAX_SELECTION) {
+                toast({
+                    title: "Selection limit reached",
+                    description: `You can select up to ${MAX_SELECTION} files at a time. Deselect some files first.`,
+                    variant: "destructive",
+                })
+                return
+            }
             newSelected.add(id)
         }
         setSelectedIds(newSelected)
@@ -271,7 +290,9 @@ export function FailedFilesTable({ files }: FailedFilesTableProps) {
             <div className="flex items-center justify-between p-4 border-b bg-slate-50">
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">
-                        {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select files to reprocess"}
+                        {selectedIds.size > 0
+                            ? `${selectedIds.size} selected (max ${MAX_SELECTION})`
+                            : `Select files to reprocess (max ${MAX_SELECTION} at a time)`}
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -303,9 +324,9 @@ export function FailedFilesTable({ files }: FailedFilesTableProps) {
                         <TableRow className="bg-slate-50 hover:bg-slate-50">
                             <TableHead className="w-[50px]">
                                 <Checkbox
-                                    checked={selectedIds.size === files.length && files.length > 0}
+                                    checked={selectedIds.size > 0 && selectedIds.size === Math.min(files.length, MAX_SELECTION)}
                                     onCheckedChange={toggleSelectAll}
-                                    aria-label="Select all"
+                                    aria-label={`Select up to ${MAX_SELECTION} files`}
                                 />
                             </TableHead>
                             <TableHead className="w-[25%]">File Name</TableHead>
