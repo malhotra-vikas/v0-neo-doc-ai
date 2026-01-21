@@ -293,15 +293,6 @@ export function FailedFilesTable({ files }: FailedFilesTableProps) {
                         <RefreshCw className={`h-4 w-4 mr-2 ${isReprocessing ? "animate-spin" : ""}`} />
                         Reprocess All ({files.length})
                     </Button>
-                    <Button
-                        variant="default"
-                        size="sm"
-                        onClick={regenerateCaseStudies}
-                        disabled={files.length === 0 || isRegenerating}
-                    >
-                        <Sparkles className={`h-4 w-4 mr-2 ${isRegenerating ? "animate-pulse" : ""}`} />
-                        {isRegenerating ? "Regenerating..." : "Regenerate Case Studies"}
-                    </Button>
                 </div>
             </div>
 
