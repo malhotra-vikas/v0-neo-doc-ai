@@ -305,15 +305,6 @@ export function FailedFilesTable({ files }: FailedFilesTableProps) {
                         <RefreshCw className={`h-4 w-4 mr-2 ${isReprocessing ? "animate-spin" : ""}`} />
                         Reprocess Selected
                     </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={reprocessAll}
-                        disabled={files.length === 0 || isReprocessing}
-                    >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isReprocessing ? "animate-spin" : ""}`} />
-                        Reprocess All ({files.length})
-                    </Button>
                 </div>
             </div>
 
