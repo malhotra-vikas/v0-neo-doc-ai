@@ -8,10 +8,12 @@ import {
     Users,
     Building2,
     Calendar,
+    BookOpen,
 } from "lucide-react"
 import { AutoRefreshWrapper } from "@/components/auto-refresh-wrapper"
 import { PageViewLogger } from "@/components/page-view-logger"
 import { FailedFilesTable } from "@/components/failed-files-table"
+import { FailedCaseStudiesTable } from "@/components/failed-case-studies-table"
 
 interface FailedFile {
     id: string
@@ -32,6 +34,16 @@ interface FailedFile {
             name: string
         } | null
     } | null
+}
+
+export interface FailedCaseStudy {
+    id: string
+    patient_id: string
+    patient_name: string
+    nursing_home_name: string | null
+    nursing_home_id: string | null
+    updated_at: string
+    failed_quotes_count: number
 }
 
 export default async function FailedFilesPage() {
@@ -95,10 +107,71 @@ export default async function FailedFilesPage() {
     }
 
     const failedFiles = allFailedFiles
-    const error = null
 
     console.log("=== FAILED FILES DEBUG ===")
     console.log("Total batches fetched, total count:", failedFiles?.length)
+    console.log("=== END DEBUG ===")
+
+    // Fetch case studies with "Python extraction failed" in source quotes
+    // We need to fetch all and filter client-side since Supabase doesn't support
+    // text search within JSONB array elements directly
+    const { data: allCaseStudies, error: caseStudyError } = await supabase
+        .from("patient_case_study_highlights")
+        .select(`
+            id,
+            patient_id,
+            detailed_interventions,
+            detailed_outcomes,
+            updated_at,
+            patients (
+                id,
+                name,
+                nursing_home_id,
+                nursing_homes (
+                    id,
+                    name
+                )
+            )
+        `)
+        .order("updated_at", { ascending: false })
+
+    // Filter for case studies that have "Python extraction failed" in their source quotes
+    const failedCaseStudiesRaw = (allCaseStudies || []).filter((cs: any) => {
+        const interventionsHasFailed = (cs.detailed_interventions || []).some(
+            (i: any) => i.source_quote === "Python extraction failed."
+        )
+        const outcomesHasFailed = (cs.detailed_outcomes || []).some(
+            (o: any) => o.source_quote === "Python extraction failed."
+        )
+        return interventionsHasFailed || outcomesHasFailed
+    })
+
+    if (caseStudyError) {
+        console.error("Error fetching failed case studies:", caseStudyError)
+    }
+
+    // Process case studies to count failed quotes
+    const failedCaseStudies: FailedCaseStudy[] = (failedCaseStudiesRaw || []).map((cs: any) => {
+        const interventionsFailed = (cs.detailed_interventions || []).filter(
+            (i: any) => i.source_quote === "Python extraction failed."
+        ).length
+        const outcomesFailed = (cs.detailed_outcomes || []).filter(
+            (o: any) => o.source_quote === "Python extraction failed."
+        ).length
+
+        return {
+            id: cs.id,
+            patient_id: cs.patient_id,
+            patient_name: cs.patients?.name || "Unknown",
+            nursing_home_name: cs.patients?.nursing_homes?.name || null,
+            nursing_home_id: cs.patients?.nursing_home_id || null,
+            updated_at: cs.updated_at,
+            failed_quotes_count: interventionsFailed + outcomesFailed,
+        }
+    }).filter((cs: FailedCaseStudy) => cs.failed_quotes_count > 0)
+
+    console.log("=== FAILED CASE STUDIES DEBUG ===")
+    console.log("Total failed case studies:", failedCaseStudies.length)
     console.log("=== END DEBUG ===")
 
     const files = (failedFiles || []) as unknown as FailedFile[]
@@ -116,6 +189,12 @@ export default async function FailedFilesPage() {
         acc[key] = (acc[key] || 0) + 1
         return acc
     }, {} as Record<string, number>)
+
+    // Case study stats
+    const totalFailedCaseStudies = failedCaseStudies.length
+    const uniqueCaseStudyNursingHomes = new Set(
+        failedCaseStudies.map((cs) => cs.nursing_home_id).filter(Boolean)
+    ).size
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -173,14 +252,12 @@ export default async function FailedFilesPage() {
 
                         <Card className="bg-white">
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">Most Affected Period</CardTitle>
+                                <CardTitle className="text-sm font-medium text-muted-foreground">Failed Case Studies</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-end justify-between">
-                                    <p className="text-lg font-bold text-slate-600">
-                                        {Object.entries(monthYearCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A"}
-                                    </p>
-                                    <Calendar className="h-5 w-5 text-slate-500" />
+                                    <p className="text-3xl font-bold text-purple-600">{totalFailedCaseStudies}</p>
+                                    <BookOpen className="h-5 w-5 text-purple-500" />
                                 </div>
                             </CardContent>
                         </Card>
@@ -213,6 +290,43 @@ export default async function FailedFilesPage() {
                             <div className="w-full flex justify-between items-center text-xs text-muted-foreground">
                                 <div>
                                     Showing {totalFiles} failed files
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3 mr-1" />
+                                    Last updated: {new Date().toLocaleString()}
+                                </div>
+                            </div>
+                        </CardFooter>
+                    </Card>
+
+                    {/* Failed Case Studies Section */}
+                    <Card className="bg-white shadow-sm border-slate-200 mt-8">
+                        <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 border-b">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                <div>
+                                    <CardTitle className="text-xl text-slate-800 flex items-center">
+                                        <BookOpen className="mr-2 h-5 w-5 text-purple-500" />
+                                        Failed Case Study Quotes
+                                    </CardTitle>
+                                    <CardDescription className="mt-1">
+                                        {totalFailedCaseStudies > 0 ? (
+                                            <>
+                                                {totalFailedCaseStudies} case studies with &quot;Python extraction failed&quot; quotes across {uniqueCaseStudyNursingHomes} nursing homes
+                                            </>
+                                        ) : (
+                                            <>No case studies with failed quotes found</>
+                                        )}
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <FailedCaseStudiesTable caseStudies={failedCaseStudies} />
+                        </CardContent>
+                        <CardFooter className="bg-slate-50 border-t px-6 py-3">
+                            <div className="w-full flex justify-between items-center text-xs text-muted-foreground">
+                                <div>
+                                    Showing {totalFailedCaseStudies} case studies needing regeneration
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <Calendar className="h-3 w-3 mr-1" />
