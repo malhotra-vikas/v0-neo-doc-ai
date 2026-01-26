@@ -113,7 +113,6 @@ interface ReportGeneratorProps {
 const initialPatientMetrics = {
     // Rolling (3-month) metrics
     rollingPuzzlePatients: 0,
-    rollingPuzzleReadmissions: 0,
     rollingBambooReadmissions: 0,
     totalReadmissions3mo: 0,
     rollingRate: 0,
@@ -201,33 +200,6 @@ async function getFacilityStatic(nursingHomeId: string) {
     }
 
     return data
-}
-
-async function getFacilitySummary(nursingHomeId: string, month: string, year: string) {
-    const supabase = createClientComponentClient()
-
-    console.log("Running getFacilitySummary for - ", nursingHomeId)
-    console.log("Running getFacilitySummary for - ", month)
-    console.log("Running getFacilitySummary for - ", year)
-
-    const { data, error } = await supabase
-        .from('facility_readmission_summary')
-        .select('*')
-        .eq('nursing_home_id', nursingHomeId)
-        .eq('month', month)
-        .eq('year', year)
-        .order('created_at', { ascending: false })     // sort newest first
-        .limit(1)                                       // take only the latest
-
-
-    console.log("getFacilitySummary Data is - ", data)
-
-    if (error) {
-        console.error("❌ Failed to fetch facility summary:", error)
-        return null
-    }
-
-    return data?.[0] || null
 }
 
 async function getFilePaths(nursingHomeId: string, month: string, year: string) {
@@ -807,7 +779,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     const clinicalRisksChartRef = useRef<HTMLDivElement>(null)
     const { toast } = useToast()
     let [categorizedInterventions, setCategorizedInterventions] = useState<Record<string, string[]>>({})
-    const [facilityReadmissionData, setFacilityReadmissionData] = useState<any>()
     const [facilityData, setFacilityData] = useState<any>()
     const [open, setOpen] = useState(false)
 
@@ -1072,7 +1043,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         setClinicalRisks([])
         setReadmittedPatients([])
         setPatientMetrics(initialPatientMetrics)
-        setFacilityReadmissionData(undefined)
         setFacilityData(undefined)
     }, [selectedNursingHomeId, selectedMonth, selectedYear])
 
@@ -1106,7 +1076,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         setFacilityData(facilityStaticInfo);
 
         let allReadmitted: any[] = [];
-        let allData: any[] = [];
         let totalDischargedPuzzlePatients = 0;
 
         // Rolling 3-month logic
@@ -1120,20 +1089,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 console.log("\n┌──────────────────────────────────────────────────────────────┐");
                 console.log(`│ MONTH ${i + 1}/3: ${month} ${year}                                       │`);
                 console.log("└──────────────────────────────────────────────────────────────┘");
-
-                // Facility summary
-                console.log(`  📄 Fetching facility summary...`);
-                const summary = await getFacilitySummary(selectedNursingHomeId, month, year);
-                if (summary) {
-                    console.log(`  ✅ Facility Summary Found:`);
-                    console.log(`     • CCM Master Count: ${summary.ccm_master_count || 0}`);
-                    console.log(`     • CCM Master Discharged: ${summary.ccm_master_discharged_count || 0}`);
-                    console.log(`     • Non-CCM Count: ${summary.non_ccm_master_count || 0}`);
-                    console.log(`     • H30 Admit: ${summary.h30_admit || 0}`);
-                    allData.push(summary);
-                } else {
-                    console.log(`  ⚠️ No facility summary data found for ${month} ${year}`);
-                }
 
                 // Get file paths for ADT and Charge Capture
                 console.log(`  📁 Fetching file paths...`);
@@ -1207,7 +1162,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             console.log("└──────────────────────────────────────────────────────────────┘");
             console.log("  • Total Readmitted (all 3 months, raw):", allReadmitted.length);
             console.log("  • Total Discharged Puzzle Patients (all 3 months):", totalDischargedPuzzlePatients);
-            console.log("  • Facility Summaries Collected:", allData.length);
 
             // Deduplicate across all 3 months (same patient may appear in multiple months' reports)
             const seenAcrossMonths = new Set<string>();
@@ -1234,34 +1188,11 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         console.log("  • Setting readmittedPatients:", allReadmitted.length, "patients");
         setReadmittedPatients(allReadmitted);
 
-        // Update facility summaries for display
-        console.log("  • Setting facilityReadmissionData:", allData.length, "summaries");
-        setFacilityReadmissionData(allData);
-
         // Rolling 3-month Puzzle totals
-        // Use ADT + Charge Capture calculation if available, otherwise fall back to facility summary
+        // ADT + Charge Capture is the source of truth for patient count
         console.log("\n📊 STEP 4: Computing Final Metrics...");
-        let rollingPuzzlePatients: number;
-        if (totalDischargedPuzzlePatients > 0) {
-            rollingPuzzlePatients = totalDischargedPuzzlePatients;
-            console.log("  ✅ Using ADT + Charge Capture for rollingPuzzlePatients:", rollingPuzzlePatients);
-        } else {
-            console.log("  ⚠️ No ADT/Charge Capture data - falling back to facility summary");
-            rollingPuzzlePatients = allData.reduce((sum, row, idx) => {
-                const count =
-                    (row.ccm_master_count || 0) +
-                    (row.ccm_master_discharged_count || 0) +
-                    (row.non_ccm_master_count || 0);
-                console.log(`     • Summary ${idx + 1}: ${count} patients (CCM: ${row.ccm_master_count || 0}, Discharged: ${row.ccm_master_discharged_count || 0}, Non-CCM: ${row.non_ccm_master_count || 0})`);
-                return sum + count;
-            }, 0);
-            console.log("  📊 Fallback rollingPuzzlePatients:", rollingPuzzlePatients);
-        }
-
-        const rollingPuzzleReadmissions = allData.reduce((sum, row, idx) => {
-            console.log(`     • Summary ${idx + 1} h30_admit:`, row.h30_admit || 0);
-            return sum + (row.h30_admit || 0);
-        }, 0);
+        const rollingPuzzlePatients = totalDischargedPuzzlePatients;
+        console.log("  ✅ Total Puzzle Patients (from ADT + Charge Capture):", rollingPuzzlePatients);
 
         const rollingBambooReadmissions = allReadmitted.length;
 
@@ -1281,8 +1212,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         console.log("  📊 Rolling Readmission Rate:", rollingRate.toFixed(2) + "%");
         console.log("  ────────────────────────────────────────────────────");
         console.log("  📈 Breakdown:");
-        console.log("     • Rolling Puzzle Readmissions (from summary):", rollingPuzzleReadmissions);
-        console.log("     • Rolling Bamboo Readmissions:", rollingBambooReadmissions);
+        console.log("     • Readmissions from Bamboo Report:", rollingBambooReadmissions);
         console.log("     • Readmitted Patient Names:", allReadmitted.map(p => p.name).join(", ") || "None");
         console.log("  ────────────────────────────────────────────────────");
         console.log(`  ⏱️ Calculation completed in ${(endTime - startTime).toFixed(2)}ms`);
@@ -1291,7 +1221,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         // Set metrics for UI
         setPatientMetrics({
             rollingPuzzlePatients,
-            rollingPuzzleReadmissions,
             rollingBambooReadmissions,
             totalReadmissions3mo,
             rollingRate,
