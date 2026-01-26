@@ -233,23 +233,32 @@ async function getFacilitySummary(nursingHomeId: string, month: string, year: st
 async function getFilePaths(nursingHomeId: string, month: string, year: string) {
     const supabase = createClientComponentClient()
 
+    console.log(`[getFilePaths] Querying for nursingHomeId=${nursingHomeId}, month=${month}, year=${year}`)
+
     const { data, error } = await supabase
         .from('nursing_home_files')
-        .select('file_type, file_path')
+        .select('file_type, file_path, file_name')
         .eq('nursing_home_id', nursingHomeId)
         .eq('month', month)
         .eq('year', year)
 
     if (error || !data) {
-        console.error("Error fetching file paths", error)
-        return { patientsPath: null, nonCcmPath: null, bambooReportPath: null }
+        console.error("[getFilePaths] Error fetching file paths", error)
+        return { patientsPath: null, nonCcmPath: null, bambooReportPath: null, adtReportPath: null, chargeCaptureReportPath: null }
     }
+
+    console.log(`[getFilePaths] Found ${data.length} files:`, data.map(d => ({ type: d.file_type, name: d.file_name })))
 
     const patientsPath = data.find(d => d.file_type === 'Patients')?.file_path || null
     const nonCcmPath = data.find(d => d.file_type === 'Non CCM')?.file_path || null
     const bambooReportPath = data.find(d => d.file_type === 'Bamboo Report')?.file_path || null
+    const adtReportPath = data.find(d => d.file_type === 'Month ADT Report')?.file_path || null
+    const chargeCaptureReportPath = data.find(d => d.file_type === 'Charge Capture')?.file_path || null
 
-    return { patientsPath, nonCcmPath, bambooReportPath }
+    console.log(`[getFilePaths] ADT Report: ${adtReportPath ? 'FOUND' : 'NOT FOUND'}`)
+    console.log(`[getFilePaths] Charge Capture: ${chargeCaptureReportPath ? 'FOUND' : 'NOT FOUND'}`)
+
+    return { patientsPath, nonCcmPath, bambooReportPath, adtReportPath, chargeCaptureReportPath }
 }
 
 async function getBambooReportPath(month: string, year: string, state: string) {
@@ -274,6 +283,29 @@ async function getBambooReportPath(month: string, year: string, state: string) {
     return data[0]?.file_path || null
 }
 
+// Charge Capture is a company-wide file, stored under the master facility
+async function getChargeCaptureReportPath(month: string, year: string) {
+    const supabase = createClientComponentClient()
+    const PUZZLE_FACILITY_ID = "1688ba99-e4d3-4543-a0ba-7caa37e33a1c"
+
+    const { data, error } = await supabase
+        .from('nursing_home_files')
+        .select('file_type, file_path')
+        .eq('nursing_home_id', PUZZLE_FACILITY_ID)
+        .eq('month', month)
+        .eq('year', year)
+        .eq('file_type', 'Charge Capture')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+    if (error || !data) {
+        console.error("Error fetching Charge Capture file path", error)
+        return null
+    }
+
+    return data[0]?.file_path || null
+}
+
 async function fetchAndParseExcel(path: string | null): Promise<XLSX.WorkSheet | null> {
     if (!path) return null
     const supabase = createClientComponentClient()
@@ -289,6 +321,207 @@ async function fetchAndParseExcel(path: string | null): Promise<XLSX.WorkSheet |
     return workbook.Sheets[workbook.SheetNames[0]]
 }
 
+// Parse ADT Report (CSV) to get patients with Discharge = "Y"
+async function parseDischargedPatientsFromADT(
+    filePath: string | null,
+    facilityName: string
+): Promise<Array<{ firstName: string; lastName: string }>> {
+    console.log(`[parseDischargedPatientsFromADT] Starting parse for "${facilityName}", path: ${filePath}`)
+
+    if (!filePath) {
+        console.log("[parseDischargedPatientsFromADT] No file path provided")
+        return []
+    }
+
+    const supabase = createClientComponentClient()
+    console.log(`[parseDischargedPatientsFromADT] Downloading file from storage...`)
+    const { data, error } = await supabase.storage.from('nursing-home-files').download(filePath)
+
+    if (error || !data) {
+        console.error("[parseDischargedPatientsFromADT] Error downloading ADT file", error)
+        return []
+    }
+
+    console.log(`[parseDischargedPatientsFromADT] File downloaded successfully, size: ${data.size} bytes`)
+
+    const text = await data.text()
+    const lines = text.split('\n')
+
+    console.log(`[parseDischargedPatientsFromADT] CSV has ${lines.length} lines`)
+
+    if (lines.length < 2) {
+        console.log("[parseDischargedPatientsFromADT] CSV has less than 2 lines, returning empty")
+        return []
+    }
+
+    // Parse CSV header
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+    const dischargeIndex = headers.findIndex(h => h === 'Discharge')
+    const dischargeStatusIndex = headers.findIndex(h => h === 'Discharge Status')
+    const firstNameIndex = headers.findIndex(h => h === 'Resident First Name')
+    const lastNameIndex = headers.findIndex(h => h === 'Resident Last Name')
+    const facilityNameIndex = headers.findIndex(h => h === 'Facility Name')
+
+    if (dischargeIndex === -1 || firstNameIndex === -1 || lastNameIndex === -1) {
+        console.error("Required columns not found in ADT file")
+        return []
+    }
+
+    // Discharge statuses to exclude (case-insensitive partial match)
+    const excludedStatuses = ['expired', 'funeral home', 'hospice', 'hospital']
+
+    const dischargedPatients: Array<{ firstName: string; lastName: string }> = []
+
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line) continue
+
+        // Simple CSV parsing (handles basic cases)
+        const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
+
+        const discharge = values[dischargeIndex]
+        const dischargeStatus = dischargeStatusIndex !== -1 ? values[dischargeStatusIndex]?.toLowerCase() || '' : ''
+        const rowFacility = facilityNameIndex !== -1 ? values[facilityNameIndex] : ''
+
+        // Check if this is a discharge record and optionally match facility
+        if (discharge === 'Y') {
+            // Exclude patients with certain discharge statuses
+            const isExcluded = excludedStatuses.some(status => dischargeStatus.includes(status))
+            if (isExcluded) {
+                continue
+            }
+
+            // If facility name column exists, filter by it; otherwise include all
+            if (facilityNameIndex === -1 || rowFacility.toLowerCase() === facilityName.toLowerCase()) {
+                const firstName = values[firstNameIndex]?.toLowerCase().trim() || ''
+                const lastName = values[lastNameIndex]?.toLowerCase().trim() || ''
+
+                if (firstName && lastName) {
+                    // Avoid duplicates
+                    const exists = dischargedPatients.some(
+                        p => p.firstName === firstName && p.lastName === lastName
+                    )
+                    if (!exists) {
+                        dischargedPatients.push({ firstName, lastName })
+                    }
+                }
+            }
+        }
+    }
+
+    console.log(`Found ${dischargedPatients.length} discharged patients from ADT for "${facilityName}"`)
+    return dischargedPatients
+}
+
+// Parse Charge Capture (Excel) to get patients for a specific facility
+async function parsePatientsFromChargeCapture(
+    filePath: string | null,
+    facilityName: string
+): Promise<Array<{ firstName: string; lastName: string }>> {
+    console.log(`[parsePatientsFromChargeCapture] Starting parse for "${facilityName}", path: ${filePath}`)
+
+    if (!filePath) {
+        console.log("[parsePatientsFromChargeCapture] No file path provided")
+        return []
+    }
+
+    const supabase = createClientComponentClient()
+    console.log(`[parsePatientsFromChargeCapture] Downloading file from storage...`)
+    const { data, error } = await supabase.storage.from('nursing-home-files').download(filePath)
+
+    if (error || !data) {
+        console.error("[parsePatientsFromChargeCapture] Error downloading Charge Capture file", error)
+        return []
+    }
+
+    console.log(`[parsePatientsFromChargeCapture] File downloaded successfully, size: ${data.size} bytes`)
+
+    const arrayBuffer = await data.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: "array" })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+
+    if (!sheet) {
+        console.error("[parsePatientsFromChargeCapture] No sheet found in Charge Capture file")
+        return []
+    }
+
+    const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' })
+    console.log(`[parsePatientsFromChargeCapture] Processing Charge Capture with ${rows.length} rows`)
+
+    const patients: Array<{ firstName: string; lastName: string }> = []
+
+    // Normalize facility name for matching (remove trailing suffixes like "(M)")
+    const normalizedFacilityName = facilityName.toLowerCase().replace(/\s*\(m\)\s*$/i, '').trim()
+
+    for (const row of rows) {
+        const rowFacility = row['Facility']?.toString().trim() || ''
+        // Normalize row facility name for comparison
+        const normalizedRowFacility = rowFacility.toLowerCase().replace(/\s*\(m\)\s*$/i, '').trim()
+
+        // Check if this row is for the selected facility (flexible match)
+        if (normalizedRowFacility === normalizedFacilityName ||
+            normalizedRowFacility.startsWith(normalizedFacilityName) ||
+            normalizedFacilityName.startsWith(normalizedRowFacility)) {
+            const firstName = row['Patient First Name']?.toString().toLowerCase().trim() || ''
+            const lastName = row['Patient Last Name']?.toString().toLowerCase().trim() || ''
+
+            if (firstName && lastName) {
+                // Avoid duplicates
+                const exists = patients.some(
+                    p => p.firstName === firstName && p.lastName === lastName
+                )
+                if (!exists) {
+                    patients.push({ firstName, lastName })
+                }
+            }
+        }
+    }
+
+    console.log(`Found ${patients.length} unique patients in Charge Capture for "${facilityName}"`)
+    return patients
+}
+
+// Calculate Total Puzzle Continuity Care Patients Tracked
+// These are patients discharged from ADT that also exist in Charge Capture
+async function calculateDischargedPuzzlePatients(
+    adtPath: string | null,
+    chargeCapturePath: string | null,
+    facilityName: string
+): Promise<number> {
+    console.log(`[calculateDischargedPuzzlePatients] Starting calculation for "${facilityName}"`)
+    console.log(`[calculateDischargedPuzzlePatients] ADT Path: ${adtPath}`)
+    console.log(`[calculateDischargedPuzzlePatients] Charge Capture Path: ${chargeCapturePath}`)
+
+    if (!adtPath || !chargeCapturePath) {
+        console.log("[calculateDischargedPuzzlePatients] Missing ADT or Charge Capture file path - returning 0")
+        return 0
+    }
+
+    const [adtPatients, chargeCapturePatients] = await Promise.all([
+        parseDischargedPatientsFromADT(adtPath, facilityName),
+        parsePatientsFromChargeCapture(chargeCapturePath, facilityName)
+    ])
+
+    console.log(`[calculateDischargedPuzzlePatients] ADT discharged patients: ${adtPatients.length}`)
+    console.log(`[calculateDischargedPuzzlePatients] Charge Capture patients: ${chargeCapturePatients.length}`)
+
+    // Match patients: discharged from ADT AND exist in Charge Capture
+    const matchedPatients = adtPatients.filter(adtPatient =>
+        chargeCapturePatients.some(
+            ccPatient =>
+                ccPatient.firstName === adtPatient.firstName &&
+                ccPatient.lastName === adtPatient.lastName
+        )
+    )
+
+    console.log(`[calculateDischargedPuzzlePatients] MATCHED patients: ${matchedPatients.length}`)
+    if (matchedPatients.length > 0) {
+        console.log(`[calculateDischargedPuzzlePatients] Matched patient names:`, matchedPatients)
+    }
+
+    return matchedPatients.length
+}
+
 async function parseReadmittedPatientsFromExcel(
     filePath: string | null,
     facilityName: string
@@ -300,18 +533,30 @@ async function parseReadmittedPatientsFromExcel(
     hospitalName: string;
     readmissionReason: string;
 }>> {
-    if (!filePath) return []
+    console.log("\n┌──────────────────────────────────────────────────────────────┐")
+    console.log("│ PARSING READMITTED PATIENTS FROM EXCEL                       │")
+    console.log("└──────────────────────────────────────────────────────────────┘")
+    console.log(`  📁 File Path: ${filePath}`)
+    console.log(`  🏥 Facility Name: ${facilityName}`)
 
-    const supabase = createClientComponentClient()
-    const { data, error } = await supabase.storage.from('nursing-home-files').download(filePath)
-
-    if (error || !data) {
-        console.error("Error downloading file for readmitted patients", error)
+    if (!filePath) {
+        console.log("  ⚠️ No file path provided - returning empty array")
         return []
     }
 
+    const supabase = createClientComponentClient()
+    console.log("  📥 Downloading file from storage...")
+    const { data, error } = await supabase.storage.from('nursing-home-files').download(filePath)
+
+    if (error || !data) {
+        console.error("  ❌ Error downloading file for readmitted patients:", error)
+        return []
+    }
+    console.log(`  ✅ File downloaded successfully (${data.size} bytes)`)
+
     const arrayBuffer = await data.arrayBuffer()
     const workbook = XLSX.read(arrayBuffer, { type: "array" })
+    console.log(`  📊 Workbook loaded. Available sheets: ${workbook.SheetNames.join(", ")}`)
 
     const readmittedPatients: Array<{
         name: string;
@@ -321,6 +566,9 @@ async function parseReadmittedPatientsFromExcel(
         hospitalName: string;
         readmissionReason: string;
     }> = []
+
+    // Track seen patients to avoid duplicates (key = name + hospitalDischargeDate + snfDischargeDate + hospitalReadmitDate)
+    const seenPatients = new Set<string>()
 
     // Check all three sheets: CCM Master, CCM Master Discharged, and PMR - Non CCM
     const sheetConfigsReadmissionData = [
@@ -346,21 +594,40 @@ async function parseReadmittedPatientsFromExcel(
         }
     }
 
+    // Parse "Hospital Name - Reason" format from the info field
     const parseAdmitReason = (reasonStr: any): { hospitalName: string; readmitReason: string } => {
-        // Parse format like "04/18/2025 - 04/25/2025" where first date is readmit, second is re-discharge
-        if (!reasonStr) return { hospitalName: 'N/A', readmitReason: 'N/A' }
-
-        const str = reasonStr.toString().trim()
-        const parts = str.split('-').map((p: string) => p.trim())
-
-        if (parts.length === 2) {
-            return {
-                hospitalName: parts[0] || 'N/A',
-                readmitReason: parts[1] || 'N/A'
-            }
+        console.log(`     🔍 Parsing hospital info: "${reasonStr}"`)
+        if (!reasonStr) {
+            console.log(`     ⚠️ Empty info string`)
+            return { hospitalName: 'N/A', readmitReason: 'N/A' }
         }
 
-        // If not in range format, might be a single date
+        const str = reasonStr.toString().trim()
+        if (!str) {
+            console.log(`     ⚠️ Empty after trim`)
+            return { hospitalName: 'N/A', readmitReason: 'N/A' }
+        }
+
+        // Try to split by " - " (with spaces around dash) first for "Hospital Name - Reason" format
+        const dashWithSpaces = str.split(' - ')
+        if (dashWithSpaces.length >= 2) {
+            const hospitalName = dashWithSpaces[0].trim() || 'N/A'
+            const readmitReason = dashWithSpaces.slice(1).join(' - ').trim() || 'N/A'
+            console.log(`     ✅ Parsed with " - ": Hospital="${hospitalName}", Reason="${readmitReason}"`)
+            return { hospitalName, readmitReason }
+        }
+
+        // Try to split by just "-" if no spaces around it
+        const parts = str.split('-').map((p: string) => p.trim())
+        if (parts.length >= 2) {
+            const hospitalName = parts[0] || 'N/A'
+            const readmitReason = parts.slice(1).join('-').trim() || 'N/A'
+            console.log(`     ✅ Parsed with "-": Hospital="${hospitalName}", Reason="${readmitReason}"`)
+            return { hospitalName, readmitReason }
+        }
+
+        // If no separator found, treat the whole string as the hospital name
+        console.log(`     ⚠️ No separator found, using whole string as hospital name: "${str}"`)
         return { hospitalName: str, readmitReason: 'N/A' }
     }
 
@@ -400,14 +667,32 @@ async function parseReadmittedPatientsFromExcel(
     for (const config of sheetConfigsReadmissionData) {
         const sheet = workbook.Sheets[config.name]
         if (!sheet) {
-            console.log(`Sheet "${config.name}" not found in workbook`)
+            console.log(`\n  📄 Sheet "${config.name}": NOT FOUND - skipping`)
             continue
         }
 
-        const data = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' })
-        console.log(`Processing sheet "${config.name}" with ${data.length} rows`)
+        const sheetData = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' })
+        console.log(`\n  📄 Sheet "${config.name}": Processing ${sheetData.length} rows`)
 
-        for (const row of data) {
+        // Log available columns for debugging
+        if (sheetData.length > 0) {
+            const columns = Object.keys(sheetData[0])
+            console.log(`     📋 Available columns (${columns.length}):`)
+            // Find columns that might contain "30 Day" or "Hospitalization"
+            const relevantCols = columns.filter(c =>
+                c.toLowerCase().includes('30 day') ||
+                c.toLowerCase().includes('hospitalization') ||
+                c.toLowerCase().includes('info')
+            )
+            if (relevantCols.length > 0) {
+                console.log(`     🔍 Relevant columns for hospital info:`, relevantCols)
+            }
+        }
+
+        let foundInSheet = 0
+        let skippedDuplicates = 0
+
+        for (const row of sheetData) {
             const snfFacility = row['SNF Facility Name']?.toString().trim()
             const patientName = row['Patient Name']?.toString().trim()
 
@@ -449,11 +734,28 @@ async function parseReadmittedPatientsFromExcel(
 
                 console.log(`${config.name}: Patient ${patientName}, Parsed readmit date: ${parsedReadmitDate}, hospital Name: ${hospitalName}, readmissionReason: ${readmissionReason}`)
 
+                const formattedHospitalDischargeDate = formatDate(hospitalDischargeDate)
+                const formattedSnfDischargeDate = formatDate(snfDischargeDate)
+                const formattedHospitalReadmitDate = formatDate(parsedReadmitDate)
+
+                // Create unique key for deduplication
+                const uniqueKey = `${patientName.toLowerCase()}|${formattedHospitalDischargeDate}|${formattedSnfDischargeDate}|${formattedHospitalReadmitDate}`
+
+                if (seenPatients.has(uniqueKey)) {
+                    console.log(`     ⚠️ DUPLICATE DETECTED - skipping patient: ${patientName} (key: ${uniqueKey})`)
+                    skippedDuplicates++
+                    continue
+                }
+
+                seenPatients.add(uniqueKey)
+                foundInSheet++
+                console.log(`     ✅ Adding unique patient: ${patientName}`)
+
                 readmittedPatients.push({
                     name: patientName,
-                    hospitalDischargeDate: formatDate(hospitalDischargeDate),
-                    snfDischargeDate: formatDate(snfDischargeDate),
-                    hospitalReadmitDate: formatDate(parsedReadmitDate),
+                    hospitalDischargeDate: formattedHospitalDischargeDate,
+                    snfDischargeDate: formattedSnfDischargeDate,
+                    hospitalReadmitDate: formattedHospitalReadmitDate,
                     hospitalName: hospitalName,
                     readmissionReason: readmissionReason
                 })
@@ -466,10 +768,21 @@ async function parseReadmittedPatientsFromExcel(
                 continue
             }
         }
+        console.log(`     📊 Sheet "${config.name}" summary: Found ${foundInSheet} patients, Skipped ${skippedDuplicates} duplicates`)
     }
 
-    console.log(`Found ${readmittedPatients.length} readmitted patients for facility "${facilityName}"`)
-    console.log(readmittedPatients)
+    console.log("\n┌──────────────────────────────────────────────────────────────┐")
+    console.log("│ READMITTED PATIENTS PARSING COMPLETE                         │")
+    console.log("└──────────────────────────────────────────────────────────────┘")
+    console.log(`  📊 Total unique readmitted patients: ${readmittedPatients.length}`)
+    if (readmittedPatients.length > 0) {
+        console.log("  📋 Patient list:")
+        readmittedPatients.forEach((p, i) => {
+            console.log(`     ${i + 1}. ${p.name} | Hospital: ${p.hospitalName} | Reason: ${p.readmissionReason}`)
+        })
+    }
+    console.log("")
+
     return readmittedPatients
 }
 
@@ -763,9 +1076,243 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
         setFacilityData(undefined)
     }, [selectedNursingHomeId, selectedMonth, selectedYear])
 
+    // Calculate metrics when Generate Report is clicked
+    const calculateMetrics = async () => {
+        const startTime = performance.now();
+        console.log("╔════════════════════════════════════════════════════════════════╗");
+        console.log("║           METRICS CALCULATION STARTED                          ║");
+        console.log("╚════════════════════════════════════════════════════════════════╝");
+        console.log(`[${new Date().toISOString()}] calculateMetrics triggered`);
+        console.log("📋 Input Parameters:");
+        console.log("  • Nursing Home ID:", selectedNursingHomeId);
+        console.log("  • Nursing Home Name:", selectedNursingHomeName);
+        console.log("  • Month:", selectedMonth);
+        console.log("  • Year:", selectedYear);
+
+        if (!(selectedNursingHomeId && selectedMonth && selectedYear)) {
+            console.warn("⚠️ Missing required parameters for metrics calculation.");
+            console.log("  • Has nursingHomeId:", !!selectedNursingHomeId);
+            console.log("  • Has month:", !!selectedMonth);
+            console.log("  • Has year:", !!selectedYear);
+            return;
+        }
+
+        console.log("\n📊 STEP 1: Fetching facility static info...");
+        const facilityStaticInfo = await getFacilityStatic(selectedNursingHomeId);
+        console.log("✅ Facility Static Info Retrieved:");
+        console.log("  • Name:", facilityStaticInfo?.name);
+        console.log("  • State:", facilityStaticInfo?.us_state);
+        console.log("  • Logo URL:", facilityStaticInfo?.logo_url);
+        setFacilityData(facilityStaticInfo);
+
+        let allReadmitted: any[] = [];
+        let allData: any[] = [];
+        let totalDischargedPuzzlePatients = 0;
+
+        // Rolling 3-month logic
+        if (facilityStaticInfo?.us_state) {
+            const monthsToCheck = lastThreeMonths(selectedMonth, selectedYear);
+            console.log("\n📅 STEP 2: Processing Rolling 3-Month Window");
+            console.log("  Months to process:", monthsToCheck.map(m => `${m.month} ${m.year}`).join(", "));
+
+            for (let i = 0; i < monthsToCheck.length; i++) {
+                const { month, year } = monthsToCheck[i];
+                console.log("\n┌──────────────────────────────────────────────────────────────┐");
+                console.log(`│ MONTH ${i + 1}/3: ${month} ${year}                                       │`);
+                console.log("└──────────────────────────────────────────────────────────────┘");
+
+                // Facility summary
+                console.log(`  📄 Fetching facility summary...`);
+                const summary = await getFacilitySummary(selectedNursingHomeId, month, year);
+                if (summary) {
+                    console.log(`  ✅ Facility Summary Found:`);
+                    console.log(`     • CCM Master Count: ${summary.ccm_master_count || 0}`);
+                    console.log(`     • CCM Master Discharged: ${summary.ccm_master_discharged_count || 0}`);
+                    console.log(`     • Non-CCM Count: ${summary.non_ccm_master_count || 0}`);
+                    console.log(`     • H30 Admit: ${summary.h30_admit || 0}`);
+                    allData.push(summary);
+                } else {
+                    console.log(`  ⚠️ No facility summary data found for ${month} ${year}`);
+                }
+
+                // Get file paths for ADT and Charge Capture
+                console.log(`  📁 Fetching file paths...`);
+                const { adtReportPath, chargeCaptureReportPath: localChargeCaptureReportPath } = await getFilePaths(
+                    selectedNursingHomeId,
+                    month,
+                    year
+                );
+
+                // Charge Capture is a company-wide file - if not found locally, check master facility
+                let chargeCaptureReportPath = localChargeCaptureReportPath;
+                if (!chargeCaptureReportPath) {
+                    console.log(`  📁 Charge Capture not found locally, checking master facility...`);
+                    chargeCaptureReportPath = await getChargeCaptureReportPath(month, year);
+                }
+
+                console.log(`  📋 File Paths:`);
+                console.log(`     • ADT Report: ${adtReportPath || '❌ NOT FOUND'}`);
+                console.log(`     • Charge Capture: ${chargeCaptureReportPath || '❌ NOT FOUND'}${chargeCaptureReportPath && !localChargeCaptureReportPath ? ' (from master facility)' : ''}`);
+
+                // Calculate discharged Puzzle patients (ADT discharged + in Charge Capture)
+                if (adtReportPath && chargeCaptureReportPath && selectedNursingHomeName) {
+                    console.log(`  🔄 Calculating discharged Puzzle patients...`);
+                    const dischargedCount = await calculateDischargedPuzzlePatients(
+                        adtReportPath,
+                        chargeCaptureReportPath,
+                        selectedNursingHomeName
+                    );
+                    console.log(`  ✅ Discharged Puzzle Patients for ${month} ${year}: ${dischargedCount}`);
+                    totalDischargedPuzzlePatients += dischargedCount;
+                    console.log(`  📊 Running Total Discharged Puzzle Patients: ${totalDischargedPuzzlePatients}`);
+                } else {
+                    console.log(`  ⚠️ Skipping discharged calculation - missing files:`);
+                    if (!adtReportPath) console.log(`     • ADT Report missing`);
+                    if (!chargeCaptureReportPath) console.log(`     • Charge Capture missing`);
+                    if (!selectedNursingHomeName) console.log(`     • Nursing Home Name missing`);
+                }
+
+                // Bamboo readmissions
+                console.log(`  📁 Fetching Bamboo Report path...`);
+                const bambooReportPath = await getBambooReportPath(
+                    month,
+                    year,
+                    facilityStaticInfo.us_state
+                );
+                console.log(`     • Bamboo Report: ${bambooReportPath || '❌ NOT FOUND'}`);
+
+                if (bambooReportPath && selectedNursingHomeName) {
+                    console.log(`  🔄 Parsing readmitted patients from Bamboo...`);
+                    const readmitted = await parseReadmittedPatientsFromExcel(
+                        bambooReportPath,
+                        selectedNursingHomeName
+                    );
+
+                    console.log(`  ✅ Readmitted Patients from Bamboo: ${readmitted.length}`);
+                    if (readmitted.length > 0) {
+                        console.log(`     Patient Names: ${readmitted.map(p => p.name).join(", ")}`);
+                    }
+
+                    allReadmitted.push(...readmitted);
+                    console.log(`  📊 Running Total Readmitted: ${allReadmitted.length}`);
+                } else {
+                    console.log(`  ⚠️ Skipping Bamboo readmissions - missing:`);
+                    if (!bambooReportPath) console.log(`     • Bamboo Report not found`);
+                    if (!selectedNursingHomeName) console.log(`     • Nursing Home Name missing`);
+                }
+            }
+
+            console.log("\n┌──────────────────────────────────────────────────────────────┐");
+            console.log("│ 3-MONTH ROLLING TOTALS (before deduplication)                │");
+            console.log("└──────────────────────────────────────────────────────────────┘");
+            console.log("  • Total Readmitted (all 3 months, raw):", allReadmitted.length);
+            console.log("  • Total Discharged Puzzle Patients (all 3 months):", totalDischargedPuzzlePatients);
+            console.log("  • Facility Summaries Collected:", allData.length);
+
+            // Deduplicate across all 3 months (same patient may appear in multiple months' reports)
+            const seenAcrossMonths = new Set<string>();
+            const uniqueReadmitted = allReadmitted.filter(patient => {
+                const key = `${patient.name.toLowerCase()}|${patient.hospitalDischargeDate}|${patient.snfDischargeDate}|${patient.hospitalReadmitDate}`;
+                if (seenAcrossMonths.has(key)) {
+                    console.log(`  ⚠️ Cross-month duplicate removed: ${patient.name}`);
+                    return false;
+                }
+                seenAcrossMonths.add(key);
+                return true;
+            });
+
+            console.log(`\n  📊 After cross-month deduplication: ${uniqueReadmitted.length} unique patients (removed ${allReadmitted.length - uniqueReadmitted.length} duplicates)`);
+            allReadmitted = uniqueReadmitted;
+        } else {
+            console.warn("⚠️ Facility state not available — skipping 3-month rolling logic.");
+            console.log("  • facilityStaticInfo:", facilityStaticInfo);
+            console.log("  • us_state:", facilityStaticInfo?.us_state);
+        }
+
+        // Update readmitted patients (Bamboo)
+        console.log("\n📊 STEP 3: Updating State...");
+        console.log("  • Setting readmittedPatients:", allReadmitted.length, "patients");
+        setReadmittedPatients(allReadmitted);
+
+        // Update facility summaries for display
+        console.log("  • Setting facilityReadmissionData:", allData.length, "summaries");
+        setFacilityReadmissionData(allData);
+
+        // Rolling 3-month Puzzle totals
+        // Use ADT + Charge Capture calculation if available, otherwise fall back to facility summary
+        console.log("\n📊 STEP 4: Computing Final Metrics...");
+        let rollingPuzzlePatients: number;
+        if (totalDischargedPuzzlePatients > 0) {
+            rollingPuzzlePatients = totalDischargedPuzzlePatients;
+            console.log("  ✅ Using ADT + Charge Capture for rollingPuzzlePatients:", rollingPuzzlePatients);
+        } else {
+            console.log("  ⚠️ No ADT/Charge Capture data - falling back to facility summary");
+            rollingPuzzlePatients = allData.reduce((sum, row, idx) => {
+                const count =
+                    (row.ccm_master_count || 0) +
+                    (row.ccm_master_discharged_count || 0) +
+                    (row.non_ccm_master_count || 0);
+                console.log(`     • Summary ${idx + 1}: ${count} patients (CCM: ${row.ccm_master_count || 0}, Discharged: ${row.ccm_master_discharged_count || 0}, Non-CCM: ${row.non_ccm_master_count || 0})`);
+                return sum + count;
+            }, 0);
+            console.log("  📊 Fallback rollingPuzzlePatients:", rollingPuzzlePatients);
+        }
+
+        const rollingPuzzleReadmissions = allData.reduce((sum, row, idx) => {
+            console.log(`     • Summary ${idx + 1} h30_admit:`, row.h30_admit || 0);
+            return sum + (row.h30_admit || 0);
+        }, 0);
+
+        const rollingBambooReadmissions = allReadmitted.length;
+
+        const totalReadmissions3mo = rollingBambooReadmissions;
+
+        const rollingRate =
+            rollingPuzzlePatients > 0
+                ? (totalReadmissions3mo / rollingPuzzlePatients) * 100
+                : 0;
+
+        const endTime = performance.now();
+        console.log("\n╔════════════════════════════════════════════════════════════════╗");
+        console.log("║           FINAL METRICS SUMMARY                                ║");
+        console.log("╚════════════════════════════════════════════════════════════════╝");
+        console.log("  📊 Total Puzzle Continuity Care Patients Tracked:", rollingPuzzlePatients);
+        console.log("  📊 30-Day Readmissions (Puzzle Patients):", totalReadmissions3mo);
+        console.log("  📊 Rolling Readmission Rate:", rollingRate.toFixed(2) + "%");
+        console.log("  ────────────────────────────────────────────────────");
+        console.log("  📈 Breakdown:");
+        console.log("     • Rolling Puzzle Readmissions (from summary):", rollingPuzzleReadmissions);
+        console.log("     • Rolling Bamboo Readmissions:", rollingBambooReadmissions);
+        console.log("     • Readmitted Patient Names:", allReadmitted.map(p => p.name).join(", ") || "None");
+        console.log("  ────────────────────────────────────────────────────");
+        console.log(`  ⏱️ Calculation completed in ${(endTime - startTime).toFixed(2)}ms`);
+        console.log("╚════════════════════════════════════════════════════════════════╝\n");
+
+        // Set metrics for UI
+        setPatientMetrics({
+            rollingPuzzlePatients,
+            rollingPuzzleReadmissions,
+            rollingBambooReadmissions,
+            totalReadmissions3mo,
+            rollingRate,
+            facilityName: facilityStaticInfo?.name,
+            publicLogoLink: facilityStaticInfo?.logo_url,
+
+            executiveSummary: `This three-month performance review highlights Puzzle's sustained impact at ${facilityStaticInfo?.name}. Despite natural fluctuations in census, our coordinated clinical pathways continued to drive low avoidable hospital returns.`,
+
+            closingStatement: `We appreciate the strong collaboration with ${facilityStaticInfo?.name}. Together, we have built consistency in processes that prevent unnecessary hospitalizations and improve resident outcomes.`,
+
+            nationalReadmissionsBenchmark: Number(
+                process.env.NEXT_PUBLIC_NATIONAL_READMISSION_BENCHMARK
+            )
+        });
+        console.log("✅ Patient metrics state updated successfully");
+    };
+
+    // Fetch available patients when selection changes (but don't calculate metrics)
     useEffect(() => {
         const run = async () => {
-            console.log("=== useEffect triggered ===");
+            console.log("=== useEffect triggered (patient fetch only) ===");
             console.log("Inputs:", {
                 selectedNursingHomeId,
                 selectedNursingHomeName,
@@ -784,131 +1331,6 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                 setSelectedInterventionPatients([]);
                 setSelectedNursingHomeName(null);
             }
-
-            if (!(selectedNursingHomeId && selectedMonth && selectedYear)) {
-                console.log("Early return — missing required parameters.");
-                return;
-            }
-
-            console.log("Running getFacilityStatic for:", selectedNursingHomeId);
-            const facilityStaticInfo = await getFacilityStatic(selectedNursingHomeId);
-            console.log("facilityStaticInfo Data is - ", facilityStaticInfo);
-            setFacilityData(facilityStaticInfo);
-
-            let allReadmitted: any[] = [];
-            let allData: any[] = [];
-
-            // Rolling 3-month logic
-            if (facilityStaticInfo?.us_state) {
-                const monthsToCheck = lastThreeMonths(selectedMonth, selectedYear);
-                console.log("Months to check (3-month rolling):", monthsToCheck);
-
-                for (const { month, year } of monthsToCheck) {
-                    console.log("---------");
-                    console.log(`Processing Month: ${month} ${year}`);
-
-                    // Facility summary
-                    const summary = await getFacilitySummary(selectedNursingHomeId, month, year);
-                    console.log(`Facility Summary for ${month} ${year}:`, summary);
-
-                    if (summary) {
-                        allData.push(summary);
-                    } else {
-                        console.log(`No facility summary data found for ${month} ${year}`);
-                    }
-
-                    // Bamboo readmissions
-                    const bambooReportPath = await getBambooReportPath(
-                        month,
-                        year,
-                        facilityStaticInfo.us_state
-                    );
-
-                    console.log(`Checking Bamboo Report for ${month} ${year}:`, bambooReportPath);
-
-                    if (bambooReportPath && selectedNursingHomeName) {
-                        const readmitted = await parseReadmittedPatientsFromExcel(
-                            bambooReportPath,
-                            selectedNursingHomeName
-                        );
-
-                        console.log(
-                            `Found ${readmitted.length} readmitted patients in Bamboo for ${month} ${year}`
-                        );
-
-                        allReadmitted.push(...readmitted);
-                    } else {
-                        console.log(`No Bamboo Report for ${month} ${year}`);
-                    }
-                }
-
-                console.log("---------");
-                console.log("Total readmitted across last 3 months:", allReadmitted.length);
-                console.log("All facility summaries collected:", allData);
-            } else {
-                console.log("Facility state not available — skipping Bamboo report logic.");
-            }
-
-            // Update readmitted patients (Bamboo)
-            setReadmittedPatients(allReadmitted);
-
-            // Update facility summaries for display
-            setFacilityReadmissionData(allData);
-
-            if (allData.length === 0) {
-                console.log("No facility summary data found across all 3 months. Exiting.");
-                return;
-            }
-
-            // Rolling 3-month Puzzle totals
-            const rollingPuzzlePatients = allData.reduce((sum, row) => {
-                const count =
-                    (row.ccm_master_count || 0) +
-                    (row.ccm_master_discharged_count || 0) +
-                    (row.non_ccm_master_count || 0);
-                console.log(`Patients in month summary row:`, count);
-                return sum + count;
-            }, 0);
-
-            const rollingPuzzleReadmissions = allData.reduce((sum, row) => {
-                console.log(`Puzzle readmissions this row:`, row.h30_admit || 0);
-                return sum + (row.h30_admit || 0);
-            }, 0);
-
-            const rollingBambooReadmissions = allReadmitted.length;
-
-            const totalReadmissions3mo = rollingBambooReadmissions;
-
-            const rollingRate =
-                rollingPuzzlePatients > 0
-                    ? (totalReadmissions3mo / rollingPuzzlePatients) * 100
-                    : 0;
-
-            console.log("=== Final Rolling 3-Month Metrics ===");
-            console.log("Rolling Puzzle Patients:", rollingPuzzlePatients);
-            console.log("Rolling Puzzle Readmissions:", rollingPuzzleReadmissions);
-            console.log("Rolling Bamboo Readmissions:", rollingBambooReadmissions);
-            console.log("Total Readmissions (Puzzle + Bamboo):", totalReadmissions3mo);
-            console.log("Rolling Readmission Rate:", rollingRate);
-
-            // Set metrics for UI
-            setPatientMetrics({
-                rollingPuzzlePatients,
-                rollingPuzzleReadmissions,
-                rollingBambooReadmissions,
-                totalReadmissions3mo,
-                rollingRate,
-                facilityName: facilityStaticInfo?.name,
-                publicLogoLink: facilityStaticInfo?.logo_url,
-
-                executiveSummary: `This three-month performance review highlights Puzzle’s sustained impact at ${facilityStaticInfo?.name}. Despite natural fluctuations in census, our coordinated clinical pathways continued to drive low avoidable hospital returns.`,
-
-                closingStatement: `We appreciate the strong collaboration with ${facilityStaticInfo?.name}. Together, we have built consistency in processes that prevent unnecessary hospitalizations and improve resident outcomes.`,
-
-                nationalReadmissionsBenchmark: Number(
-                    process.env.NEXT_PUBLIC_NATIONAL_READMISSION_BENCHMARK
-                )
-            });
         };
 
         run();
@@ -1233,17 +1655,62 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
     }
 
     const handleGenerateReport = async () => {
+        const reportStartTime = performance.now()
+        console.log("\n")
+        console.log("╔════════════════════════════════════════════════════════════════╗")
+        console.log("║           🚀 GENERATE REPORT STARTED                           ║")
+        console.log("╚════════════════════════════════════════════════════════════════╝")
+        console.log(`[${new Date().toISOString()}] handleGenerateReport triggered`)
+        console.log("📋 Report Parameters:")
+        console.log("  • Nursing Home ID:", selectedNursingHomeId)
+        console.log("  • Nursing Home Name:", selectedNursingHomeName)
+        console.log("  • Month:", selectedMonth)
+        console.log("  • Year:", selectedYear)
+        console.log("  • Selected Case Study Patients:", selectedCaseStudyPatients.length)
+        console.log("  • Selected Intervention Patients:", selectedInterventionPatients.length)
+
         setIsGenerating(true)
         setReportGenerated(false)
         try {
+            // STEP 1: Calculate metrics (Total Puzzle Continuity Care Patients, 30-Day Readmissions)
+            console.log("\n🔄 STEP 1/2: Calculating Metrics...")
+            const metricsStartTime = performance.now()
+            await calculateMetrics()
+            const metricsEndTime = performance.now()
+            console.log(`✅ Metrics calculation completed in ${(metricsEndTime - metricsStartTime).toFixed(2)}ms`)
+
+            // STEP 2: Fetch case studies
+            console.log("\n🔄 STEP 2/2: Fetching Case Studies...")
+            const caseStudiesStartTime = performance.now()
             await fetchCaseStudies()
+            const caseStudiesEndTime = performance.now()
+            console.log(`✅ Case studies fetched in ${(caseStudiesEndTime - caseStudiesStartTime).toFixed(2)}ms`)
+
             setReportGenerated(true)
+
+            const reportEndTime = performance.now()
+            console.log("\n╔════════════════════════════════════════════════════════════════╗")
+            console.log("║           ✅ REPORT GENERATION COMPLETE                        ║")
+            console.log("╚════════════════════════════════════════════════════════════════╝")
+            console.log(`  ⏱️ Total report generation time: ${(reportEndTime - reportStartTime).toFixed(2)}ms`)
+            console.log("  📊 Metrics:", {
+                puzzlePatients: patientMetrics.rollingPuzzlePatients,
+                readmissions: patientMetrics.totalReadmissions3mo,
+                rate: patientMetrics.rollingRate?.toFixed(2) + "%"
+            })
+            console.log("\n")
+
             toast({
                 title: "Report Generated",
                 description: "The report has been generated successfully.",
             })
-        } catch (error) {
-            console.error("Error generating report:", error)
+        } catch (error: any) {
+            console.error("\n╔════════════════════════════════════════════════════════════════╗")
+            console.error("║           ❌ REPORT GENERATION FAILED                          ║")
+            console.error("╚════════════════════════════════════════════════════════════════╝")
+            console.error("Error details:", error)
+            console.error("Error message:", error?.message || "Unknown error")
+            console.error("Error stack:", error?.stack)
             toast({
                 title: "Error",
                 description: "Failed to generate report. Please try again.",
@@ -1251,6 +1718,7 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
             })
         } finally {
             setIsGenerating(false)
+            console.log("🏁 Report generation process finished (isGenerating set to false)")
         }
     }
 
