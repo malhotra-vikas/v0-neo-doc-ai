@@ -55,12 +55,39 @@ import {
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
 import { processPatientsWithLimit } from "@/app/actions/generate-case-study"
 
-const facilityNameMap: Record<string, { patientsName: string; readmitName: string }> = {
-    "Harborview Briarwood": {
-        patientsName: "Briarwood Health Center by Harborview, LLC.",
-        readmitName: "Harborview Briarwood"
-    },
-    // Add more mappings here as needed
+// Facility name mapping: Bamboo name (key) -> source-specific names (ADT, Charge Capture)
+// Configured via NEXT_PUBLIC_FACILITY_NAME_MAP env variable (JSON)
+interface FacilityNameMapping {
+    adtName: string;
+    ccName: string;
+}
+
+type FacilityNameMap = Record<string, FacilityNameMapping>;
+
+const facilityNameMap: FacilityNameMap = (() => {
+    try {
+        const raw = process.env.NEXT_PUBLIC_FACILITY_NAME_MAP;
+        if (!raw) return {};
+        return JSON.parse(raw);
+    } catch (e) {
+        console.error("[facilityNameMap] Failed to parse NEXT_PUBLIC_FACILITY_NAME_MAP:", e);
+        return {};
+    }
+})();
+
+function resolveSourceFacilityName(bambooName: string, source: 'adt' | 'cc'): string {
+    const mapping = facilityNameMap[bambooName];
+    if (!mapping) {
+        console.log(`[resolveSourceFacilityName] No mapping for "${bambooName}" (${source}), using Bamboo name`)
+        return bambooName;
+    }
+    const resolved = source === 'adt' ? mapping.adtName : mapping.ccName;
+    if (!resolved) {
+        console.log(`[resolveSourceFacilityName] No ${source} name in mapping for "${bambooName}", using Bamboo name`)
+        return bambooName;
+    }
+    console.log(`[resolveSourceFacilityName] "${bambooName}" -> "${resolved}" (${source})`)
+    return resolved;
 }
 
 const months = [
@@ -344,6 +371,11 @@ async function parseDischargedPatientsFromADT(
 
     const dischargedPatients: Array<{ firstName: string; lastName: string }> = []
 
+    const normalizedFacilityName = facilityName.toLowerCase().trim()
+    console.log(`[parseDischargedPatientsFromADT] Matching against: "${normalizedFacilityName}", Facility Name column index: ${facilityNameIndex}`)
+
+    const uniqueFacilities = new Set<string>()
+
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim()
         if (!line) continue
@@ -355,6 +387,8 @@ async function parseDischargedPatientsFromADT(
         const dischargeStatus = dischargeStatusIndex !== -1 ? values[dischargeStatusIndex]?.toLowerCase() || '' : ''
         const rowFacility = facilityNameIndex !== -1 ? values[facilityNameIndex] : ''
 
+        if (rowFacility) uniqueFacilities.add(rowFacility)
+
         // Check if this is a discharge record and optionally match facility
         if (discharge === 'Y') {
             // Exclude patients with certain discharge statuses
@@ -363,8 +397,8 @@ async function parseDischargedPatientsFromADT(
                 continue
             }
 
-            // If facility name column exists, filter by it; otherwise include all
-            if (facilityNameIndex === -1 || rowFacility.toLowerCase() === facilityName.toLowerCase()) {
+            // If facility name column exists, filter by exact match; otherwise include all
+            if (facilityNameIndex === -1 || rowFacility.toLowerCase().trim() === normalizedFacilityName) {
                 const firstName = values[firstNameIndex]?.toLowerCase().trim() || ''
                 const lastName = values[lastNameIndex]?.toLowerCase().trim() || ''
 
@@ -381,7 +415,8 @@ async function parseDischargedPatientsFromADT(
         }
     }
 
-    console.log(`Found ${dischargedPatients.length} discharged patients from ADT for "${facilityName}"`)
+    console.log(`[parseDischargedPatientsFromADT] Facility names in ADT CSV:`, Array.from(uniqueFacilities))
+    console.log(`[parseDischargedPatientsFromADT] Found ${dischargedPatients.length} discharged patients for "${facilityName}"`)
     return dischargedPatients
 }
 
@@ -424,16 +459,18 @@ async function parsePatientsFromChargeCapture(
 
     // Normalize facility name for matching (remove trailing suffixes like "(M)")
     const normalizedFacilityName = facilityName.toLowerCase().replace(/\s*\(m\)\s*$/i, '').trim()
+    console.log(`[parsePatientsFromChargeCapture] Matching against: "${normalizedFacilityName}"`)
+
+    const uniqueCCFacilities = new Set<string>()
 
     for (const row of rows) {
         const rowFacility = row['Facility']?.toString().trim() || ''
-        // Normalize row facility name for comparison
         const normalizedRowFacility = rowFacility.toLowerCase().replace(/\s*\(m\)\s*$/i, '').trim()
 
-        // Check if this row is for the selected facility (flexible match)
-        if (normalizedRowFacility === normalizedFacilityName ||
-            normalizedRowFacility.startsWith(normalizedFacilityName) ||
-            normalizedFacilityName.startsWith(normalizedRowFacility)) {
+        if (rowFacility) uniqueCCFacilities.add(rowFacility)
+
+        // Check if this row is for the selected facility (exact match)
+        if (normalizedRowFacility === normalizedFacilityName) {
             const firstName = row['Patient First Name']?.toString().toLowerCase().trim() || ''
             const lastName = row['Patient Last Name']?.toString().toLowerCase().trim() || ''
 
@@ -449,7 +486,8 @@ async function parsePatientsFromChargeCapture(
         }
     }
 
-    console.log(`Found ${patients.length} unique patients in Charge Capture for "${facilityName}"`)
+    console.log(`[parsePatientsFromChargeCapture] Facility names in Charge Capture:`, Array.from(uniqueCCFacilities))
+    console.log(`[parsePatientsFromChargeCapture] Found ${patients.length} unique patients for "${facilityName}"`)
     return patients
 }
 
@@ -469,9 +507,12 @@ async function calculateDischargedPuzzlePatients(
         return 0
     }
 
+    const adtFacilityName = resolveSourceFacilityName(facilityName, 'adt')
+    const ccFacilityName = resolveSourceFacilityName(facilityName, 'cc')
+
     const [adtPatients, chargeCapturePatients] = await Promise.all([
-        parseDischargedPatientsFromADT(adtPath, facilityName),
-        parsePatientsFromChargeCapture(chargeCapturePath, facilityName)
+        parseDischargedPatientsFromADT(adtPath, adtFacilityName),
+        parsePatientsFromChargeCapture(chargeCapturePath, ccFacilityName)
     ])
 
     console.log(`[calculateDischargedPuzzlePatients] ADT discharged patients: ${adtPatients.length}`)
@@ -1461,12 +1502,8 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             console.log(`selectedNursingHomeId is `, selectedNursingHomeId)
 
-            const facilityMappedName = facilityNameMap[selectedNursingHomeName!] || {
-                originalName: selectedNursingHomeName,
-                mappedName: selectedNursingHomeName
-            }
-
-            console.log("facilityMappedName ios ", facilityMappedName)
+            const facilityMapping = facilityNameMap[selectedNursingHomeName!];
+            console.log("[Report] Facility mapping for", selectedNursingHomeName, ":", facilityMapping || "No explicit mapping (using fuzzy matching)");
 
             console.log("buildRiskAndInterventionCategories is - ", buildRiskAndInterventionCategories)
 
