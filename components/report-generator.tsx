@@ -54,26 +54,7 @@ import {
 } from "recharts"
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
 import { processPatientsWithLimit } from "@/app/actions/generate-case-study"
-
-// Facility name mapping: Bamboo name (key) -> source-specific names (ADT, Charge Capture)
-// Configured via NEXT_PUBLIC_FACILITY_NAME_MAP env variable (JSON)
-interface FacilityNameMapping {
-    adtName: string;
-    ccName: string;
-}
-
-type FacilityNameMap = Record<string, FacilityNameMapping>;
-
-const facilityNameMap: FacilityNameMap = (() => {
-    try {
-        const raw = process.env.NEXT_PUBLIC_FACILITY_NAME_MAP;
-        if (!raw) return {};
-        return JSON.parse(raw);
-    } catch (e) {
-        console.error("[facilityNameMap] Failed to parse NEXT_PUBLIC_FACILITY_NAME_MAP:", e);
-        return {};
-    }
-})();
+import { facilityNameMap } from "@/config/facility-name-map"
 
 function resolveSourceFacilityName(bambooName: string, source: 'adt' | 'cc'): string {
     const mapping = facilityNameMap[bambooName];
