@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import card1 from "../public/card1.png"
 import card2 from "../public/card2.png"
 import card3 from "../public/card3.png"
+import { shuffleArray } from "./utils"
 const COLORS = {
     TEXT: '07226c',
     PAGE_NUMBER: '#11b3dc',
@@ -195,11 +196,11 @@ export const exportToPDF = async ({
         const [first, last] = (study.patient_name || "").split(" ");
         const shortName = first && last ? `${first[0]}. ${last}` : (study.patient_name || "Unknown");
 
-        const interventionsHTML = (study.detailed_interventions || [])
+        const interventionsHTML = shuffleArray(study.detailed_interventions || [])
             .map(item => `
             <div class="avoid-page-break" style="
-                display: flex; 
-                align-items: flex-start; 
+                display: flex;
+                align-items: flex-start;
                 margin-bottom: 4px;
             ">
                 <span style="display:inline-block; font-size:14px; margin-right:6px;">•</span>
