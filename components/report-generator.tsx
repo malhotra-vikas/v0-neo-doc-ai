@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ChevronsUpDown, Check } from "lucide-react"
-import { cn } from "@/lib/utils" // helper for conditional classes
+import { cn, shuffleArray } from "@/lib/utils" // helper for conditional classes
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -853,7 +853,12 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     const interventionEntries = useMemo(() => {
         if (selectedInterventionPatients.length === 0) return []
-        return caseStudies.filter((study) => selectedInterventionPatients.includes(study.patient_id))
+        return caseStudies
+            .filter((study) => selectedInterventionPatients.includes(study.patient_id))
+            .map((study) => ({
+                ...study,
+                detailed_interventions: shuffleArray(study.detailed_interventions || []),
+            }))
     }, [caseStudies, selectedInterventionPatients])
 
     const formatPatientName = useCallback(
@@ -2585,12 +2590,12 @@ ${JSON.stringify(parsed, null, 2)}
                                                         <>
                                                             <p className="text-sm font-medium text-gray-700 mb-1">Interventions:</p>
                                                             <ul className="list-disc list-inside pl-4 text-sm text-gray-700 space-y-1 mb-3">
-                                                                {study.detailed_interventions.map((item, idx) => (
+                                                                {(study.detailed_interventions || []).map((item, idx) => (
                                                                     <li key={`int-${idx}`}>
                                                                         {item.intervention}
                                                                         {item.source_quote && (
                                                                             <p className="text-xs text-gray-500 italic mt-1 pl-2">
-                                                                                “{item.source_quote}”
+                                                                                "{item.source_quote}"
                                                                                 {item.source_file_id && (
                                                                                     <>
                                                                                         {" — "}
