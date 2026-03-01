@@ -16,8 +16,9 @@ async function extractWithPython(pdfData: ArrayBuffer): Promise<string> {
 
     return new Promise((resolve, reject) => {
         const scriptPath = path.resolve(process.cwd(), "scripts/parse_pdf.py")
-        const py = spawn("python3", [scriptPath, tmpPath])
+        const pythonPath = path.resolve(process.cwd(), "venv/bin/python")
 
+        const py = spawn(pythonPath, [scriptPath, tmpPath])
         let output = ""
         let error = ""
 
