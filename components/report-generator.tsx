@@ -883,14 +883,21 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             if (showPatientPHI) {
                 if (first && last) {
-                    return `${first.charAt(0).toUpperCase()}. ${toTitleCase(last)}`
+                    // Preserve existing initials (e.g. "P.A." stays "P.A.") instead of reducing to just first char
+                    const displayFirst = first.includes('.') ? first : `${first.charAt(0).toUpperCase()}.`
+                    return `${displayFirst} ${toTitleCase(last)}`
                 }
                 return toTitleCase(name)
             }
 
-            const firstInitial = first ? `${first.charAt(0).toUpperCase()}.` : ""
-            const lastInitial = last ? `${last.charAt(0).toUpperCase()}.` : ""
-            const masked = [firstInitial, lastInitial].filter(Boolean).join(" ")
+            const masked = parts
+                .flatMap((part) => {
+                    // Split by "." to handle compound initials like "P.A."
+                    const subParts = part.split(".").map(s => s.trim()).filter(Boolean)
+                    return subParts.map(s => `${s.charAt(0).toUpperCase()}.`)
+                })
+                .filter(Boolean)
+                .join("")
 
             return masked || "Unknown"
         },
