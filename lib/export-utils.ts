@@ -196,8 +196,13 @@ export const exportToPDF = async ({
         const [first, last] = (study.patient_name || "").split(" ");
         const shortName = first && last ? `${first[0]}. ${last}` : (study.patient_name || "Unknown");
 
-        const interventionsHTML = shuffleArray(study.detailed_interventions || [])
-            .map(item => `
+        const isVoicemailOnly = (text: string) => {
+            const lower = text.toLowerCase().trim()
+            return lower.includes("left voicemail") || lower.includes("voicemail left") || lower.includes("voicemail") || /^\s*attempt\s*$/i.test(text)
+        }
+        const interventionsHTML = shuffleArray(
+            (study.detailed_interventions || []).filter(item => !isVoicemailOnly(item.intervention))
+        ).map(item => `
             <div class="avoid-page-break" style="
                 display: flex;
                 align-items: flex-start;

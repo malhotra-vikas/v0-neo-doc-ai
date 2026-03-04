@@ -853,11 +853,17 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     const interventionEntries = useMemo(() => {
         if (selectedInterventionPatients.length === 0) return []
+        const isVoicemailOnly = (text: string) => {
+            const lower = text.toLowerCase().trim()
+            return lower.includes("left voicemail") || lower.includes("voicemail left") || lower.includes("voicemail") || /^\s*attempt\s*$/i.test(text)
+        }
         return caseStudies
             .filter((study) => selectedInterventionPatients.includes(study.patient_id))
             .map((study) => ({
                 ...study,
-                detailed_interventions: shuffleArray(study.detailed_interventions || []),
+                detailed_interventions: shuffleArray(
+                    (study.detailed_interventions || []).filter(item => !isVoicemailOnly(item.intervention))
+                ),
             }))
     }, [caseStudies, selectedInterventionPatients])
 
