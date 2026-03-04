@@ -853,11 +853,17 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
     const interventionEntries = useMemo(() => {
         if (selectedInterventionPatients.length === 0) return []
+        const isVoicemailOnly = (text: string) => {
+            const lower = text.toLowerCase().trim()
+            return lower.includes("left voicemail") || lower.includes("voicemail left") || lower.includes("voicemail") || /^\s*attempt\s*$/i.test(text)
+        }
         return caseStudies
             .filter((study) => selectedInterventionPatients.includes(study.patient_id))
             .map((study) => ({
                 ...study,
-                detailed_interventions: shuffleArray(study.detailed_interventions || []),
+                detailed_interventions: shuffleArray(
+                    (study.detailed_interventions || []).filter(item => !isVoicemailOnly(item.intervention))
+                ),
             }))
     }, [caseStudies, selectedInterventionPatients])
 
@@ -883,14 +889,21 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
 
             if (showPatientPHI) {
                 if (first && last) {
-                    return `${first.charAt(0).toUpperCase()}. ${toTitleCase(last)}`
+                    // Preserve existing initials (e.g. "P.A." stays "P.A.") instead of reducing to just first char
+                    const displayFirst = first.includes('.') ? first : `${first.charAt(0).toUpperCase()}.`
+                    return `${displayFirst} ${toTitleCase(last)}`
                 }
                 return toTitleCase(name)
             }
 
-            const firstInitial = first ? `${first.charAt(0).toUpperCase()}.` : ""
-            const lastInitial = last ? `${last.charAt(0).toUpperCase()}.` : ""
-            const masked = [firstInitial, lastInitial].filter(Boolean).join(" ")
+            const masked = parts
+                .flatMap((part) => {
+                    // Split by "." to handle compound initials like "P.A."
+                    const subParts = part.split(".").map(s => s.trim()).filter(Boolean)
+                    return subParts.map(s => `${s.charAt(0).toUpperCase()}.`)
+                })
+                .filter(Boolean)
+                .join("")
 
             return masked || "Unknown"
         },
