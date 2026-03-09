@@ -518,7 +518,9 @@ async function calculateDischargedPuzzlePatients(
 
 async function parseReadmittedPatientsFromExcel(
     filePath: string | null,
-    facilityName: string
+    facilityName: string,
+    reportMonth: string,
+    reportYear: string
 ): Promise<Array<{
     name: string;
     hospitalDischargeDate: string;
@@ -727,6 +729,18 @@ async function parseReadmittedPatientsFromExcel(
                 console.log("1st date read is  - ", parsedReadmitDate)
 
                 console.log(`${config.name}: Patient ${patientName}, Parsed readmit date: ${parsedReadmitDate}, hospital Name: ${hospitalName}, readmissionReason: ${readmissionReason}`)
+
+                // Filter: only include hospitalizations that fall within the report month/year
+                const readmitDateObj = typeof parsedReadmitDate === 'number'
+                    ? new Date(new Date(1899, 11, 30).getTime() + parsedReadmitDate * 86400000)
+                    : new Date(parsedReadmitDate)
+                const targetMonthIndex = new Date(`${reportMonth} 1, ${reportYear}`).getMonth()
+                const targetYear = Number(reportYear)
+                if (!isNaN(readmitDateObj.getTime()) &&
+                    (readmitDateObj.getMonth() !== targetMonthIndex || readmitDateObj.getFullYear() !== targetYear)) {
+                    console.log(`     ⏭️ SKIPPING patient ${patientName} - readmit date ${parsedReadmitDate} is outside ${reportMonth} ${reportYear}`)
+                    continue
+                }
 
                 const formattedHospitalDischargeDate = formatDate(hospitalDischargeDate)
                 const formattedSnfDischargeDate = formatDate(snfDischargeDate)
@@ -1180,7 +1194,9 @@ export function ReportGenerator({ nursingHomes }: ReportGeneratorProps) {
                     console.log(`  🔄 Parsing readmitted patients from Bamboo...`);
                     const readmitted = await parseReadmittedPatientsFromExcel(
                         bambooReportPath,
-                        selectedNursingHomeName
+                        selectedNursingHomeName,
+                        month,
+                        year
                     );
 
                     console.log(`  ✅ Readmitted Patients from Bamboo: ${readmitted.length}`);
